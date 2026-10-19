@@ -15,10 +15,11 @@ def load_site_monitor():
 
 
 class FakeResponse:
-    def __init__(self, status_code, payload=None, text=None):
+    def __init__(self, status_code, payload=None, text=None, headers=None):
         self.status_code = status_code
         self._payload = payload
         self.text = text if text is not None else str(payload)
+        self.headers = headers or {}
 
     def json(self):
         return self._payload
@@ -216,3 +217,87 @@ def test_offset_falls_back_to_file_when_table_missing(sm, tmp_path):
     assert sm.RUNTIME_STATE_TABLE_AVAILABLE is False
     sm.save_telegram_offset(9)
     assert '"offset": 9' in offset_file.read_text(encoding="utf-8")
+
+
+LINKED = {("GET", "user_profiles"): FakeResponse(200, [{"user_id": USER_ID}])}
+NOT_ADMIN = {("GET", "admin_users"): FakeResponse(200, [])}
+ADMIN = {("GET", "admin_users"): FakeResponse(200, [{"user_id": USER_ID}])}
+
+
+def test_monitors_lists_names_state_and_keywords(sm):
+    fake = run_updates(sm, "/monitors", {**LINKED, ("GET", "user_monitors"): FakeResponse(200, [
+        {"name": "Bank", "status": "active", "notify_telegram": True,
+         "monitor_keywords": [{"keyword": "ABB"}, {"keyword": "Kapital Bank"}]},
+        {"name": "Köhnə", "status": "inactive", "notify_telegram": True, "monitor_keywords": []},
+    ])})
+    assert "monitor_keywords(keyword)" in fake.find("GET", "user_monitors")[0]["params"]["select"]
+    assert fake.sent_texts() == [
+        "Monitorlarınız:\n• Bank (aktiv): ABB, Kapital Bank\n• Köhnə (deaktiv): açar söz yoxdur"
+    ]
+
+
+def test_pause_and_resume_keep_the_link(sm):
+    patch = {("PATCH", "user_monitors"): FakeResponse(204, None, text="")}
+    fake = run_updates(sm, "/pause", {**LINKED, **patch})
+    call = fake.find("PATCH", "user_monitors")[0]
+    assert call["params"]["user_id"] == f"in.({USER_ID})"
+    assert call["json"] == {"notify_telegram": False, "telegram_chat_id": CHAT_ID}
+    assert not fake.find("PATCH", "user_profiles")
+    assert fake.sent_texts() == [sm.TELEGRAM_REPLY_PAUSED]
+
+    fake = run_updates(sm, "/resume", {**LINKED, **patch})
+    assert fake.find("PATCH", "user_monitors")[0]["json"]["notify_telegram"] is True
+    assert fake.sent_texts() == [sm.TELEGRAM_REPLY_RESUMED]
+
+
+def test_pause_in_unlinked_chat(sm):
+    fake = run_updates(sm, "/pause", {("GET", "user_profiles"): FakeResponse(200, [])})
+    assert not fake.find("PATCH", "user_monitors")
+    assert fake.sent_texts() == [sm.TELEGRAM_REPLY_NOT_LINKED]
+
+
+def test_admin_commands_rejected_for_customers(sm):
+    fake = run_updates(sm, "/pause_all", {**LINKED, **NOT_ADMIN})
+    assert not fake.find("PATCH", "bot_settings")
+    assert fake.sent_texts() == [sm.TELEGRAM_REPLY_ADMIN_ONLY]
+
+
+def test_admin_pause_all_updates_settings_and_cache(sm):
+    fake = run_updates(sm, "/pause_all", {**LINKED, **ADMIN, ("PATCH", "bot_settings"): FakeResponse(204, None, text="")})
+    assert fake.find("PATCH", "bot_settings")[0]["json"] == {"notifications_paused": True}
+    assert sm.BOT_SETTINGS_CACHE["paused"] is True
+    assert fake.sent_texts() == [sm.TELEGRAM_REPLY_ALL_PAUSED]
+
+
+def test_admin_stats_reads_exact_counts(sm):
+    counted = FakeResponse(200, [], headers={"Content-Range": "0-0/12"})
+    routes = {**ADMIN, ("GET", "bot_settings"): FakeResponse(200, [{"notifications_paused": False}])}
+    for table in ("user_monitors", "monitor_keywords", "sources", "monitored_items", "monitor_alerts"):
+        routes[("GET", table)] = counted
+    # user_profiles answers both the chat lookup and the count.
+    routes[("GET", "user_profiles")] = FakeResponse(200, [{"user_id": USER_ID}], headers={"Content-Range": "0-0/5"})
+    fake = run_updates(sm, "/stats", routes)
+    text = fake.sent_texts()[0]
+    assert "İstifadəçi: 5" in text and "Aktiv mənbə: 12" in text and "Bildirişlər: aktiv" in text
+    assert fake.find("GET", "sources")[1]["params"]["consecutive_fail_count"] == "gte.3"
+
+
+def test_help_shows_admin_commands_only_to_admins(sm):
+    assert "/stats" not in run_updates(sm, "/help", {**LINKED, **NOT_ADMIN}).sent_texts()[0]
+    assert "/stats" in run_updates(sm, "/start", {**LINKED, **ADMIN}).sent_texts()[0]
+
+
+def test_command_menu_scopes_admin_commands_to_admin_chats(sm):
+    fake = FakeRequests({
+        ("POST", "setMyCommands"): FakeResponse(200, {"ok": True}),
+        **ADMIN,
+        ("GET", "user_profiles"): FakeResponse(200, [{"telegram_chat_id": CHAT_ID}]),
+    })
+    sm.requests = fake
+    sm.register_telegram_command_menu()
+    default, admin = fake.find("POST", "setMyCommands")
+    assert "scope" not in default["json"]
+    assert {c["command"] for c in default["json"]["commands"]} >= {"status", "monitors", "pause", "stop"}
+    assert "stats" not in {c["command"] for c in default["json"]["commands"]}
+    assert admin["json"]["scope"] == {"type": "chat", "chat_id": CHAT_ID}
+    assert "pause_all" in {c["command"] for c in admin["json"]["commands"]}

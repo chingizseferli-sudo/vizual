@@ -285,7 +285,7 @@ function TelegramAdminPage() {
                 <h2 className='font-semibold'>Müştəri bildirişləri</h2>
                 <p className='mt-1 text-sm text-muted-foreground'>
                   {data.paused
-                    ? 'Dayandırılıb. Bot əmrləri (/start, /stop, /status) işləyir.'
+                    ? 'Dayandırılıb. Bot əmrləri (/start, /status, /stop və s.) işləyir.'
                     : 'Aktivdir. Dəyişiklik worker-ə 1 dəqiqəyə çatır.'}
                 </p>
               </div>
