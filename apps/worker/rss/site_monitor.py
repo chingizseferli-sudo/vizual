@@ -39,6 +39,9 @@ SOURCE_MAX_CONSECUTIVE_FAILS = int(os.getenv("SOURCE_MAX_CONSECUTIVE_FAILS", "5"
 GOOGLE_NEWS_FALLBACK_HOURS = max(1, int(os.getenv("GOOGLE_NEWS_FALLBACK_HOURS", str(NEWS_TIME_LIMIT_HOURS))))
 SCHEDULER_DRY_RUN = os.getenv("SCHEDULER_DRY_RUN", "false").strip().lower() in {"1", "true", "yes"}
 DISABLE_TELEGRAM_SEND = os.getenv("DISABLE_TELEGRAM_SEND", "false").strip().lower() in {"1", "true", "yes"}
+# Legacy `/start <user uuid>` linking lets anyone who knows a UUID receive that user's alerts.
+TELEGRAM_ALLOW_LEGACY_UUID_LINK = os.getenv("TELEGRAM_ALLOW_LEGACY_UUID_LINK", "false").strip().lower() in {"1", "true", "yes"}
+BOT_SETTINGS_CACHE_SECONDS = 60
 VERIFY_RELEASE_REPAIR_ONLY = os.getenv("VERIFY_RELEASE_REPAIR_ONLY", "false").strip().lower() in {"1", "true", "yes"}
 SOURCE_DEFAULT_INTERVAL_MINUTES = max(1, int(os.getenv("SOURCE_DEFAULT_INTERVAL_MINUTES", "60")))
 SOURCE_SITEMAP_SCAN_LIMIT = max(5, int(os.getenv("SOURCE_SITEMAP_SCAN_LIMIT", "50")))
@@ -54,6 +57,9 @@ USER_TELEGRAM_CACHE = {}
 ARTICLE_TITLE_INFO_CACHE = {}
 LAST_MONITOR_CLEANUP = None
 TELEGRAM_LAST_ERROR = ""
+BOT_SETTINGS_CACHE = {"paused": False, "fetched_at": 0.0}
+RUNTIME_STATE_TABLE_AVAILABLE = True
+TELEGRAM_HEARTBEAT = {"last_poll_at": None, "last_error": None, "last_error_at": None, "last_send_ok_at": None, "loaded": False}
 
 STRICT_WORDS = {
     "dim", "tkta", "arti", "pisa", "timss", "pirls", "bağça", "magistr",
@@ -140,6 +146,7 @@ DOMAIN_DETAIL_ARTICLE_PATTERNS = {
 
 DB_LOCK = threading.Lock()
 TELEGRAM_LOCK = threading.Lock()
+BOT_SETTINGS_LOCK = threading.Lock()
 ARTICLE_TITLE_CACHE = {}
 DOMAIN_LOCKS = {}
 DOMAIN_LOCKS_LOCK = threading.Lock()
@@ -1104,13 +1111,43 @@ def parse_telegram_response(response):
     return result
 
 
-def send_telegram(message, chat_id=None):
+def notifications_paused():
+    """Admin-controlled global pause (bot_settings.notifications_paused), cached."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return False
+    with BOT_SETTINGS_LOCK:
+        if time.time() - BOT_SETTINGS_CACHE["fetched_at"] < BOT_SETTINGS_CACHE_SECONDS:
+            return BOT_SETTINGS_CACHE["paused"]
+        BOT_SETTINGS_CACHE["fetched_at"] = time.time()
+        try:
+            response = requests.get(
+                f"{SUPABASE_URL}/rest/v1/bot_settings",
+                headers=supabase_headers(),
+                params={"select": "notifications_paused", "id": "eq.1", "limit": "1"},
+                timeout=REQUEST_TIMEOUT,
+            )
+            if response.status_code == 200:
+                rows = response.json() or []
+                BOT_SETTINGS_CACHE["paused"] = bool(rows and rows[0].get("notifications_paused"))
+            else:
+                # Keep the last known value (False until the migration is applied).
+                print(f"bot_settings oxunmadi: {response.status_code} | {response.text[:160]}", flush=True)
+        except Exception as exc:
+            print(f"bot_settings istisnasi: {redact_secrets(exc)}", flush=True)
+        return BOT_SETTINGS_CACHE["paused"]
+
+
+def send_telegram(message, chat_id=None, bypass_pause=False):
     global TELEGRAM_LAST_ERROR
     TELEGRAM_LAST_ERROR = ""
     target_chat_id = clean_text(chat_id or CHAT_ID)
     if DISABLE_TELEGRAM_SEND:
         TELEGRAM_LAST_ERROR = "telegram_disabled"
         print("Telegram send disabled by DISABLE_TELEGRAM_SEND; message skipped safely.", flush=True)
+        return False
+    if not bypass_pause and notifications_paused():
+        TELEGRAM_LAST_ERROR = "telegram_disabled"
+        print("Telegram bildirişləri admin tərəfindən dayandırılıb; mesaj göndərilmədi.", flush=True)
         return False
     if not BOT_TOKEN or not target_chat_id:
         TELEGRAM_LAST_ERROR = "bad_request"
@@ -1130,6 +1167,7 @@ def send_telegram(message, chat_id=None):
                 response = requests.post(url, data=payload, timeout=15)
         except Exception as exc:
             TELEGRAM_LAST_ERROR = "network_error"
+            record_telegram_error("send:network_error")
             print(f"Telegram network_error: chat={target_chat_id} | {redact_secrets(exc)}", flush=True)
             return False
 
@@ -1137,9 +1175,11 @@ def send_telegram(message, chat_id=None):
         print(f"Telegram: {parsed['status_code']} | reason={parsed['reason'] or 'sent'}", flush=True)
         if parsed["ok"]:
             TELEGRAM_LAST_ERROR = ""
+            TELEGRAM_HEARTBEAT["last_send_ok_at"] = datetime.now(BAKU_TZ).isoformat()
             return True
 
         TELEGRAM_LAST_ERROR = parsed["reason"] or "network_error"
+        record_telegram_error(f"send:{TELEGRAM_LAST_ERROR}")
         print(f"Telegram cavabi: {parsed['description'][:500]}", flush=True)
 
         if TELEGRAM_LAST_ERROR == "chat_migrated":
@@ -1159,7 +1199,88 @@ def send_telegram(message, chat_id=None):
     return False
 
 
+TELEGRAM_UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+TELEGRAM_LINK_TOKEN_RE = re.compile(r"[0-9a-f]{32}")
+TELEGRAM_REPLY_LINKED = "Telegram bildirişləri aktiv edildi. Dayandırmaq üçün /stop yazın."
+TELEGRAM_REPLY_LINK_INVALID = "Link etibarsızdır. Profil səhifəsində «Telegram-ı qoş» ilə yeni link yaradın."
+TELEGRAM_REPLY_LINK_EXPIRED = "Linkin vaxtı bitib. Profil səhifəsindən yeni link yaradın."
+TELEGRAM_REPLY_LINK_USED = "Bu link artıq istifadə olunub. Profil səhifəsindən yeni link yaradın."
+TELEGRAM_REPLY_ERROR = "Əməliyyat alınmadı. Bir az sonra yenidən cəhd edin."
+TELEGRAM_REPLY_STOPPED = "Telegram bildirişləri dayandırıldı. Yenidən qoşmaq üçün profil səhifəsindən link yaradın."
+TELEGRAM_REPLY_NOT_LINKED = "Bu çat heç bir hesaba qoşulmayıb."
+TELEGRAM_REPLY_HELP = (
+    "Vizual bot əmrləri:\n"
+    "/status - qoşulma vəziyyəti\n"
+    "/stop - bildirişləri dayandır\n"
+    "/help - kömək\n"
+    "Qoşulmaq üçün profil səhifəsində «Telegram-ı qoş» düyməsini basın."
+)
+
+
+def runtime_state_table_missing(response):
+    if response.status_code == 404:
+        return True
+    return any(code in (response.text or "") for code in ("42P01", "PGRST205"))
+
+
+def load_runtime_state(key):
+    """Returns (ok, value). ok=False when bot_runtime_state can't be read."""
+    global RUNTIME_STATE_TABLE_AVAILABLE
+    if not RUNTIME_STATE_TABLE_AVAILABLE or not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return False, None
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/bot_runtime_state",
+            headers=supabase_headers(),
+            params={"select": "value", "key": f"eq.{key}", "limit": "1"},
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as exc:
+        print(f"bot_runtime_state oxuma istisnasi: {redact_secrets(exc)}", flush=True)
+        return False, None
+    if response.status_code == 200:
+        rows = response.json() or []
+        return True, (rows[0].get("value") if rows else None)
+    if runtime_state_table_missing(response):
+        RUNTIME_STATE_TABLE_AVAILABLE = False
+        print("bot_runtime_state cədvəli yoxdur; lokal fayl istifadə olunur.", flush=True)
+    else:
+        print(f"bot_runtime_state oxuma xetasi: {response.status_code} | {response.text[:160]}", flush=True)
+    return False, None
+
+
+def save_runtime_state(key, value):
+    global RUNTIME_STATE_TABLE_AVAILABLE
+    if not RUNTIME_STATE_TABLE_AVAILABLE or not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return False
+    try:
+        response = requests.post(
+            f"{SUPABASE_URL}/rest/v1/bot_runtime_state",
+            headers=supabase_headers({"Prefer": "resolution=merge-duplicates,return=minimal"}),
+            json={"key": key, "value": value, "updated_at": datetime.now(BAKU_TZ).isoformat()},
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as exc:
+        print(f"bot_runtime_state yazma istisnasi: {redact_secrets(exc)}", flush=True)
+        return False
+    if response.status_code in (200, 201, 204):
+        return True
+    if runtime_state_table_missing(response):
+        RUNTIME_STATE_TABLE_AVAILABLE = False
+        print("bot_runtime_state cədvəli yoxdur; lokal fayl istifadə olunur.", flush=True)
+    else:
+        print(f"bot_runtime_state yazma xetasi: {response.status_code} | {response.text[:160]}", flush=True)
+    return False
+
+
 def load_telegram_offset():
+    ok, value = load_runtime_state("telegram_offset")
+    if ok and isinstance(value, dict):
+        try:
+            return int(value.get("offset", 0))
+        except (TypeError, ValueError):
+            return 0
+    # Table missing, unreadable, or no row yet (first run after migration).
     try:
         if not os.path.exists(TELEGRAM_OFFSET_FILE):
             return 0
@@ -1170,11 +1291,174 @@ def load_telegram_offset():
 
 
 def save_telegram_offset(offset):
+    if save_runtime_state("telegram_offset", {"offset": offset}):
+        return
     try:
         with open(TELEGRAM_OFFSET_FILE, "w", encoding="utf-8") as fh:
             json.dump({"offset": offset}, fh)
     except Exception as exc:
         print(f"Telegram offset yazilmadi: {exc}", flush=True)
+
+
+def save_telegram_heartbeat():
+    if not TELEGRAM_HEARTBEAT["loaded"]:
+        # Keep last_send_ok_at / last_error across worker restarts.
+        ok, previous = load_runtime_state("telegram_heartbeat")
+        if ok and isinstance(previous, dict):
+            for field in ("last_error", "last_error_at", "last_send_ok_at"):
+                if TELEGRAM_HEARTBEAT.get(field) is None and previous.get(field):
+                    TELEGRAM_HEARTBEAT[field] = previous.get(field)
+        TELEGRAM_HEARTBEAT["loaded"] = True
+    save_runtime_state(
+        "telegram_heartbeat",
+        {field: TELEGRAM_HEARTBEAT.get(field) for field in ("last_poll_at", "last_error", "last_error_at", "last_send_ok_at")},
+    )
+
+
+def record_telegram_error(error):
+    TELEGRAM_HEARTBEAT["last_error"] = error
+    TELEGRAM_HEARTBEAT["last_error_at"] = datetime.now(BAKU_TZ).isoformat()
+
+
+def find_users_by_telegram_chat(chat_id):
+    response = requests.get(
+        f"{SUPABASE_URL}/rest/v1/user_profiles",
+        headers=supabase_headers(),
+        params={"select": "user_id", "telegram_chat_id": f"eq.{chat_id}", "limit": "50"},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"user_profiles:{response.status_code}:{response.text[:160]}")
+    return [row.get("user_id") for row in (response.json() or []) if row.get("user_id")]
+
+
+def redeem_telegram_link_token(token, chat_id):
+    now_iso = datetime.now(BAKU_TZ).isoformat()
+    response = requests.get(
+        f"{SUPABASE_URL}/rest/v1/telegram_link_tokens",
+        headers=supabase_headers(),
+        params={"select": "user_id,expires_at,used_at", "token": f"eq.{token}", "limit": "1"},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code != 200:
+        print(f"Telegram link token oxuma xetasi: {response.status_code} | {response.text[:160]}", flush=True)
+        return TELEGRAM_REPLY_ERROR
+    rows = response.json() or []
+    if not rows:
+        return TELEGRAM_REPLY_LINK_INVALID
+    row = rows[0]
+    if row.get("used_at"):
+        return TELEGRAM_REPLY_LINK_USED
+    expires_at = parse_baku_datetime(row.get("expires_at"))
+    if not expires_at or expires_at <= datetime.now(BAKU_TZ):
+        return TELEGRAM_REPLY_LINK_EXPIRED
+
+    # Conditional update = atomic claim: a second chat racing on the same token gets no row back.
+    claim = requests.patch(
+        f"{SUPABASE_URL}/rest/v1/telegram_link_tokens",
+        headers=supabase_headers({"Prefer": "return=representation"}),
+        params={"token": f"eq.{token}", "used_at": "is.null", "expires_at": f"gt.{now_iso}"},
+        json={"used_at": now_iso, "chat_id": chat_id},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if claim.status_code != 200 or not (claim.json() or []):
+        return TELEGRAM_REPLY_LINK_USED
+
+    user_id = row.get("user_id")
+    connected, reason = enable_user_telegram_subscription(user_id, chat_id)
+    if not connected:
+        print(f"Telegram profil/monitor yazma xetasi: {reason}", flush=True)
+        requests.patch(
+            f"{SUPABASE_URL}/rest/v1/telegram_link_tokens",
+            headers=supabase_headers({"Prefer": "return=minimal"}),
+            params={"token": f"eq.{token}"},
+            json={"used_at": None, "chat_id": None},
+            timeout=REQUEST_TIMEOUT,
+        )
+        return TELEGRAM_REPLY_ERROR
+    print(f"Telegram profil ve monitorlar baglandi (token): user={user_id}", flush=True)
+    return TELEGRAM_REPLY_LINKED
+
+
+def link_telegram_chat(payload, chat_id):
+    if TELEGRAM_UUID_RE.fullmatch(payload):
+        if not TELEGRAM_ALLOW_LEGACY_UUID_LINK:
+            print("Telegram legacy UUID link rədd edildi.", flush=True)
+            return TELEGRAM_REPLY_LINK_INVALID
+        connected, reason = enable_user_telegram_subscription(payload, chat_id)
+        if not connected:
+            print(f"Telegram profil/monitor yazma xetasi: {reason}", flush=True)
+            return TELEGRAM_REPLY_ERROR
+        print(f"Telegram profil ve monitorlar baglandi (legacy UUID): user={payload}", flush=True)
+        return TELEGRAM_REPLY_LINKED
+    if not TELEGRAM_LINK_TOKEN_RE.fullmatch(payload):
+        return TELEGRAM_REPLY_LINK_INVALID
+    return redeem_telegram_link_token(payload, chat_id)
+
+
+def unlink_telegram_chat(chat_id):
+    user_ids = find_users_by_telegram_chat(chat_id)
+    monitors_response = requests.patch(
+        f"{SUPABASE_URL}/rest/v1/user_monitors",
+        headers=supabase_headers({"Prefer": "return=representation"}),
+        params={"telegram_chat_id": f"eq.{chat_id}", "select": "id"},
+        json={"notify_telegram": False},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if monitors_response.status_code != 200:
+        raise RuntimeError(f"monitors:{monitors_response.status_code}:{monitors_response.text[:160]}")
+    monitors_updated = len(monitors_response.json() or [])
+    if not user_ids and not monitors_updated:
+        return TELEGRAM_REPLY_NOT_LINKED
+
+    profile_response = requests.patch(
+        f"{SUPABASE_URL}/rest/v1/user_profiles",
+        headers=supabase_headers({"Prefer": "return=minimal"}),
+        params={"telegram_chat_id": f"eq.{chat_id}"},
+        json={"telegram_chat_id": None, "updated_at": datetime.now(BAKU_TZ).isoformat()},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if profile_response.status_code not in (200, 204):
+        raise RuntimeError(f"profile:{profile_response.status_code}:{profile_response.text[:160]}")
+    for user_id, cached_chat_id in list(USER_TELEGRAM_CACHE.items()):
+        if cached_chat_id == chat_id:
+            USER_TELEGRAM_CACHE.pop(user_id, None)
+    print(f"Telegram çat ayrıldı: users={len(user_ids)} | monitors={monitors_updated}", flush=True)
+    return TELEGRAM_REPLY_STOPPED
+
+
+def telegram_chat_status(chat_id):
+    user_ids = find_users_by_telegram_chat(chat_id)
+    if not user_ids:
+        return TELEGRAM_REPLY_NOT_LINKED
+    response = requests.get(
+        f"{SUPABASE_URL}/rest/v1/user_monitors",
+        headers=supabase_headers(),
+        params={
+            "select": "id",
+            "user_id": f"in.({','.join(user_ids)})",
+            "status": "eq.active",
+            "notify_telegram": "not.is.false",
+            "limit": "1000",
+        },
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"monitors:{response.status_code}:{response.text[:160]}")
+    return f"Çat qoşulub. Aktiv monitor sayı: {len(response.json() or [])}."
+
+
+def handle_telegram_command(text, chat_id):
+    parts = text.split(maxsplit=1)
+    command = parts[0].split("@", 1)[0].lower()
+    payload = parts[1].strip() if len(parts) > 1 else ""
+    if command == "/start":
+        return link_telegram_chat(payload, chat_id) if payload else TELEGRAM_REPLY_HELP
+    if command == "/stop":
+        return unlink_telegram_chat(chat_id)
+    if command == "/status":
+        return telegram_chat_status(chat_id)
+    return TELEGRAM_REPLY_HELP
 
 
 def connect_telegram_users_from_updates():
@@ -1186,8 +1470,10 @@ def connect_telegram_users_from_updates():
             params={"offset": load_telegram_offset(), "timeout": 0, "allowed_updates": json.dumps(["message"])},
             timeout=REQUEST_TIMEOUT,
         )
+        TELEGRAM_HEARTBEAT["last_poll_at"] = datetime.now(BAKU_TZ).isoformat()
         if response.status_code != 200:
-            print(f"Telegram getUpdates xetasi: {response.status_code} | {response.text[:200]}", flush=True)
+            record_telegram_error(f"poll:{response.status_code}")
+            print(f"Telegram getUpdates xetasi: {response.status_code} | {redact_secrets(response.text[:200])}", flush=True)
             return
         updates = response.json().get("result", []) or []
         next_offset = None
@@ -1197,28 +1483,23 @@ def connect_telegram_users_from_updates():
                 next_offset = max(next_offset or 0, update_id + 1)
             message = update.get("message") or {}
             text = clean_text(message.get("text"))
-            if not text.startswith("/start"):
+            chat_id = clean_text((message.get("chat") or {}).get("id"))
+            if not text.startswith("/") or not chat_id:
                 continue
-            parts = text.split(maxsplit=1)
-            if len(parts) < 2:
-                continue
-            user_id = parts[1].strip()
-            if not re.fullmatch(r"[0-9a-fA-F-]{36}", user_id):
-                continue
-            chat = message.get("chat") or {}
-            chat_id = clean_text(chat.get("id"))
-            if not chat_id:
-                continue
-            connected, reason = enable_user_telegram_subscription(user_id, chat_id)
-            if connected:
-                print(f"Telegram profil ve monitorlar baglandi: user={user_id}", flush=True)
-                send_telegram("Telegram bildirisleri aktiv edildi.", chat_id=chat_id)
-            else:
-                print(f"Telegram profil/monitor yazma xetasi: {reason}", flush=True)
+            try:
+                reply = handle_telegram_command(text, chat_id)
+            except Exception as exc:
+                print(f"Telegram əmr xetasi: {redact_secrets(exc)}", flush=True)
+                reply = TELEGRAM_REPLY_ERROR
+            # Command replies are not customer alerts: they ignore the admin pause.
+            send_telegram(reply, chat_id=chat_id, bypass_pause=True)
         if next_offset is not None:
             save_telegram_offset(next_offset)
     except Exception as exc:
+        record_telegram_error("poll:exception")
         print(f"Telegram connect istisnasi: {redact_secrets(exc)}", flush=True)
+    finally:
+        save_telegram_heartbeat()
 
 
 def strip_inline_html(text):
@@ -4246,6 +4527,9 @@ def check_sites():
             if sent_count >= MAX_SEND_PER_RUN:
                 print("Bu dövr üçün göndərmə limiti tamamlandı. Qalan başladılmış yoxlamalar tamamlanacaq.", flush=True)
                 break
+
+    if BOT_TOKEN and supabase_ready():
+        save_telegram_heartbeat()
 
     elapsed = time.time() - started
     print("=" * 60, flush=True)

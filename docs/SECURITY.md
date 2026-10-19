@@ -28,6 +28,7 @@
 | 14 | Low | `supabase/functions/*/index.ts:4-6` | `Access-Control-Allow-Origin: *`; errors echo upstream response bodies. | Open |
 | 15 | Low | `supabase/migrations/202607070003_public_site_assets_bucket.sql:13` | Public bucket allows `image/svg+xml` (script-capable, served from storage origin; admin-only upload). | Open |
 | 16 | Info | prod, not in repo | Owner policies for `user_monitors`/`monitor_keywords` exist only in dashboard; verify they don't allow direct inserts that bypass `create_user_monitor_with_limit`. | Open (verify) |
+| 17 | High | Telegram: `apps/web/src/routes/(auth)/monitor/profile.tsx`, `apps/worker/rss/site_monitor.py` (`connect_telegram_users_from_updates`) | Bot linked any chat that sent `/start <auth user uuid>`; anyone who learned a user's UUID received that user's alerts. | Fixed: single-use 15-min tokens (`create_telegram_link_token`, migration `20261019000002`); UUID payloads rejected unless `TELEGRAM_ALLOW_LEGACY_UUID_LINK=true`. Deploy web + worker together after the migration. |
 
 No service-role or other secret is referenced via `VITE_*` or client code (only `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_TELEGRAM_BOT_USERNAME`). No `dangerouslySetInnerHTML`; `textarea.innerHTML` entity decoding is inert. Sign-in redirect is restricted to `/monitor*` / `/admin*`.
 

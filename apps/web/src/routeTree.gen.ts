@@ -41,6 +41,7 @@ import { Route as authMonitorResultsRouteImport } from './routes/(auth)/monitor/
 import { Route as authMonitorProfileRouteImport } from './routes/(auth)/monitor/profile'
 import { Route as authMonitorMonitorsRouteImport } from './routes/(auth)/monitor/monitors'
 import { Route as authMonitorAlertsRouteImport } from './routes/(auth)/monitor/alerts'
+import { Route as authAdminTelegramRouteImport } from './routes/(auth)/admin/telegram'
 import { Route as authAdminSubscriptionsRouteImport } from './routes/(auth)/admin/subscriptions'
 import { Route as authAdminNewsRouteImport } from './routes/(auth)/admin/news'
 import { Route as authAdminSettingsRouteRouteImport } from './routes/(auth)/admin/settings/route'
@@ -233,6 +234,11 @@ const authMonitorAlertsRoute = authMonitorAlertsRouteImport.update({
   path: '/alerts',
   getParentRoute: () => authMonitorRouteRoute,
 } as any)
+const authAdminTelegramRoute = authAdminTelegramRouteImport.update({
+  id: '/telegram',
+  path: '/telegram',
+  getParentRoute: () => authAdminRouteRoute,
+} as any)
 const authAdminSubscriptionsRoute = authAdminSubscriptionsRouteImport.update({
   id: '/subscriptions',
   path: '/subscriptions',
@@ -405,6 +411,7 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof authAdminSettingsRouteRouteWithChildren
   '/admin/news': typeof authAdminNewsRouteWithChildren
   '/admin/subscriptions': typeof authAdminSubscriptionsRoute
+  '/admin/telegram': typeof authAdminTelegramRoute
   '/monitor/alerts': typeof authMonitorAlertsRoute
   '/monitor/monitors': typeof authMonitorMonitorsRoute
   '/monitor/profile': typeof authMonitorProfileRoute
@@ -461,6 +468,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/admin/sign-in': typeof AdminSignInRoute
   '/admin/subscriptions': typeof authAdminSubscriptionsRoute
+  '/admin/telegram': typeof authAdminTelegramRoute
   '/monitor/alerts': typeof authMonitorAlertsRoute
   '/monitor/monitors': typeof authMonitorMonitorsRoute
   '/monitor/profile': typeof authMonitorProfileRoute
@@ -522,6 +530,7 @@ export interface FileRoutesById {
   '/(auth)/admin/settings': typeof authAdminSettingsRouteRouteWithChildren
   '/(auth)/admin/news': typeof authAdminNewsRouteWithChildren
   '/(auth)/admin/subscriptions': typeof authAdminSubscriptionsRoute
+  '/(auth)/admin/telegram': typeof authAdminTelegramRoute
   '/(auth)/monitor/alerts': typeof authMonitorAlertsRoute
   '/(auth)/monitor/monitors': typeof authMonitorMonitorsRoute
   '/(auth)/monitor/profile': typeof authMonitorProfileRoute
@@ -585,6 +594,7 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/news'
     | '/admin/subscriptions'
+    | '/admin/telegram'
     | '/monitor/alerts'
     | '/monitor/monitors'
     | '/monitor/profile'
@@ -641,6 +651,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/admin/sign-in'
     | '/admin/subscriptions'
+    | '/admin/telegram'
     | '/monitor/alerts'
     | '/monitor/monitors'
     | '/monitor/profile'
@@ -701,6 +712,7 @@ export interface FileRouteTypes {
     | '/(auth)/admin/settings'
     | '/(auth)/admin/news'
     | '/(auth)/admin/subscriptions'
+    | '/(auth)/admin/telegram'
     | '/(auth)/monitor/alerts'
     | '/(auth)/monitor/monitors'
     | '/(auth)/monitor/profile'
@@ -987,6 +999,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authMonitorAlertsRouteImport
       parentRoute: typeof authMonitorRouteRoute
     }
+    '/(auth)/admin/telegram': {
+      id: '/(auth)/admin/telegram'
+      path: '/telegram'
+      fullPath: '/admin/telegram'
+      preLoaderRoute: typeof authAdminTelegramRouteImport
+      parentRoute: typeof authAdminRouteRoute
+    }
     '/(auth)/admin/subscriptions': {
       id: '/(auth)/admin/subscriptions'
       path: '/subscriptions'
@@ -1270,6 +1289,7 @@ interface authAdminRouteRouteChildren {
   authAdminSettingsRouteRoute: typeof authAdminSettingsRouteRouteWithChildren
   authAdminNewsRoute: typeof authAdminNewsRouteWithChildren
   authAdminSubscriptionsRoute: typeof authAdminSubscriptionsRoute
+  authAdminTelegramRoute: typeof authAdminTelegramRoute
   authAdminIndexRoute: typeof authAdminIndexRoute
   authAdminErrorsErrorRoute: typeof authAdminErrorsErrorRoute
   authAdminUsersUserIdRoute: typeof authAdminUsersUserIdRoute
@@ -1281,6 +1301,7 @@ const authAdminRouteRouteChildren: authAdminRouteRouteChildren = {
   authAdminSettingsRouteRoute: authAdminSettingsRouteRouteWithChildren,
   authAdminNewsRoute: authAdminNewsRouteWithChildren,
   authAdminSubscriptionsRoute: authAdminSubscriptionsRoute,
+  authAdminTelegramRoute: authAdminTelegramRoute,
   authAdminIndexRoute: authAdminIndexRoute,
   authAdminErrorsErrorRoute: authAdminErrorsErrorRoute,
   authAdminUsersUserIdRoute: authAdminUsersUserIdRoute,

@@ -3,6 +3,7 @@
   FileText,
   Globe,
   LayoutDashboard,
+  Send,
   Settings,
   ShieldCheck,
   Users,
@@ -52,6 +53,11 @@ export const sidebarData: SidebarData = {
           title: 'Bot logları',
           url: '/admin/monitor/logs',
           icon: FileText,
+        },
+        {
+          title: 'Telegram bot',
+          url: '/admin/telegram',
+          icon: Send,
         },
         {
           title: 'Tənzimləmələr',

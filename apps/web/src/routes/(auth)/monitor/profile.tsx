@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { clientEnv } from '@/config/env'
 import {
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
+import { openExternalUrl } from '@/lib/utils'
 
 type ProfileRow = {
   user_id: string
@@ -73,12 +74,24 @@ function getStatusLabel(status: string | null) {
   return status || '-'
 }
 
-function getTelegramBotUrl(userId: string) {
+function getTelegramBotUrl(startToken?: string) {
   const username = clientEnv.telegramBotUsername.replace(/^@/, '').trim()
 
-  if (!username || !userId) return ''
+  if (!username) return ''
 
-  return `https://t.me/${encodeURIComponent(username)}?start=${encodeURIComponent(userId)}`
+  const base = `https://t.me/${encodeURIComponent(username)}`
+  return startToken ? `${base}?start=${encodeURIComponent(startToken)}` : base
+}
+
+// One-time token (15 min, single use) so a leaked user id can't link a chat.
+async function createTelegramLinkUrl() {
+  const { data, error } = await supabase.rpc('create_telegram_link_token')
+
+  if (error || typeof data !== 'string' || !data) {
+    throw new Error(error?.message || 'Telegram linki yaradılmadı.')
+  }
+
+  return getTelegramBotUrl(data)
 }
 
 async function loadOptionalPlan(
@@ -195,6 +208,8 @@ function NotificationChannelCard({
   statusTone,
   icon: Icon,
   href,
+  onAction,
+  actionDisabled,
   actionLabel,
 }: {
   title: string
@@ -202,6 +217,8 @@ function NotificationChannelCard({
   statusTone: 'active' | 'ready' | 'soon'
   icon: LucideIcon
   href?: string
+  onAction?: () => void
+  actionDisabled?: boolean
   actionLabel?: string
 }) {
   const toneClass =
@@ -235,6 +252,19 @@ function NotificationChannelCard({
     </div>
   )
 
+  if (onAction) {
+    return (
+      <button
+        type='button'
+        onClick={onAction}
+        disabled={actionDisabled}
+        className='rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md disabled:pointer-events-none disabled:opacity-60'
+      >
+        {content}
+      </button>
+    )
+  }
+
   if (href) {
     return (
       <a
@@ -263,6 +293,12 @@ function ProfilePage() {
   })
   const profileState = data?.profileState || null
   const errorMessage = data?.errorMessage || ''
+  const telegramLink = useMutation({
+    mutationFn: createTelegramLinkUrl,
+    onSuccess: (url) => {
+      openExternalUrl(url)
+    },
+  })
 
   if (isLoading) {
     return (
@@ -289,7 +325,7 @@ function ProfilePage() {
     typeof planLimit === 'number' && profileState.monitorCount >= planLimit
   const telegramActive = Boolean(profileState.telegramChatId)
   const emailReady = profileState.email !== '-'
-  const telegramBotUrl = getTelegramBotUrl(profileState.userId)
+  const telegramBotUrl = getTelegramBotUrl()
 
   return (
     <div className='grid gap-4 p-4 md:p-6'>
@@ -364,12 +400,20 @@ function ProfilePage() {
             status={telegramActive ? 'Aktiv' : 'Aktiv deyil'}
             statusTone={telegramActive ? 'active' : 'soon'}
             icon={Send}
-            href={telegramBotUrl}
+            href={telegramActive ? telegramBotUrl : undefined}
+            onAction={
+              telegramBotUrl && !telegramActive
+                ? () => telegramLink.mutate()
+                : undefined
+            }
+            actionDisabled={telegramLink.isPending}
             actionLabel={
               telegramBotUrl
                 ? telegramActive
                   ? 'Botu aç'
-                  : 'Qoşul'
+                  : telegramLink.isPending
+                    ? 'Link yaradılır...'
+                    : 'Telegram-ı qoş'
                 : undefined
             }
           />
@@ -392,6 +436,32 @@ function ProfilePage() {
             icon={Smartphone}
           />
         </div>
+
+        {telegramLink.data ? (
+          <p className='mt-3 text-sm text-muted-foreground'>
+            Link 15 dəqiqə etibarlıdır və bir dəfə istifadə olunur. Telegram
+            açılmadısa,{' '}
+            <a
+              href={telegramLink.data}
+              target='_blank'
+              rel='noopener noreferrer'
+              className='font-medium text-primary underline'
+            >
+              bu linkə keçin
+            </a>{' '}
+            və <span className='font-medium'>Start</span> düyməsini basın.
+          </p>
+        ) : null}
+        {telegramLink.isError ? (
+          <p className='mt-3 text-sm text-destructive' role='alert'>
+            Telegram linki yaradılmadı. Bir az sonra yenidən cəhd edin.
+          </p>
+        ) : null}
+        {telegramActive ? (
+          <p className='mt-3 text-sm text-muted-foreground'>
+            Bildirişləri dayandırmaq üçün botda /stop yazın.
+          </p>
+        ) : null}
       </section>
 
       <section className='rounded-2xl border border-border bg-card p-5 shadow-sm'>
