@@ -12,6 +12,9 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import requests
+import requests.adapters
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
@@ -186,6 +189,66 @@ def assert_public_url(url):
         raise UnsafeUrlError("unsafe_url")
 
 
+class _PeerCheckMixin:
+    """Validate the address the socket actually connected to.
+
+    assert_public_url() resolves the host before the request, but urllib3
+    resolves it again when connecting; a DNS-rebinding host can answer with a
+    public address first and a private one second. Checking the peer of the
+    connected socket, before any byte is sent, closes that gap."""
+
+    def _new_conn(self):
+        sock = super()._new_conn()
+        try:
+            peer = sock.getpeername()[0]
+        except OSError:
+            peer = ""
+        if not is_public_ip(str(peer).split("%")[0]):
+            sock.close()
+            raise UnsafeUrlError("unsafe_url")
+        return sock
+
+
+class _PeerCheckedHTTPConnection(_PeerCheckMixin, HTTPConnection):
+    pass
+
+
+class _PeerCheckedHTTPSConnection(_PeerCheckMixin, HTTPSConnection):
+    pass
+
+
+class _PeerCheckedHTTPPool(HTTPConnectionPool):
+    ConnectionCls = _PeerCheckedHTTPConnection
+
+
+class _PeerCheckedHTTPSPool(HTTPSConnectionPool):
+    ConnectionCls = _PeerCheckedHTTPSConnection
+
+
+class _PeerCheckedAdapter(requests.adapters.HTTPAdapter):
+    def init_poolmanager(self, *args, **kwargs):
+        super().init_poolmanager(*args, **kwargs)
+        self.poolmanager.pool_classes_by_scheme = {"http": _PeerCheckedHTTPPool, "https": _PeerCheckedHTTPSPool}
+
+
+_GUARDED_SESSION = threading.local()
+
+
+def guarded_request(method, url, **kwargs):
+    """requests.request through a per-thread session whose connections refuse
+    non-public peers. Environment proxies are ignored (trust_env=False) so the
+    peer is always the target host."""
+    session = getattr(_GUARDED_SESSION, "session", None)
+    if session is None:
+        session = requests.Session()
+        session.trust_env = False
+        adapter = _PeerCheckedAdapter()
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        _GUARDED_SESSION.session = session
+    return session.request(method, url, **kwargs)
+
+
 def safe_http_request(method, url, config, headers=None, timeout=None, max_bytes=None, read_body=True):
     """requests wrapper for user-supplied URLs: SSRF check on every redirect hop,
     hard timeout, and a cap on how many body bytes are read."""
@@ -197,7 +260,7 @@ def safe_http_request(method, url, config, headers=None, timeout=None, max_bytes
 
     for _hop in range(max_redirects + 1):
         assert_public_url(current_url)
-        response = requests.request(
+        response = guarded_request(
             method,
             current_url,
             headers=headers,

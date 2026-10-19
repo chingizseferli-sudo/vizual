@@ -1,5 +1,6 @@
 import socket
 import sys
+import threading
 import types
 
 import pytest
@@ -101,7 +102,7 @@ def test_redirect_to_private_address_blocked(monkeypatch):
         assert kwargs["timeout"] == 5
         return FakeResponse(302, {"Location": "http://evil.example/latest/meta-data/"})
 
-    monkeypatch.setattr(cm.requests, "request", fake_request)
+    monkeypatch.setattr(cm, "guarded_request", fake_request)
     with pytest.raises(cm.UnsafeUrlError):
         cm.safe_http_request("GET", "https://example.com/", CONFIG)
     assert calls == ["https://example.com/"]
@@ -109,18 +110,18 @@ def test_redirect_to_private_address_blocked(monkeypatch):
 
 def test_response_size_cap(monkeypatch):
     monkeypatch.setattr(cm.socket, "getaddrinfo", fake_dns({"example.com": ["93.184.216.34"]}))
-    monkeypatch.setattr(cm.requests, "request", lambda *a, **k: FakeResponse(200, chunks=[b"x" * 600, b"y" * 600]))
+    monkeypatch.setattr(cm, "guarded_request", lambda *a, **k: FakeResponse(200, chunks=[b"x" * 600, b"y" * 600]))
     with pytest.raises(cm.ResponseTooLargeError):
         cm.safe_http_request("GET", "https://example.com/", CONFIG)
 
-    monkeypatch.setattr(cm.requests, "request", lambda *a, **k: FakeResponse(200, {"Content-Length": "999999"}))
+    monkeypatch.setattr(cm, "guarded_request", lambda *a, **k: FakeResponse(200, {"Content-Length": "999999"}))
     with pytest.raises(cm.ResponseTooLargeError):
         cm.safe_http_request("GET", "https://example.com/", CONFIG)
 
 
 def test_small_response_body_is_returned(monkeypatch):
     monkeypatch.setattr(cm.socket, "getaddrinfo", fake_dns({"example.com": ["93.184.216.34"]}))
-    monkeypatch.setattr(cm.requests, "request", lambda *a, **k: FakeResponse(200, body=b"<html>ok</html>"))
+    monkeypatch.setattr(cm, "guarded_request", lambda *a, **k: FakeResponse(200, body=b"<html>ok</html>"))
     response = cm.safe_http_request("GET", "https://example.com/", CONFIG)
     assert response._content == b"<html>ok</html>"
 
@@ -134,3 +135,60 @@ def test_telegram_network_error_does_not_leak_token(monkeypatch):
     assert ok is False
     assert "ABC-secret_token" not in error
     assert "bot<redacted>" in error
+
+
+class FakeSocket:
+    def __init__(self, peer):
+        self.peer = peer
+        self.closed = False
+
+    def getpeername(self):
+        return (self.peer, 80)
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.mark.parametrize("peer", ["127.0.0.1", "10.1.2.3", "169.254.169.254", "::1", "::ffff:192.168.0.1"])
+def test_connection_to_private_peer_is_refused(monkeypatch, peer):
+    """DNS rebinding: the pre-check saw a public IP, the connect landed on a private one."""
+    sock = FakeSocket(peer)
+    monkeypatch.setattr(cm.HTTPConnection, "_new_conn", lambda self: sock)
+    conn = cm._PeerCheckedHTTPConnection("rebind.example", 80)
+    with pytest.raises(cm.UnsafeUrlError):
+        conn._new_conn()
+    assert sock.closed
+
+
+def test_connection_to_public_peer_is_kept(monkeypatch):
+    sock = FakeSocket("93.184.216.34")
+    monkeypatch.setattr(cm.HTTPConnection, "_new_conn", lambda self: sock)
+    conn = cm._PeerCheckedHTTPConnection("example.com", 80)
+    assert conn._new_conn() is sock
+    assert not sock.closed
+
+
+def test_guarded_session_uses_peer_checked_pools():
+    cm._GUARDED_SESSION.__dict__.pop("session", None)
+    with pytest.raises(Exception):
+        cm.guarded_request("GET", "http://127.0.0.1:9/", timeout=1)
+    session = cm._GUARDED_SESSION.session
+    assert session.trust_env is False
+    adapter = session.get_adapter("https://example.com/")
+    assert adapter.poolmanager.pool_classes_by_scheme["https"] is cm._PeerCheckedHTTPSPool
+    assert adapter.poolmanager.pool_classes_by_scheme["http"] is cm._PeerCheckedHTTPPool
+
+
+def test_guarded_request_refuses_loopback_server():
+    """End to end with a real local socket: the pre-check is bypassed, the peer check still refuses."""
+    import http.server
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), http.server.BaseHTTPRequestHandler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.handle_request, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(cm.UnsafeUrlError):
+            cm.guarded_request("GET", f"http://127.0.0.1:{port}/", timeout=2)
+    finally:
+        server.server_close()
