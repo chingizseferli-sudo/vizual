@@ -1219,13 +1219,38 @@ TELEGRAM_REPLY_LINK_USED = "Bu link artıq istifadə olunub. Profil səhifəsind
 TELEGRAM_REPLY_ERROR = "Əməliyyat alınmadı. Bir az sonra yenidən cəhd edin."
 TELEGRAM_REPLY_STOPPED = "Telegram bildirişləri dayandırıldı. Yenidən qoşmaq üçün profil səhifəsindən link yaradın."
 TELEGRAM_REPLY_NOT_LINKED = "Bu çat heç bir hesaba qoşulmayıb."
-TELEGRAM_REPLY_HELP = (
-    "Vizual bot əmrləri:\n"
-    "/status - qoşulma vəziyyəti\n"
-    "/stop - bildirişləri dayandır\n"
-    "/help - kömək\n"
-    "Qoşulmaq üçün profil səhifəsində «Telegram-ı qoş» düyməsini basın."
-)
+TELEGRAM_REPLY_PAUSED = "Bildirişlər müvəqqəti dayandırıldı. Yenidən açmaq üçün /resume yazın."
+TELEGRAM_REPLY_RESUMED = "Bildirişlər yenidən açıldı."
+TELEGRAM_REPLY_NO_MONITORS = "Bu hesabda monitor yoxdur. Monitorları saytda yarada bilərsiniz."
+TELEGRAM_REPLY_ADMIN_ONLY = "Bu əmr yalnız adminlər üçündür."
+TELEGRAM_REPLY_ALL_PAUSED = "Bütün müştəri bildirişləri dayandırıldı. Açmaq üçün /resume_all yazın."
+TELEGRAM_REPLY_ALL_RESUMED = "Bütün müştəri bildirişləri yenidən açıldı."
+# (command, description) pairs: the "/" menu in Telegram and the /help text.
+TELEGRAM_CUSTOMER_COMMANDS = [
+    ("status", "Qoşulma vəziyyəti"),
+    ("monitors", "Monitorlarım və açar sözlər"),
+    ("pause", "Bildirişləri müvəqqəti dayandır"),
+    ("resume", "Bildirişləri yenidən aç"),
+    ("stop", "Telegram-ı hesabdan ayır"),
+    ("help", "Kömək"),
+]
+TELEGRAM_ADMIN_COMMANDS = [
+    ("stats", "Admin: ümumi statistika"),
+    ("errors", "Admin: xətalı mənbələr"),
+    ("pause_all", "Admin: bütün bildirişləri dayandır"),
+    ("resume_all", "Admin: bütün bildirişləri aç"),
+]
+TELEGRAM_COMMAND_MENU_REFRESH_SECONDS = 3600
+
+
+def telegram_help_text(is_admin=False):
+    commands = TELEGRAM_CUSTOMER_COMMANDS + (TELEGRAM_ADMIN_COMMANDS if is_admin else [])
+    lines = ["Vizual bot əmrləri:"] + [f"/{name} - {description}" for name, description in commands]
+    lines.append("Qoşulmaq üçün profil səhifəsində «Telegram-ı qoş» düyməsini basın.")
+    return "\n".join(lines)
+
+
+TELEGRAM_REPLY_HELP = telegram_help_text()
 
 
 def runtime_state_table_missing(response):
@@ -1459,27 +1484,229 @@ def telegram_chat_status(chat_id):
     return f"Çat qoşulub. Aktiv monitor sayı: {len(response.json() or [])}."
 
 
+def find_user_monitors(user_ids, select="id"):
+    response = requests.get(
+        f"{SUPABASE_URL}/rest/v1/user_monitors",
+        headers=supabase_headers(),
+        params={"select": select, "user_id": f"in.({','.join(user_ids)})", "order": "created_at", "limit": "1000"},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"monitors:{response.status_code}:{response.text[:160]}")
+    return response.json() or []
+
+
+def telegram_monitor_list(chat_id):
+    user_ids = find_users_by_telegram_chat(chat_id)
+    if not user_ids:
+        return TELEGRAM_REPLY_NOT_LINKED
+    monitors = find_user_monitors(user_ids, "name,status,notify_telegram,monitor_keywords(keyword)")
+    if not monitors:
+        return TELEGRAM_REPLY_NO_MONITORS
+    lines = ["Monitorlarınız:"]
+    for monitor in monitors:
+        if monitor.get("status") != "active":
+            state = "deaktiv"
+        elif monitor.get("notify_telegram") is False:
+            state = "bildiriş dayandırılıb"
+        else:
+            state = "aktiv"
+        keywords = [clean_text(row.get("keyword")) for row in monitor.get("monitor_keywords") or []]
+        keywords = [keyword for keyword in keywords if keyword]
+        shown = ", ".join(keywords[:10]) + (f" və daha {len(keywords) - 10}" if len(keywords) > 10 else "")
+        lines.append(f"• {clean_text(monitor.get('name'))} ({state}): {shown or 'açar söz yoxdur'}")
+    return "\n".join(lines)
+
+
+def set_chat_notifications(chat_id, enabled):
+    user_ids = find_users_by_telegram_chat(chat_id)
+    if not user_ids:
+        return TELEGRAM_REPLY_NOT_LINKED
+    response = requests.patch(
+        f"{SUPABASE_URL}/rest/v1/user_monitors",
+        headers=supabase_headers({"Prefer": "return=minimal"}),
+        params={"user_id": f"in.({','.join(user_ids)})"},
+        json={"notify_telegram": enabled, "telegram_chat_id": chat_id},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code not in (200, 204):
+        raise RuntimeError(f"monitors:{response.status_code}:{response.text[:160]}")
+    return TELEGRAM_REPLY_RESUMED if enabled else TELEGRAM_REPLY_PAUSED
+
+
+def is_admin_chat(chat_id):
+    user_ids = find_users_by_telegram_chat(chat_id)
+    if not user_ids:
+        return False
+    response = requests.get(
+        f"{SUPABASE_URL}/rest/v1/admin_users",
+        headers=supabase_headers(),
+        params={"select": "user_id", "user_id": f"in.({','.join(user_ids)})", "status": "eq.active", "limit": "1"},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"admin_users:{response.status_code}:{response.text[:160]}")
+    return bool(response.json())
+
+
+def admin_chat_ids():
+    response = requests.get(
+        f"{SUPABASE_URL}/rest/v1/admin_users",
+        headers=supabase_headers(),
+        params={"select": "user_id", "status": "eq.active", "limit": "100"},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"admin_users:{response.status_code}:{response.text[:160]}")
+    user_ids = [row.get("user_id") for row in response.json() or [] if row.get("user_id")]
+    if not user_ids:
+        return []
+    profiles = requests.get(
+        f"{SUPABASE_URL}/rest/v1/user_profiles",
+        headers=supabase_headers(),
+        params={"select": "telegram_chat_id", "user_id": f"in.({','.join(user_ids)})", "telegram_chat_id": "not.is.null"},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if profiles.status_code != 200:
+        raise RuntimeError(f"user_profiles:{profiles.status_code}:{profiles.text[:160]}")
+    return sorted({clean_text(row.get("telegram_chat_id")) for row in profiles.json() or [] if row.get("telegram_chat_id")})
+
+
+def count_rows(table, params):
+    response = requests.get(
+        f"{SUPABASE_URL}/rest/v1/{table}",
+        headers=supabase_headers({"Prefer": "count=exact"}),
+        params={"select": "*", "limit": "1", **params},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code not in (200, 206):
+        raise RuntimeError(f"{table}:{response.status_code}:{response.text[:160]}")
+    total = (response.headers.get("Content-Range") or "").rsplit("/", 1)[-1]
+    return int(total) if total.isdigit() else 0
+
+
+def telegram_admin_stats():
+    since = (datetime.now(BAKU_TZ) - timedelta(hours=24)).isoformat()
+    lines = [
+        "Vizual statistika:",
+        f"İstifadəçi: {count_rows('user_profiles', {})}",
+        f"Aktiv monitor: {count_rows('user_monitors', {'status': 'eq.active'})}",
+        f"Açar söz: {count_rows('monitor_keywords', {})}",
+        f"Aktiv mənbə: {count_rows('sources', {'status': 'eq.active'})}",
+        f"Xətalı mənbə (3+ uğursuz oxu): {count_rows('sources', {'status': 'eq.active', 'consecutive_fail_count': 'gte.3'})}",
+        f"Son 24 saatda yığılan xəbər: {count_rows('monitored_items', {'created_at': f'gte.{since}'})}",
+        f"Son 24 saatda göndərilən bildiriş: {count_rows('monitor_alerts', {'sent_at': f'gte.{since}'})}",
+        f"Bildirişlər: {'dayandırılıb' if notifications_paused() else 'aktiv'}",
+    ]
+    last_send = TELEGRAM_HEARTBEAT.get("last_send_ok_at")
+    if last_send:
+        lines.append(f"Son uğurlu göndəriş: {last_send[:16].replace('T', ' ')}")
+    return "\n".join(lines)
+
+
+def telegram_admin_errors():
+    response = requests.get(
+        f"{SUPABASE_URL}/rest/v1/sources",
+        headers=supabase_headers(),
+        params={
+            "select": "name,consecutive_fail_count,last_error",
+            "status": "eq.active",
+            "consecutive_fail_count": "gte.3",
+            "order": "consecutive_fail_count.desc",
+            "limit": "15",
+        },
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"sources:{response.status_code}:{response.text[:160]}")
+    rows = response.json() or []
+    if not rows:
+        return "Xətalı mənbə yoxdur."
+    lines = ["Ən çox uğursuz oxunan mənbələr:"]
+    for row in rows:
+        error = clean_text(row.get("last_error"))[:80] or "-"
+        lines.append(f"• {clean_text(row.get('name'))}: {row.get('consecutive_fail_count')} dəfə | {error}")
+    return "\n".join(lines)
+
+
+def set_global_pause(paused):
+    response = requests.patch(
+        f"{SUPABASE_URL}/rest/v1/bot_settings",
+        headers=supabase_headers({"Prefer": "return=minimal"}),
+        params={"id": "eq.1"},
+        json={"notifications_paused": paused},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code not in (200, 204):
+        raise RuntimeError(f"bot_settings:{response.status_code}:{response.text[:160]}")
+    with BOT_SETTINGS_LOCK:
+        BOT_SETTINGS_CACHE["paused"] = paused
+        BOT_SETTINGS_CACHE["fetched_at"] = time.time()
+    print(f"Telegram: admin bildirişləri {'dayandırdı' if paused else 'açdı'}", flush=True)
+    return TELEGRAM_REPLY_ALL_PAUSED if paused else TELEGRAM_REPLY_ALL_RESUMED
+
+
+TELEGRAM_ADMIN_HANDLERS = {
+    "/stats": telegram_admin_stats,
+    "/errors": telegram_admin_errors,
+    "/pause_all": lambda: set_global_pause(True),
+    "/resume_all": lambda: set_global_pause(False),
+}
+
+
 def handle_telegram_command(text, chat_id):
     parts = text.split(maxsplit=1)
     command = parts[0].split("@", 1)[0].lower()
     payload = parts[1].strip() if len(parts) > 1 else ""
-    if command == "/start":
-        return link_telegram_chat(payload, chat_id) if payload else TELEGRAM_REPLY_HELP
+    if command == "/start" and payload:
+        return link_telegram_chat(payload, chat_id)
     if command == "/stop":
         return unlink_telegram_chat(chat_id)
     if command == "/status":
         return telegram_chat_status(chat_id)
-    return TELEGRAM_REPLY_HELP
+    if command == "/monitors":
+        return telegram_monitor_list(chat_id)
+    if command == "/pause":
+        return set_chat_notifications(chat_id, False)
+    if command == "/resume":
+        return set_chat_notifications(chat_id, True)
+    if command in TELEGRAM_ADMIN_HANDLERS:
+        if not is_admin_chat(chat_id):
+            return TELEGRAM_REPLY_ADMIN_ONLY
+        return TELEGRAM_ADMIN_HANDLERS[command]()
+    return telegram_help_text(is_admin=is_admin_chat(chat_id))
 
 
-def connect_telegram_users_from_updates():
+def telegram_bot_api(method, payload):
+    response = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/{method}", json=payload, timeout=REQUEST_TIMEOUT)
+    if response.status_code != 200:
+        print(f"Telegram {method} xetasi: {response.status_code} | {redact_secrets(response.text[:200])}", flush=True)
+        return False
+    return True
+
+
+def register_telegram_command_menu():
+    """Fills Telegram's "/" menu: customer commands for everyone, admin commands only in admin chats."""
+    if not BOT_TOKEN or not supabase_ready():
+        return
+    customer = [{"command": name, "description": text} for name, text in TELEGRAM_CUSTOMER_COMMANDS]
+    admin = customer + [{"command": name, "description": text} for name, text in TELEGRAM_ADMIN_COMMANDS]
+    try:
+        telegram_bot_api("setMyCommands", {"commands": customer})
+        for chat_id in admin_chat_ids():
+            telegram_bot_api("setMyCommands", {"commands": admin, "scope": {"type": "chat", "chat_id": chat_id}})
+    except Exception as exc:
+        print(f"Telegram əmr menyusu yazılmadı: {redact_secrets(exc)}", flush=True)
+
+
+def connect_telegram_users_from_updates(poll_seconds=0):
     if not BOT_TOKEN or not supabase_ready():
         return
     try:
         response = requests.get(
             f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates",
-            params={"offset": load_telegram_offset(), "timeout": 0, "allowed_updates": json.dumps(["message"])},
-            timeout=REQUEST_TIMEOUT,
+            params={"offset": load_telegram_offset(), "timeout": poll_seconds, "allowed_updates": json.dumps(["message"])},
+            timeout=REQUEST_TIMEOUT + poll_seconds,
         )
         TELEGRAM_HEARTBEAT["last_poll_at"] = datetime.now(BAKU_TZ).isoformat()
         if response.status_code != 200:
@@ -1511,6 +1738,19 @@ def connect_telegram_users_from_updates():
         print(f"Telegram connect istisnasi: {redact_secrets(exc)}", flush=True)
     finally:
         save_telegram_heartbeat()
+
+
+def telegram_command_loop():
+    """Long-polls bot commands so replies don't wait for a full news cycle."""
+    menu_refreshed_at = 0.0
+    while True:
+        if time.time() - menu_refreshed_at > TELEGRAM_COMMAND_MENU_REFRESH_SECONDS:
+            register_telegram_command_menu()
+            menu_refreshed_at = time.time()
+        started = time.time()
+        connect_telegram_users_from_updates(poll_seconds=25)
+        if time.time() - started < 1:
+            time.sleep(5)  # errors return immediately; don't hammer the API
 
 
 def strip_inline_html(text):
@@ -4552,9 +4792,10 @@ Link:
     return result
 
 
-def check_sites():
+def check_sites(poll_commands=True):
     started = time.time()
-    connect_telegram_users_from_updates()
+    if poll_commands:
+        connect_telegram_users_from_updates()
     cleanup_old_monitor_data_if_needed()
     # Long-running mode (RUN_ONCE=0) keeps module state between cycles; keep the
     # per-article title cache bounded instead of growing for the process lifetime.
@@ -4790,9 +5031,11 @@ def main():
         print("✅ GitHub Actions monitor yoxlaması tamamlandı.", flush=True)
         return
 
+    if BOT_TOKEN:
+        threading.Thread(target=telegram_command_loop, name="telegram-commands", daemon=True).start()
     while True:
         print("🔎 Yeni xəbərlər yoxlanılır...", flush=True)
-        check_sites()
+        check_sites(poll_commands=False)
         run_lifecycle_tick(load_patterns())
         time.sleep(CHECK_INTERVAL_SECONDS)
 
