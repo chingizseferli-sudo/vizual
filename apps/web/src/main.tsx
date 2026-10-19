@@ -7,6 +7,8 @@ import {
 } from '@tanstack/react-query'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { clientEnv } from '@/config/env'
+import '@fontsource-variable/inter/wght.css'
+import '@fontsource-variable/manrope/wght.css'
 import { toast } from 'sonner'
 import { getErrorStatus } from '@/lib/errors'
 import { handleServerError } from '@/lib/handle-server-error'
