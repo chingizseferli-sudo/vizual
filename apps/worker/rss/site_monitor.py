@@ -1532,6 +1532,9 @@ def title_from_url_slug(url):
         return ""
     slug = unquote(parts[-1])
     slug = re.sub(r"\.(?:html?|php|aspx?)$", "", slug, flags=re.IGNORECASE)
+    if re.fullmatch(r"\d+", slug) and len(parts) > 1 and "-" in parts[-2]:
+        # /slug-words/147723 -> the readable slug is the previous segment
+        slug = re.sub(r"\.(?:html?|php|aspx?)$", "", unquote(parts[-2]), flags=re.IGNORECASE)
     slug = re.sub(r"(?:^|[-_])\d{4,}(?:$|[-_])", " ", slug)
     slug = re.sub(r"[-_]+", " ", slug)
     return clean_article_text(slug)
@@ -1671,24 +1674,57 @@ def title_needs_article_refetch(title):
     return False
 
 
+_AZ_FOLD = str.maketrans({"ə": "e", "ı": "i", "ö": "o", "ü": "u", "ç": "c", "ş": "s", "ğ": "g", "İ": "i", "Ə": "e", "Ö": "o", "Ü": "u", "Ç": "c", "Ş": "s", "Ğ": "g", "I": "i"})
+
+
+def fold_az(text):
+    """Lowercase + ASCII-fold Azerbaijani letters so titles can be compared with URL slugs."""
+    return normalize_text(str(text or "").translate(_AZ_FOLD))
+
+
+_CYRILLIC_SKELETON = str.maketrans({
+    "ж": "z", "ц": "c", "ч": "c", "ш": "s", "щ": "s", "х": "", "й": "", "ь": "", "ъ": "",
+    "а": "", "е": "", "ё": "", "и": "", "о": "", "у": "", "ы": "", "э": "", "ю": "", "я": "",
+    "б": "b", "в": "v", "г": "g", "д": "d", "з": "z", "к": "k", "л": "l", "м": "m", "н": "n",
+    "п": "p", "р": "r", "с": "s", "т": "t", "ф": "f",
+})
+_CYRILLIC_RE = re.compile(r"[а-яё]", re.IGNORECASE)
+
+
+def slug_skeleton(word):
+    """Consonant skeleton of a Latin slug word, so 'azerbajdzhan' and 'азербайджан' compare equal."""
+    word = re.sub(r"shch|dzh|tch|zh|ch|sh", lambda m: {"shch": "s", "dzh": "z", "tch": "c", "zh": "z", "ch": "c", "sh": "s"}[m.group(0)], word)
+    word = word.replace("kh", "h").replace("ts", "c")
+    return re.sub(r"[aeiouyjhx]", "", word)
+
+
 def meaningful_slug_words(article_url):
-    slug_title = normalize_text(title_from_url_slug(article_url))
+    slug_raw = title_from_url_slug(article_url)
+    if len(slug_raw.split()) < 2:
+        return []  # opaque id slug (e.g. 1805hgwolf12o7cyf7) says nothing about the title
+    slug_title = fold_az(slug_raw)
     stop_words = {
         "az", "xeber", "xeberler", "xəbər", "xəbərlər", "news", "post",
         "article", "video", "foto", "fotolar", "cemiyyet", "cəmiyyət",
         "siyaset", "siyasət", "iqtisadiyyat", "tehsil", "təhsil",
     }
     words = re.findall(r"[a-zA-Z0-9əöğüçıƏÖĞÜÇŞşİı]{4,}", slug_title)
-    return [word for word in words if word not in stop_words]
+    words = [re.sub(r"(?<=[a-z])\d+$", "", word) for word in words]  # 'azerbaycandir1' -> 'azerbaycandir'
+    return [word for word in words if len(word) >= 4 and word not in stop_words]
 
 
 def title_matches_url_slug(title, article_url):
     words = meaningful_slug_words(article_url)
     if not words:
         return True
-    title_norm = normalize_text(clean_title_for_message(title))
-    overlap = sum(1 for word in words[:8] if word in title_norm)
-    return overlap >= min(2, max(1, len(words[:8]) // 3))
+    words = words[:8]
+    cleaned = clean_title_for_message(title)
+    title_norm = fold_az(cleaned)
+    overlap = sum(1 for word in words if word in title_norm)
+    if _CYRILLIC_RE.search(cleaned):
+        skeletons = {w.translate(_CYRILLIC_SKELETON) for w in re.findall(r"[а-яё]+", cleaned.lower())}
+        overlap = sum(1 for word in words if len(slug_skeleton(word)) >= 2 and slug_skeleton(word) in skeletons)
+    return overlap >= min(2, max(1, len(words) // 3))
 
 
 def title_rejection_reason(title, article_url=None, source_domain=None):
@@ -1775,16 +1811,49 @@ def extract_article_title_info_from_html(page_html, article_url=None, source_dom
         "json_ld_name": 35,
         "html_title": 10,
     }
+    meta_methods = {"json_ld_headline", "og_title", "twitter_title", "meta_headline", "meta_title"}
+
+    def title_tokens(value):
+        return {w for w in re.findall(r"\w{3,}", fold_az(value))}
+
+    # Reference titles from page metadata (even truncated with "..." they tell what the page is about).
+    meta_refs = []
+    for method, raw_title in candidates:
+        if method in meta_methods:
+            ref = re.sub(r"\s*(?:\.{3}|\u2026)\s*$", "", clean_title_for_message(raw_title)).strip()
+            # Skip site-name style metas (e.g. og:title = "Dövlət İmtahan Mərkəzi"): they must match the URL slug.
+            if ref and not is_non_news_title(ref) and (not article_url or title_matches_url_slug(ref, article_url)):
+                meta_refs.append(title_tokens(ref))
+
+    def conflicts_with_meta(cleaned_title):
+        if not meta_refs:
+            return False
+        tokens = title_tokens(cleaned_title)
+        if not tokens:
+            return False
+        for ref in meta_refs:
+            if ref and len(tokens & ref) / max(1, min(len(tokens), len(ref))) >= 0.6:
+                return False
+        return True
+
     valid = []
     rejected = []
     for method, raw_title in candidates:
         cleaned = clean_title_for_message(raw_title)
         reason = title_rejection_reason(cleaned, article_url=article_url, source_domain=source_domain)
+        if not reason and method not in meta_methods and method != "json_ld_name":
+            if method.startswith("selector:") and "h1" not in method and (
+                len(cleaned) > 160 or (len(cleaned) > 110 and cleaned.endswith("."))
+            ):
+                reason = "lede_like"
+            elif conflicts_with_meta(cleaned):
+                reason = "conflicts_with_meta"
         if reason:
             rejected.append(f"{method}:{reason}:{cleaned[:60]}")
             continue
         bonus = method_bonus.get(method, 30 if method.startswith("selector:") and "h1" in method else 5)
-        valid.append((title_quality_score(cleaned) + bonus, method, cleaned, raw_title))
+        tier = 2 if method in meta_methods else (1 if method.startswith("selector:") and "h1" in method else 0)
+        valid.append((tier, title_quality_score(cleaned) + bonus, method, cleaned, raw_title))
 
     if not valid:
         return {
@@ -1794,7 +1863,7 @@ def extract_article_title_info_from_html(page_html, article_url=None, source_dom
             "reject_reason": "; ".join(rejected[:4]) or "no_title_candidate",
         }
 
-    _, method, cleaned, raw_title = max(valid, key=lambda item: item[0])
+    _, _, method, cleaned, raw_title = max(valid, key=lambda item: (item[0], item[1]))
     return {"title": cleaned, "method": method, "raw_title": raw_title, "reject_reason": ""}
 
 
