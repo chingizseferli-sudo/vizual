@@ -59,10 +59,6 @@ import site_monitor
 
 
 class SourceHealthPayloadTests(unittest.TestCase):
-    # Known mismatch, kept visible: site_monitor treats empty reads (selector_empty,
-    # fallback_empty, ...) as "readable", so broken sources still get last_success_at.
-    # Product decision pending; see docs/DECISIONS.md "open questions".
-    @unittest.expectedFailure
     def test_runtime_reason_is_used_when_result_is_unknown(self):
         site = {
             "notes": "[bot_diagnostic] result=sitemap_empty; method_attempted=sitemap",
@@ -79,31 +75,48 @@ class SourceHealthPayloadTests(unittest.TestCase):
 
         self.assertEqual(reason, "fallback_empty")
         self.assertEqual(payload["last_result"], "fallback_empty")
-        self.assertEqual(payload["last_error"], "fallback_empty")
+        self.assertEqual(payload["consecutive_fail_count"], 1)
+        self.assertNotIn("last_error", payload)
         self.assertNotIn("last_success_at", payload)
         self.assertIn("method_attempted=selector,fallback", payload["notes"])
         self.assertIn("fallback_used=true", payload["notes"])
         self.assertNotIn("result=sitemap_empty", payload["notes"])
 
-    # Known mismatch, kept visible: site_monitor treats empty reads (selector_empty,
-    # fallback_empty, ...) as "readable", so broken sources still get last_success_at.
-    # Product decision pending; see docs/DECISIONS.md "open questions".
-    @unittest.expectedFailure
-    def test_hard_failure_sets_last_error(self):
+    def test_empty_reads_become_error_after_threshold(self):
         site = {
             "_read_failure_reason": "selector_empty",
             "_read_method": "selector",
             "_method_attempted": ["selector"],
+            "consecutive_fail_count": 1,
         }
         payload, reason, hard_fail_reasons = site_monitor.build_source_health_payload(
             site,
             {"reason": "selector_empty", "candidates": 0, "sent": 0},
             "2026-06-25T20:00:00+04:00",
         )
+        self.assertNotIn(reason, hard_fail_reasons)
+        self.assertEqual(payload["consecutive_fail_count"], 2)
+        self.assertNotIn("last_error", payload)
+        self.assertNotIn("last_success_at", payload)
 
-        self.assertIn(reason, hard_fail_reasons)
-        self.assertEqual(payload["last_result"], "selector_empty")
+        site["consecutive_fail_count"] = 2
+        payload, _, _ = site_monitor.build_source_health_payload(
+            site,
+            {"reason": "selector_empty", "candidates": 0, "sent": 0},
+            "2026-06-25T20:30:00+04:00",
+        )
+        self.assertEqual(payload["consecutive_fail_count"], 3)
         self.assertEqual(payload["last_error"], "selector_empty")
+        self.assertNotIn("last_success_at", payload)
+
+    def test_hard_failure_sets_last_error(self):
+        payload, reason, hard_fail_reasons = site_monitor.build_source_health_payload(
+            {"_read_failure_reason": "http_403"},
+            {"reason": "http_403", "candidates": 0, "sent": 0},
+            "2026-06-25T20:00:00+04:00",
+        )
+        self.assertIn(reason, hard_fail_reasons)
+        self.assertEqual(payload["last_error"], "http_403")
         self.assertNotIn("last_success_at", payload)
 
     def test_candidates_mark_article_found(self):

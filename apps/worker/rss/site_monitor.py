@@ -38,6 +38,7 @@ SOURCE_HEALTH_ENABLED = os.getenv("SOURCE_HEALTH_ENABLED", "false").strip().lowe
 SOURCE_MAX_CONSECUTIVE_FAILS = int(os.getenv("SOURCE_MAX_CONSECUTIVE_FAILS", "5"))
 GOOGLE_NEWS_FALLBACK_HOURS = max(1, int(os.getenv("GOOGLE_NEWS_FALLBACK_HOURS", str(NEWS_TIME_LIMIT_HOURS))))
 SCHEDULER_DRY_RUN = os.getenv("SCHEDULER_DRY_RUN", "false").strip().lower() in {"1", "true", "yes"}
+EMPTY_READ_FAIL_THRESHOLD = max(1, int(os.getenv("EMPTY_READ_FAIL_THRESHOLD", "3") or 3))
 DISABLE_TELEGRAM_SEND = os.getenv("DISABLE_TELEGRAM_SEND", "false").strip().lower() in {"1", "true", "yes"}
 # Legacy `/start <user uuid>` linking lets anyone who knows a UUID receive that user's alerts.
 TELEGRAM_ALLOW_LEGACY_UUID_LINK = os.getenv("TELEGRAM_ALLOW_LEGACY_UUID_LINK", "false").strip().lower() in {"1", "true", "yes"}
@@ -880,6 +881,10 @@ def build_source_health_payload(site, result, now):
         "no_keyword_match", "forbidden", "chat_not_found",
         "bot_blocked", "bad_request", "network_error", "telegram_429",
         "chat_migrated", "telegram_disabled", "duplicate_url",
+    }
+    # The page answered but nothing could be extracted. One empty read can be a
+    # quiet hour; EMPTY_READ_FAIL_THRESHOLD in a row means the source is broken.
+    empty_read_reasons = {
         "rss_empty", "invalid_xml", "selector_empty", "xpath_empty",
         "sitemap_empty", "no_article", "latest_page_empty",
         "homepage_empty", "fallback_empty",
@@ -887,6 +892,11 @@ def build_source_health_payload(site, result, now):
 
     if reason in hard_fail_reasons:
         payload["last_error"] = reason
+    elif candidates == 0 and reason in empty_read_reasons:
+        empty_count = int(site.get("consecutive_fail_count") or 0) + 1
+        payload["consecutive_fail_count"] = empty_count
+        if empty_count >= EMPTY_READ_FAIL_THRESHOLD:
+            payload["last_error"] = reason
     elif candidates > 0 or reason in readable_reasons:
         payload["last_success_at"] = now
         payload["last_error"] = None

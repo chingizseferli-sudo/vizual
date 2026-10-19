@@ -10,5 +10,4 @@ Short, dated, final. Add a line, don't write an essay.
 - 2026-10-19: Cheapest combination: Apify Starter ($19) + SocialFetch Starter ($29). Default social check interval 6 h. Facebook always `monitorMode`.
 - 2026-10-19: Four repos merged into this monorepo. Node AI/content pipeline (regex "sentiment", macro-F1 0.33) removed; sentiment returns only after a real evaluation reaches macro-F1 ≥ 0.70.
 
-## Open questions
-- Empty reads (`selector_empty`, `fallback_empty`, `rss_empty`, ...) currently count as a successful check in `build_source_health_payload`, so a broken source never looks broken. Two tests in `apps/worker/rss/test_source_health_payload.py` are marked `expectedFailure` until this is decided. Recommendation: count them as failures after 3 consecutive empty reads.
+- 2026-10-19: Empty reads (`selector_empty`, `rss_empty`, ...) count toward `consecutive_fail_count`; after 3 in a row (`EMPTY_READ_FAIL_THRESHOLD`) the source gets `last_error`. Requires `SOURCE_HEALTH_ENABLED=true`.

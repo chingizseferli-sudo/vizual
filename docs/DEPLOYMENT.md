@@ -2,8 +2,8 @@
 
 | Piece | Platform | Config |
 |---|---|---|
-| Web | Vercel, root directory `apps/web` | `apps/web/vercel.json`, env from `apps/web/.env.example` |
-| Workers | Railway, one service per `WORKER` value, all from `apps/worker/Dockerfile` | `apps/worker/railway.json`, env from `apps/worker/.env.example` |
+| Web | Vercel, Root Directory `apps/web`; Ignored Build Step `git diff --quiet HEAD^ HEAD -- .` | `apps/web/vercel.json`, env from `apps/web/.env.example` |
+| Workers | Railway, one service per `WORKER` value; Root Directory `apps/worker`, Dockerfile builder, Watch Paths `apps/worker/**` | `apps/worker/railway.json`, env from `apps/worker/.env.example` |
 | Database | Supabase (single project) | `supabase/` |
 
 ## Railway services
