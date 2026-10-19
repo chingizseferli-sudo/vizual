@@ -1,4 +1,4 @@
-import { loadSupabase } from '@/lib/supabase-lazy'
+import { fetchPublicRows } from '@/lib/supabase-lazy'
 
 export type PublicService = {
   title: string
@@ -355,14 +355,16 @@ export async function loadPublicSiteContent(): Promise<PublicSiteContent> {
 
   if (!pendingContent) {
     pendingContent = (async () => {
-      const supabase = await loadSupabase()
-      const { data, error } = await supabase
-        .from('public_site_sections')
-        .select('section_key, content')
-        .eq('status', 'published')
-        .in('section_key', [...publicSiteSectionKeys])
+      const data = await fetchPublicRows<{
+        section_key: string
+        content: unknown
+      }>('public_site_sections', {
+        select: 'section_key,content',
+        status: 'eq.published',
+        section_key: `in.(${publicSiteSectionKeys.join(',')})`,
+      })
 
-      if (error || !data) {
+      if (!data) {
         return defaultPublicSiteContent
       }
 

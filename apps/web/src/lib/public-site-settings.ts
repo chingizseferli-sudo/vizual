@@ -1,4 +1,4 @@
-import { loadSupabase } from '@/lib/supabase-lazy'
+import { fetchPublicRows, loadSupabase } from '@/lib/supabase-lazy'
 
 export type PublicSiteSettings = {
   id: string
@@ -91,24 +91,26 @@ export async function loadPublicSiteSettings() {
 
   if (!pendingSettings) {
     pendingSettings = (async () => {
-      const supabase = await loadSupabase()
-      const { data, error } = await supabase
-        .from('public_site_settings')
-        .select(
-          'id, site_name, site_url, logo_url, icon_url, seo_title, seo_description, og_title, og_description'
-        )
-        .eq('id', 'main')
-        .maybeSingle()
+      const rows = await fetchPublicRows<Partial<PublicSiteSettings>>(
+        'public_site_settings',
+        {
+          select:
+            'id,site_name,site_url,logo_url,icon_url,seo_title,seo_description,og_title,og_description',
+          id: 'eq.main',
+          limit: '1',
+        }
+      )
+      const data = rows?.[0]
 
       const value =
-        error || !data
+        !data
           ? defaultPublicSiteSettings
           : ({
               ...defaultPublicSiteSettings,
               ...data,
             } satisfies PublicSiteSettings)
 
-      if (!error && data) {
+      if (data) {
         settingsCache = { value, expiresAt: Date.now() + CACHE_TTL_MS }
       }
 

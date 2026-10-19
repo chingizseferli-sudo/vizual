@@ -1,3 +1,5 @@
+import { clientEnv } from '@/config/env'
+
 const ADMIN_AUTH_STORAGE_KEY = 'visual-monitor-admin-auth'
 const CUSTOMER_AUTH_STORAGE_KEY = 'visual-monitor-customer-auth'
 
@@ -21,4 +23,27 @@ export const authStorageKey = getAuthStorageKey()
 // entry bundle so the landing page paints before it downloads.
 export function loadSupabase() {
   return import('@/lib/supabase').then((module) => module.supabase)
+}
+
+// Anonymous read of a public table through PostgREST. The public pages use it
+// so the landing page never downloads supabase-js. Returns null on any error.
+export async function fetchPublicRows<T>(
+  table: string,
+  query: Record<string, string>
+): Promise<T[] | null> {
+  if (!clientEnv.isConfigured) return null
+  try {
+    const response = await fetch(
+      `${clientEnv.supabaseUrl}/rest/v1/${table}?${new URLSearchParams(query)}`,
+      {
+        headers: {
+          apikey: clientEnv.supabaseAnonKey,
+          Authorization: `Bearer ${clientEnv.supabaseAnonKey}`,
+        },
+      }
+    )
+    return response.ok ? ((await response.json()) as T[]) : null
+  } catch {
+    return null
+  }
 }
