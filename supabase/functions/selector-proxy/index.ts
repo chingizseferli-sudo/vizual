@@ -1,13 +1,10 @@
 import { requireAuthenticated } from "../_shared/auth.ts";
 import { assertSafeUrl, safeFetch } from "../_shared/url_safety.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { withCors } from "../_shared/cors.ts";
+import { consumeRateLimit } from "../_shared/rate_limit.ts";
 
 const MAX_RESPONSE_BYTES = 1_500_000;
+const RATE_LIMIT = { requests: 60, windowSeconds: 600 };
 const SELECTOR_PROXY_VERSION = "1.4-readable-proxy-failures";
 
 type ProxyFetchResult = {
@@ -20,7 +17,7 @@ type ProxyFetchResult = {
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
   });
 }
 
@@ -216,12 +213,15 @@ async function fetchSelectorPage(url: URL): Promise<ProxyFetchResult> {
   }
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+Deno.serve(withCors(async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const auth = await requireAuthenticated(req, json);
   if (auth instanceof Response) return auth;
+
+  if (!(await consumeRateLimit(auth.user.id, "selector-proxy", RATE_LIMIT.requests, RATE_LIMIT.windowSeconds))) {
+    return json({ error: "Çox sorğu göndərildi. Bir neçə dəqiqə sonra yenidən yoxlayın.", version: SELECTOR_PROXY_VERSION }, 429);
+  }
 
   try {
     const body = await req.json().catch(() => ({}));
@@ -276,10 +276,10 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    console.error("selector-proxy fetch failed", message);
     return json({
       error: friendlyProxyError(message),
-      technicalError: message,
       version: SELECTOR_PROXY_VERSION,
     });
   }
-});
+}));

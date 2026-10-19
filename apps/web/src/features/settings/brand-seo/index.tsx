@@ -32,7 +32,7 @@ const text = {
   iconFile: 'Icon / favicon fayl\u0131',
   logoUpload: 'Logo y\u00fckl\u0259',
   iconUpload: 'Icon y\u00fckl\u0259',
-  uploadHint: 'SVG, PNG, JPG v\u0259 ya WebP fayl\u0131 se\u00e7in.',
+  uploadHint: 'PNG, JPG v\u0259 ya WebP fayl\u0131 se\u00e7in.',
   uploadSuccess:
     'Fayl y\u00fckl\u0259ndi. Yadda saxlama\u011f\u0131 unutmay\u0131n.',
   uploadError:
@@ -114,7 +114,8 @@ export function SettingsBrandSeo() {
   ) => {
     if (!file) return
 
-    if (!file.type.startsWith('image/')) {
+    // No SVG: it can carry script and is served from the public storage origin.
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
       toast.error(text.invalidFile)
       return
     }
@@ -192,7 +193,7 @@ export function SettingsBrandSeo() {
                     <Input
                       id='brand-logo-upload'
                       type='file'
-                      accept='image/svg+xml,image/png,image/jpeg,image/webp'
+                      accept='image/png,image/jpeg,image/webp'
                       className='max-w-xs'
                       onChange={(event) =>
                         handleAssetUpload(event.target.files?.[0], 'logo_url')
@@ -218,7 +219,7 @@ export function SettingsBrandSeo() {
                     <Input
                       id='brand-icon-upload'
                       type='file'
-                      accept='image/svg+xml,image/png,image/jpeg,image/webp'
+                      accept='image/png,image/jpeg,image/webp'
                       className='max-w-xs'
                       onChange={(event) =>
                         handleAssetUpload(event.target.files?.[0], 'icon_url')

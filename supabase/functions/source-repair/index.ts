@@ -1,11 +1,6 @@
 import { requireAdmin } from "../_shared/auth.ts";
 import { assertSafeUrl, safeFetch } from "../_shared/url_safety.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { withCors } from "../_shared/cors.ts";
 
 type SourceInput = {
   id: string;
@@ -1239,13 +1234,10 @@ function withVersion(body: unknown) {
 }
 
 function json(body: unknown, status = 200) {
-  return Response.json(withVersion(body), { status, headers: corsHeaders });
+  return Response.json(withVersion(body), { status });
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+Deno.serve(withCors(async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const auth = await requireAdmin(req, json);
@@ -1264,4 +1256,4 @@ Deno.serve(async (req) => {
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : String(error) }, 500);
   }
-});
+}));
