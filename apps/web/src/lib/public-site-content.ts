@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { loadSupabase } from '@/lib/supabase-lazy'
 
 export type PublicService = {
   title: string
@@ -355,6 +355,7 @@ export async function loadPublicSiteContent(): Promise<PublicSiteContent> {
 
   if (!pendingContent) {
     pendingContent = (async () => {
+      const supabase = await loadSupabase()
       const { data, error } = await supabase
         .from('public_site_sections')
         .select('section_key, content')

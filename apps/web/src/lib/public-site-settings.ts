@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { loadSupabase } from '@/lib/supabase-lazy'
 
 export type PublicSiteSettings = {
   id: string
@@ -91,6 +91,7 @@ export async function loadPublicSiteSettings() {
 
   if (!pendingSettings) {
     pendingSettings = (async () => {
+      const supabase = await loadSupabase()
       const { data, error } = await supabase
         .from('public_site_settings')
         .select(
@@ -123,6 +124,7 @@ export async function loadPublicSiteSettings() {
 export async function savePublicSiteSettings(settings: PublicSiteSettings) {
   validatePublicSiteSettings(settings)
 
+  const supabase = await loadSupabase()
   const { error } = await supabase.from('public_site_settings').upsert({
     ...settings,
     id: 'main',

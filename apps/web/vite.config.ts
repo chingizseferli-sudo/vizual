@@ -79,11 +79,6 @@ export default defineConfig({
               priority: 20,
             },
             {
-              name: 'supabase',
-              test: /node_modules[\\/]@supabase[\\/]/,
-              priority: 20,
-            },
-            {
               name: 'editor',
               test: /node_modules[\\/](@tiptap|prosemirror-)[\\/]/,
               priority: 20,
