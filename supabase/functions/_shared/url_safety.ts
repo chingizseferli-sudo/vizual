@@ -42,7 +42,10 @@ function isPrivateIpv6(hostname: string) {
   if (!host.includes(":")) return false;
   if (host === "::" || host === "0:0:0:0:0:0:0:0") return true;
   if (host === "::1" || host === "0:0:0:0:0:0:0:1") return true;
-  if (host.startsWith("::ffff:") || host.startsWith("0:0:0:0:0:ffff:")) return true;
+  // ::/16 covers IPv4-mapped (::ffff:7f00:1) and IPv4-compatible (::7f00:1).
+  if (host.startsWith("::") || host.startsWith("0:")) return true;
+  // NAT64, 6to4 and Teredo embed an IPv4 address that may be private.
+  if (host.startsWith("64:ff9b:") || host.startsWith("2002:") || host.startsWith("2001:0:") || host.startsWith("2001::")) return true;
   if (host.startsWith("fe80:") || host.startsWith("fe8") || host.startsWith("fe9") || host.startsWith("fea") || host.startsWith("feb")) return true;
   if (host.startsWith("fc") || host.startsWith("fd")) return true;
   if (host.startsWith("ff") || host.startsWith("2001:db8:")) return true;

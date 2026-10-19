@@ -3257,7 +3257,7 @@ function SourcesPage() {
               Toplu əməliyyatlar
             </summary>
 
-            <div className='absolute right-0 z-30 mt-2 grid w-72 gap-2 rounded-lg border bg-background p-3 shadow-lg'>
+            <div className='absolute left-0 z-30 mt-2 grid w-72 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border bg-background p-3 shadow-lg sm:right-0 sm:left-auto'>
               <select
                 aria-label='Toplu monitorinq üsulu'
                 value={bulkMethod}

@@ -1,12 +1,8 @@
 import { DOMParser } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
 import { requireAuthenticated } from "../_shared/auth.ts";
 import { assertSafeUrl, safeFetch } from "../_shared/url_safety.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { withCors } from "../_shared/cors.ts";
+import { consumeRateLimit } from "../_shared/rate_limit.ts";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
@@ -14,11 +10,12 @@ const FETCH_TIMEOUT_MS = 15000;
 const MAX_RESPONSE_BYTES = 1_500_000;
 const MAX_ITEMS = 20;
 const MAX_ITEM_CHARS = 300;
+const RATE_LIMIT = { requests: 60, windowSeconds: 600 };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" },
+    headers: { "Content-Type": "application/json; charset=utf-8" },
   });
 }
 
@@ -138,12 +135,15 @@ function extractPreviewItems(html: string, selector: string) {
   };
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+Deno.serve(withCors(async (req) => {
   if (req.method !== "POST") return fail("Method not allowed", 0, 405);
 
   const auth = await requireAuthenticated(req, json);
   if (auth instanceof Response) return auth;
+
+  if (!(await consumeRateLimit(auth.user.id, "change-selector-test", RATE_LIMIT.requests, RATE_LIMIT.windowSeconds))) {
+    return fail("Çox sorğu göndərildi. Bir neçə dəqiqə sonra yenidən yoxlayın.", 0, 429);
+  }
 
   try {
     const body = await req.json().catch(() => ({}));
@@ -186,4 +186,4 @@ Deno.serve(async (req) => {
     const isAbort = error instanceof DOMException && error.name === "AbortError";
     return fail(isAbort ? "Sorğu vaxt limitini keçdi." : message);
   }
-});
+}));

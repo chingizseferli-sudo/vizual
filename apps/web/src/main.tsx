@@ -7,10 +7,12 @@ import {
 } from '@tanstack/react-query'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { clientEnv } from '@/config/env'
+import '@fontsource-variable/inter/wght.css'
+import '@fontsource-variable/manrope/wght.css'
 import { toast } from 'sonner'
 import { getErrorStatus } from '@/lib/errors'
 import { handleServerError } from '@/lib/handle-server-error'
-import { supabase } from '@/lib/supabase'
+import { loadSupabase } from '@/lib/supabase-lazy'
 import { ConfigurationError } from '@/components/configuration-error'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
@@ -49,7 +51,9 @@ const queryClient = new QueryClient({
 
       if (status === 401) {
         toast.error('Sessiya bitdi. Yenidən daxil olun.')
-        void supabase.auth.signOut({ scope: 'local' })
+        void loadSupabase().then((supabase) =>
+          supabase.auth.signOut({ scope: 'local' })
+        )
         const redirect = `${router.history.location.href}`
         router.navigate({ to: '/sign-in', search: { redirect } })
       }

@@ -1,10 +1,5 @@
 import { requireAdmin } from "../_shared/auth.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { withCors } from "../_shared/cors.ts";
 
 type AuthUser = {
   id: string;
@@ -30,7 +25,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
   });
 }
 
@@ -193,8 +188,7 @@ async function deleteAuthUser(supabaseUrl: string, serviceRoleKey: string, targe
   }
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+Deno.serve(withCors(async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const auth = await requireAdmin(req, json);
@@ -297,4 +291,4 @@ Deno.serve(async (req) => {
   }
 
   return json({ users });
-});
+}));

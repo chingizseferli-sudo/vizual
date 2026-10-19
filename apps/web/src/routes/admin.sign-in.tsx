@@ -1,10 +1,13 @@
-import { z } from 'zod'
 import { createFileRoute } from '@tanstack/react-router'
 import { SignIn } from '@/features/auth/sign-in'
 
-const searchSchema = z.object({
-  redirect: z.string().optional(),
-})
+// A plain validator keeps zod out of the entry bundle: route options other
+// than the component are loaded eagerly with the route tree.
+function searchSchema(search: Record<string, unknown>): { redirect?: string } {
+  return typeof search.redirect === 'string'
+    ? { redirect: search.redirect }
+    : {}
+}
 
 function AdminSignInRoute() {
   const { redirect } = Route.useSearch()

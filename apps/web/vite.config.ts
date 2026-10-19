@@ -1,10 +1,39 @@
 import path from 'path'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import { playwright } from '@vitest/browser-playwright'
 import { configDefaults } from 'vitest/config'
+
+// Preload the self-hosted Inter files the Azerbaijani UI always needs (latin
+// and latin-ext), so text renders in Inter on first paint instead of swapping.
+function preloadInterFonts(): Plugin {
+  return {
+    name: 'preload-inter-fonts',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(_html, ctx) {
+        return Object.keys(ctx.bundle ?? {})
+          .filter((file) =>
+            /inter-latin(-ext)?-wght-normal-.*\.woff2$/.test(file)
+          )
+          .map((file) => ({
+            tag: 'link',
+            attrs: {
+              rel: 'preload',
+              href: `/${file}`,
+              as: 'font',
+              type: 'font/woff2',
+              crossorigin: '',
+            },
+            injectTo: 'head',
+          }))
+      },
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -15,6 +44,7 @@ export default defineConfig({
     }),
     react(),
     tailwindcss(),
+    preloadInterFonts(),
   ],
   resolve: {
     alias: {
@@ -79,19 +109,16 @@ export default defineConfig({
               priority: 20,
             },
             {
-              name: 'supabase',
-              test: /node_modules[\\/]@supabase[\\/]/,
+              // Only the icons the app imports (tree-shaken), in one chunk
+              // instead of one request per icon.
+              name: 'icons',
+              test: /node_modules[\\/]lucide-react[\\/]/,
               priority: 20,
             },
             {
               name: 'editor',
               test: /node_modules[\\/](@tiptap|prosemirror-)[\\/]/,
               priority: 20,
-            },
-            {
-              name: 'ui-vendor',
-              test: /node_modules[\\/](@radix-ui|lucide-react|cmdk)[\\/]/,
-              priority: 10,
             },
           ],
         },
