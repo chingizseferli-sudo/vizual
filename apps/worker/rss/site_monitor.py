@@ -17,6 +17,7 @@ from bs4 import BeautifulSoup
 from dateutil import parser
 from lxml import html
 
+import source_lifecycle as lifecycle
 from domain_policy import is_excluded_domain
 
 HEALTH_FILE = "site_health.json"
@@ -4633,6 +4634,142 @@ def check_sites():
     print("=" * 60, flush=True)
 
 
+# ---------------------------------------------------------------------------
+# Source lifecycle: trial (read-only) sampling of newly discovered sources.
+# Logic lives in source_lifecycle.py; discovery itself runs as its own Railway cron.
+# ---------------------------------------------------------------------------
+LIFECYCLE_STATE = {"last_trial": 0.0}
+
+
+def load_trial_rows():
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/sources",
+            headers=supabase_headers(),
+            params={
+                "select": "id,name,base_url,latest_url,rss_url,monitor_method,selector,article_pattern,source_type,trust_level,notes",
+                "status": "eq.inactive",
+                "discovery_status": "eq.accepted",
+                "notes": "ilike.*[trial passes=*",
+                "limit": str(lifecycle.TRIAL_MAX_PER_RUN),
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        return response.json() if response.status_code == 200 else []
+    except Exception as exc:
+        print(f"Trial mənbələri oxunmadı: {exc}", flush=True)
+        return []
+
+
+def trial_row_to_site(row):
+    base_url = clean_text(row.get("base_url", ""))
+    latest_url = clean_text(row.get("latest_url", ""))
+    rss_url = clean_text(row.get("rss_url", ""))
+    method = clean_text(row.get("monitor_method", "")).lower()
+    article_pattern = row.get("article_pattern") or ""
+    url = latest_url or base_url or rss_url
+    if not url:
+        return None
+    if not url.startswith("http"):
+        url = "https://" + url.lstrip("/")
+    return {
+        "id": row.get("id"), "name": row.get("name") or get_domain(url), "url": url,
+        "base_url": base_url, "latest_url": latest_url, "rss_url": rss_url,
+        "selector": row.get("selector") or "", "article_pattern": article_pattern,
+        "xpaths": parse_article_patterns(article_pattern),
+        "url_patterns": parse_url_patterns(article_pattern),
+        "keywords": [], "limit": MAX_LINKS_PER_SITE,
+        "source_type": row.get("source_type"), "trust_level": row.get("trust_level"),
+        "monitor_method": "xpath_pattern" if method == "xpath" else method,
+    }
+
+
+def sample_trial_site(site, patterns_data):
+    """Read a trial source like the monitor does, but never save or send anything."""
+    items = fetch_site(site, patterns_data)
+    samples = []
+    for item in items[:lifecycle.TRIAL_SAMPLE_SIZE]:
+        link = item["link"]
+        raw_title = item.get("raw_title") or item["title"]
+        info = choose_best_article_title_info(item.get("clean_title") or item["title"], link, source_domain=item["source"])
+        article_time, _ = extract_publish_time_from_article(link, return_source=True)
+        rss_time = item.get("rss_published")
+        listing_time = item.get("listing_published")
+        if not article_time:
+            article_time = rss_time or listing_time
+        _, freshness = evaluate_publish_freshness(
+            raw_title, article_time, rss_time=rss_time, listing_time=listing_time,
+            source_context=item.get("source_context"), item_position=item.get("item_position"),
+        )
+        date_state = "future" if freshness == "future_date" else ("ok" if freshness in {"fresh", "old_news"} else "missing")
+        samples.append({"title_ok": bool(info.get("title")), "date_state": date_state})
+    return samples
+
+
+def patch_source_row(source_id, payload):
+    try:
+        response = requests.patch(
+            f"{SUPABASE_URL}/rest/v1/sources",
+            headers=supabase_headers({"Prefer": "return=minimal"}),
+            params={"id": f"eq.{source_id}"},
+            json=payload,
+            timeout=REQUEST_TIMEOUT,
+        )
+        return response.status_code in (200, 204)
+    except Exception as exc:
+        print(f"Source yenilənmədi ({source_id}): {exc}", flush=True)
+        return False
+
+
+def run_trial_pass(patterns_data):
+    rows = load_trial_rows()
+    if not rows:
+        return
+    print(f"🧪 Trial yoxlaması: {len(rows)} yeni mənbə (göndərmə yoxdur)", flush=True)
+
+    def handle(row):
+        state = lifecycle.parse_trial(row.get("notes"))
+        site = trial_row_to_site(row)
+        if not state or not site:
+            return
+        try:
+            passed, reason = lifecycle.judge_sample(sample_trial_site(site, patterns_data))
+        except Exception as exc:
+            passed, reason = False, f"error:{str(exc)[:60]}"
+        action, new_state = lifecycle.next_state(state, passed)
+        base_notes = lifecycle.strip_trial_tag(row.get("notes"))
+        stamp = datetime.now(BAKU_TZ).strftime("%Y-%m-%d %H:%M")
+        if action == "promote" and lifecycle.TRIAL_AUTO_PROMOTE:
+            payload = {"status": "active", "discovery_status": "accepted", "last_result": "source_added",
+                       "notes": f"{base_notes} [auto_promoted {stamp}]".strip()}
+        elif action == "promote":
+            payload = {"discovery_status": "needs_review",
+                       "notes": f"{base_notes} [trial_passed {stamp}]".strip()}
+        elif action == "review":
+            payload = {"discovery_status": "needs_review",
+                       "notes": f"{base_notes} [trial_failed {reason} {stamp}]".strip()}
+        else:
+            payload = {"notes": lifecycle.build_trial_notes(base_notes, new_state["passes"], new_state["fails"], new_state["since"])}
+        patch_source_row(row["id"], payload)
+        print(f"🧪 {site['name']} | {'keçdi' if passed else 'keçmədi'} ({reason}) | nəticə={action} | passes={new_state['passes']} fails={new_state['fails']}", flush=True)
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        list(executor.map(handle, rows))
+
+
+def run_lifecycle_tick(patterns_data):
+    """Called between monitor cycles. Never raises."""
+    if VERIFY_RELEASE_REPAIR_ONLY or not supabase_ready():
+        return
+    now = time.time()
+    try:
+        if lifecycle.TRIAL_ENABLED and now - LIFECYCLE_STATE["last_trial"] >= lifecycle.TRIAL_INTERVAL_MINUTES * 60:
+            LIFECYCLE_STATE["last_trial"] = now
+            run_trial_pass(patterns_data)
+    except Exception as exc:
+        print(f"Lifecycle xətası: {exc}", flush=True)
+
+
 def main():
     print("🚀 Sayt monitorinq botu işə düşdü.", flush=True)
     if supabase_ready():
@@ -4656,6 +4793,7 @@ def main():
     while True:
         print("🔎 Yeni xəbərlər yoxlanılır...", flush=True)
         check_sites()
+        run_lifecycle_tick(load_patterns())
         time.sleep(CHECK_INTERVAL_SECONDS)
 
 
