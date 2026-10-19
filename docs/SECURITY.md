@@ -27,14 +27,14 @@
 | 13 | Low | `supabase/functions/admin-users/index.ts:220` | `user_id` not validated before use in REST filters/Admin API paths. | Fixed (UUID check) |
 | 14 | Low | `supabase/functions/*/index.ts:4-6` | `Access-Control-Allow-Origin: *`; errors echo upstream response bodies. | Open |
 | 15 | Low | `supabase/migrations/202607070003_public_site_assets_bucket.sql:13` | Public bucket allows `image/svg+xml` (script-capable, served from storage origin; admin-only upload). | Open |
-| 16 | Info | prod, not in repo | Owner policies for `user_monitors`/`monitor_keywords` exist only in dashboard; verify they don't allow direct inserts that bypass `create_user_monitor_with_limit`. | Open (verify) |
+| 16 | Info | `supabase/migrations/202606010000_baseline_core_schema.sql` | Owner policies for `user_monitors`/`monitor_keywords` (now in the baseline) allow direct inserts that bypass `create_user_monitor_with_limit`. | Open |
 | 17 | High | Telegram: `apps/web/src/routes/(auth)/monitor/profile.tsx`, `apps/worker/rss/site_monitor.py` (`connect_telegram_users_from_updates`) | Bot linked any chat that sent `/start <auth user uuid>`; anyone who learned a user's UUID received that user's alerts. | Fixed: single-use 15-min tokens (`create_telegram_link_token`, migration `20261019000002`); UUID payloads rejected unless `TELEGRAM_ALLOW_LEGACY_UUID_LINK=true`. Deploy web + worker together after the migration. |
 
 No service-role or other secret is referenced via `VITE_*` or client code (only `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_TELEGRAM_BOT_USERNAME`). No `dangerouslySetInnerHTML`; `textarea.innerHTML` entity decoding is inert. Sign-in redirect is restricted to `/monitor*` / `/admin*`.
 
 ## Applying `supabase/migrations/20261019000001_security_hardening.sql`
 
-The migration is idempotent and **has not been executed anywhere**. Production's migration ledger is out of sync (core tables were created in the dashboard), so do not `supabase db push` blindly.
+The migration is idempotent and runs as part of `supabase db push` on the new project (2026-10-19). The checklist below still applies to any database created before the baseline.
 
 1. **Before**: `apps/worker` already uses the service-role key for `sent_news`, `discovery_logs` and `rejected_sources` and never writes `news`; confirm any other deployed worker (e.g. tehsilbot) also writes `news`, `sent_news`, `discovery_logs`, `rejected_sources`, `notification_logs` with the **service-role** key. In-repo, `news` is written only by the admin UI (`features/news/*`, `routes/(auth)/admin/news/$id/edit.tsx`) using an authenticated admin session, not the anon role. Confirm `public.admin_users` exists and holds every real admin, and at least one `superadmin`.
 2. Check for duplicate indexes: `select indexdef from pg_indexes where schemaname='public' and tablename in ('monitor_matches','monitor_alerts','user_monitors','monitor_keywords','change_events','change_snapshots','change_alerts');` — drop §8 lines already covered. On large tables run them as `CREATE INDEX CONCURRENTLY` by hand instead.

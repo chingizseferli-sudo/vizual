@@ -14,12 +14,13 @@
 | vizual-discovery | `discovery` | cron `0 */6 * * *` |
 | vizual-discovery-deep | `discovery_deep` | cron `0 23 * * *` |
 
-Cut-over: deploy the new services with `DISABLE_TELEGRAM_SEND=1` first, compare output with the old services for a day, then switch Telegram on and stop the old services.
+Order on a new project: `supabase db push` → restore the data backup → Railway services → Vercel. The old `tehsilbot` and `vizual-bg-worker` services pointed at the deleted database and must stay stopped.
 
 ## Database changes
-1. Add a migration in `supabase/migrations/`.
-2. Apply to staging, run RLS tests.
-3. Apply to production with `supabase db push` after a fresh backup.
+`supabase/migrations/` builds the whole schema on an empty project, so the migration ledger is the source of truth.
+1. Add a migration in `supabase/migrations/` (idempotent: `if not exists`, `drop policy if exists`).
+2. Test it on a local or branch database.
+3. Take a backup, then `npx supabase link --project-ref wqxkymgilurvbvsymcvy` and `npx supabase db push`.
 
 ## Backups
 Supabase Pro daily backups (7 days). Additionally a weekly `pg_dump` to off-site storage (see `docs/DECISIONS.md`).

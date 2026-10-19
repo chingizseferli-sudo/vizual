@@ -1,4 +1,4 @@
-﻿-- Fix create_user_monitor_with_limit RAISE syntax so auth/validation/limit errors return normalized messages.
+-- Fix create_user_monitor_with_limit RAISE syntax so auth/validation/limit errors return normalized messages.
 -- Safe to run multiple times.
 
 create or replace function public.create_user_monitor_with_limit(

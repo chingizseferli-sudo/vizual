@@ -1,4 +1,4 @@
-﻿import { DOMParser } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
+import { DOMParser } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
 import { requireAuthenticated } from "../_shared/auth.ts";
 import { assertSafeUrl, safeFetch } from "../_shared/url_safety.ts";
 

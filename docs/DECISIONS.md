@@ -3,6 +3,7 @@
 Short, dated, final. Add a line, don't write an essay.
 
 - 2026-10-18: Production database is Supabase `npkctnzvyemfetsfkzcm`. The `tehsilbot` project (`xhfmlktxedbgxmatzqiq`) is legacy (only `sent_news`) and will be removed.
+- 2026-10-19: Both old Supabase projects deleted. New production project `wqxkymgilurvbvsymcvy` is built only from `supabase/migrations` (baseline added); users, admins, plans, monitors, keywords and sources were carried over from a data backup. News, matches, alerts and logs were not carried over.
 - 2026-10-18: One Python worker image + one Postgres. No microservices, no queue service until measured need (pgmq first).
 - 2026-10-18: Retention: archive first, then delete (sources disabled → archived → purged after 180 days).
 - 2026-10-18: Brave Search does not cover Instagram/Facebook (0 relevant AZ posts in a 20-keyword test); not used for social.

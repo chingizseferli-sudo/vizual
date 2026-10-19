@@ -3,7 +3,7 @@
 Keep it small and verified. This repo replaced four repos and a pile of AI-written notes; do not recreate that.
 
 ## Rules
-- One database: Supabase project `npkctnzvyemfetsfkzcm` (production). Never run SQL against production from an agent. New schema goes in `supabase/migrations/` and is tested on staging first.
+- One database: Supabase project `wqxkymgilurvbvsymcvy` ("vizual", production). Never run SQL against production from an agent. `supabase/migrations/` rebuilds the full schema from zero (baseline `202606010000`); new schema is a new migration, tested locally first.
 - Every table customers can read needs RLS scoped to `auth.uid()`; admin checks happen in SQL (`public.is_admin_user()`), never only in the UI.
 - Workers use the service-role key; it must never reach `apps/web` (no `VITE_*` secrets).
 - Social data (Apify, SocialFetch) is fetched only through `apps/worker`. Facebook search always uses `monitorMode` + `sortBy=recent`; query each unique keyword once and fan out to tenants.

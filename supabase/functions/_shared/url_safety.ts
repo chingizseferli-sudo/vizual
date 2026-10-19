@@ -1,4 +1,4 @@
-﻿export type SafeUrlOptions = {
+export type SafeUrlOptions = {
   allowBareHost?: boolean;
   maxRedirects?: number;
 };

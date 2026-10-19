@@ -1,4 +1,4 @@
-﻿import { requireAdmin } from "../_shared/auth.ts";
+import { requireAdmin } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

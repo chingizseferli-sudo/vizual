@@ -32,6 +32,5 @@ One Docker image; `WORKER` picks the process (see `start.sh`).
 - Both are unofficial scraping vendors: treat as "beta" sources behind one provider interface so either can be swapped. Results land in `monitored_items` with `platform` and `external_id`.
 
 ## Known gaps
-- Production schema was created partly in the dashboard; `supabase/migrations` cannot rebuild it yet. Next: baseline migration from a production schema dump.
 - `site_health.json` lives on ephemeral disk; move to a DB table (Telegram offset already moved to `bot_runtime_state`).
 - `DB_LOCK` serialises all worker DB calls; fine at current scale, revisit before 100 customers.

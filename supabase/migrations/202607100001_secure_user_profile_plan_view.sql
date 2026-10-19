@@ -1,4 +1,4 @@
-﻿-- Release hardening: keep profile-plan helper view behind caller permissions.
+-- Release hardening: keep profile-plan helper view behind caller permissions.
 -- The view is useful for joining user profile and plan limits, but it must not be
 -- exposed as an unrestricted public read surface.
 
