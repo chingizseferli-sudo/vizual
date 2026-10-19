@@ -343,7 +343,7 @@ def build_source_payload(site: dict) -> dict:
     method = source_monitor_method(site)
     analysis = site.get("analysis", {}) if isinstance(site.get("analysis"), dict) else {}
 
-    return {
+    payload = {
         "name": site.get("name") or clean_domain(url),
         "base_url": base_url(url),
         "latest_url": url,
@@ -359,6 +359,11 @@ def build_source_payload(site: dict) -> dict:
         "last_discovered_at": datetime.now(BAKU_TZ).isoformat(),
         "notes": "; ".join(analysis.get("reasons", []))[:1000] if analysis else site.get("reason"),
     }
+    if payload["discovery_status"] == "accepted":
+        # New approved sources are read in shadow mode first (see source_lifecycle.py).
+        since = datetime.now(timezone.utc).isoformat()
+        payload["notes"] = f"{payload['notes'] or ''} [trial passes=0 fails=0 since={since}]".strip()
+    return payload
 
 
 def save_discovery_log(domain: str, url: str, status: str, reason: str = "", method: str = "", score: int = 0, sample_links=None):
@@ -454,11 +459,16 @@ def upsert_source_to_supabase(site: dict):
         if lookup.status_code == 200 and lookup.json():
             source_id = lookup.json()[0]["id"]
 
+            # Known source: only refresh discovery metadata. Overwriting status, method or
+            # selector here deactivates working sources on every re-discovery.
             response = requests.patch(
                 f"{SUPABASE_URL}/rest/v1/sources",
                 headers=supabase_headers({"Prefer": "return=minimal"}),
                 params={"id": f"eq.{source_id}"},
-                json=payload,
+                json={
+                    "last_discovered_at": payload["last_discovered_at"],
+                    "discovery_score": payload["discovery_score"],
+                },
                 timeout=REQUEST_TIMEOUT,
             )
         else:
