@@ -88,11 +88,6 @@ export default defineConfig({
               test: /node_modules[\\/](@tiptap|prosemirror-)[\\/]/,
               priority: 20,
             },
-            {
-              name: 'ui-vendor',
-              test: /node_modules[\\/](@radix-ui|lucide-react|cmdk)[\\/]/,
-              priority: 10,
-            },
           ],
         },
       },
