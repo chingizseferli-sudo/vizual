@@ -146,9 +146,9 @@ function IndexPage() {
                       <span>•</span>
                       <span>{item.time}</span>
                     </div>
-                    <h3 className='mt-2 text-sm leading-6 font-extrabold text-slate-950'>
+                    <p className='mt-2 text-sm leading-6 font-extrabold text-slate-950'>
                       {item.title}
-                    </h3>
+                    </p>
                   </article>
                 ))}
               </div>

@@ -174,7 +174,7 @@ export function PublicPageHero({
   return (
     <section className='mx-auto max-w-7xl px-5 py-16 md:px-8 md:py-24'>
       <div className='max-w-4xl'>
-        <p className='text-xs font-extrabold tracking-[0.18em] text-sky-600 uppercase'>
+        <p className='text-xs font-extrabold tracking-[0.18em] text-sky-700 uppercase'>
           {eyebrow}
         </p>
         <h1 className='mt-4 text-4xl font-black tracking-tight text-slate-950 md:text-6xl'>
@@ -200,7 +200,7 @@ export function SectionHeading({
 }) {
   return (
     <div className='mx-auto mb-10 max-w-3xl text-center'>
-      <p className='text-xs font-extrabold tracking-[0.18em] text-sky-600 uppercase'>
+      <p className='text-xs font-extrabold tracking-[0.18em] text-sky-700 uppercase'>
         {eyebrow}
       </p>
       <h2 className='mt-3 text-3xl font-extrabold tracking-tight text-slate-950 md:text-5xl'>
