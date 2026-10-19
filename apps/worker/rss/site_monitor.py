@@ -3,6 +3,7 @@ import os
 import re
 import time
 import threading
+import unicodedata
 from html import unescape
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
@@ -215,7 +216,7 @@ def decode_percent_text(text):
     if not decoded:
         return value
     # Keep decoding only when it improves readability or actually reveals letters.
-    if mojibake_score(decoded) <= mojibake_score(value) or re.search(r"[A-Za-zÆÃ–ÄžÃœÃ‡ÅžÄ°É™Ã¶ÄŸÃ¼Ã§ÅŸÄ±Ð-Ð¯Ð°-Ñ]", decoded):
+    if mojibake_score(decoded) <= mojibake_score(value) or re.search(r"[A-Za-zƏəÖöĞğÜüÇçŞşİıА-Яа-яЁё]", decoded):
         return decoded
     return value
 
@@ -511,6 +512,23 @@ def normalize_text(text):
     return text
 
 
+def keyword_fold(text):
+    """Case-insensitive matching key for keywords and titles.
+
+    Python's lower()/casefold() turns "İ" into "i" + U+0307 and "I" into "i",
+    while Azerbaijani pairs İ/i and I/ı. Users and sites mix both conventions
+    (e.g. "UNICEF" vs "Unicef", "AZƏRİŞIQ" vs "Azərişıq"), so dotted and dotless
+    i are folded into one letter for matching only.
+    """
+    text = unicodedata.normalize("NFC", str(text or ""))
+    text = text.replace("İ", "i").replace("I", "i")
+    text = text.casefold().replace("i\u0307", "i").replace("ı", "i")
+    return re.sub(r"\s+", " ", text)
+
+
+STRICT_WORDS_FOLDED = {keyword_fold(word) for word in STRICT_WORDS}
+
+
 def get_domain(url):
     return urlparse(url or "").netloc.replace("www.", "").lower()
 
@@ -559,6 +577,14 @@ def merge_crawl_state_notes(existing_notes, state):
     return "\n".join(line for line in lines if line.strip())
 
 
+TELEGRAM_TOKEN_RE = re.compile(r"bot\d+:[A-Za-z0-9_-]+")
+
+
+def redact_secrets(text):
+    # Telegram API URLs embed the bot token and requests puts the URL in exception text.
+    return TELEGRAM_TOKEN_RE.sub("bot<redacted>", str(text or ""))
+
+
 def get_domain_lock(domain):
     with DOMAIN_LOCKS_LOCK:
         if domain not in DOMAIN_LOCKS:
@@ -567,6 +593,7 @@ def get_domain_lock(domain):
 
 
 def safe_request(url, *, site=None, method="", **kwargs):
+    kwargs.setdefault("timeout", REQUEST_TIMEOUT)
     domain = get_domain(url)
     if not domain:
         return requests.get(url, **kwargs)
@@ -1103,7 +1130,7 @@ def send_telegram(message, chat_id=None):
                 response = requests.post(url, data=payload, timeout=15)
         except Exception as exc:
             TELEGRAM_LAST_ERROR = "network_error"
-            print(f"Telegram network_error: chat={target_chat_id} | {exc}", flush=True)
+            print(f"Telegram network_error: chat={target_chat_id} | {redact_secrets(exc)}", flush=True)
             return False
 
         parsed = parse_telegram_response(response)
@@ -1191,7 +1218,7 @@ def connect_telegram_users_from_updates():
         if next_offset is not None:
             save_telegram_offset(next_offset)
     except Exception as exc:
-        print(f"Telegram connect istisnasi: {exc}", flush=True)
+        print(f"Telegram connect istisnasi: {redact_secrets(exc)}", flush=True)
 
 
 def strip_inline_html(text):
@@ -1584,42 +1611,34 @@ def clean_matched_keywords(keywords):
 
 
 def keyword_matches_title(keyword, title_text):
-    keyword = normalize_text(keyword).strip()
-    title_text = normalize_text(title_text)
+    keyword = keyword_fold(keyword).strip()
+    title_text = keyword_fold(title_text)
     if not keyword:
         return False
 
-    word_chars = r"a-zA-Z0-9É™Ã¶ÄŸÃ¼Ã§Ä±ÆÃ–ÄžÃœÃ‡ÅžÅŸÄ°Ä±"
-    strict_match = keyword in STRICT_WORDS or len(keyword) <= 4
+    # \w is Unicode-aware, so ə ğ ı ö ü ç ş count as word characters while
+    # hyphens/punctuation do not ("BDU-da" matches "bdu", "ABDU" does not).
+    strict_match = keyword in STRICT_WORDS_FOLDED or len(keyword) <= 4
 
     if strict_match or " " in keyword:
-        pattern = rf"(?<![{word_chars}])" + re.escape(keyword) + rf"(?![{word_chars}])"
-        return bool(re.search(pattern, title_text, flags=re.IGNORECASE))
+        pattern = r"(?<!\w)" + re.escape(keyword) + r"(?!\w)"
+        return bool(re.search(pattern, title_text))
 
+    # Long single-word keywords match as a stem so Azerbaijani suffixes and
+    # compounds still hit ("universitet" -> "Universitetin", "ümumtəhsil").
     return keyword in title_text
 
 
 def keyword_match(title, keywords):
-    title_lower = normalize_text(title)
-    all_keywords = set()
-
-    for keyword in keywords or []:
-        keyword = str(keyword).strip().lower()
-        if keyword:
-            all_keywords.add(keyword)
-
     matched_keywords = []
-    word_chars = r"a-zA-Z0-9əöğüçıƏÖĞÜÇŞşİı"
-
-    for keyword in sorted(all_keywords, key=len, reverse=True):
-        keyword = normalize_text(keyword)
-        if keyword in STRICT_WORDS:
-            pattern = rf"(?<![{word_chars}])" + re.escape(keyword) + rf"(?![{word_chars}])"
-            if re.search(pattern, title_lower, flags=re.IGNORECASE):
-                matched_keywords.append(keyword)
-        else:
-            if keyword in title_lower:
-                matched_keywords.append(keyword)
+    seen = set()
+    for keyword in sorted({str(k).strip() for k in keywords or [] if str(k).strip()}, key=len, reverse=True):
+        key = keyword_fold(keyword)
+        if key in seen:
+            continue
+        seen.add(key)
+        if keyword_matches_title(key, title):
+            matched_keywords.append(normalize_text(keyword))
 
     return (bool(matched_keywords), matched_keywords)
 
@@ -2462,9 +2481,9 @@ def extract_publish_time_from_html_with_source(page_html):
         (r'"(?:datePublished|dateModified|dateCreated|published_at|created_at|updated_at)"\s*:\s*"([^"]+)"', "regex:json-date"),
         (r"'(?:datePublished|dateModified|dateCreated|published_at|created_at|updated_at)'\s*:\s*'([^']+)'", "regex:json-date"),
         (r"(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:[+-]\d{2}:?\d{2}|Z)?)", "regex:iso"),
-        (r"(\d{1,2}\s+[A-Za-zÆÉ™Ã–Ã¶ÄžÄŸÃœÃ¼Ã‡Ã§ÅžÅŸÄ°Ä±]+\s+\d{4}\D{0,20}\d{1,2}[:.]\d{2})", "regex:month-time"),
+        (r"(\d{1,2}\s+[A-Za-zƏəÖöĞğÜüÇçŞşİı]+\s+\d{4}\D{0,20}\d{1,2}[:.]\d{2})", "regex:month-time"),
         (r"(\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\D{0,20}\d{1,2}[:.]\d{2}(?::\d{2})?)", "regex:numeric-time"),
-        (r"(\d{1,2}\s+[A-Za-zÆÉ™Ã–Ã¶ÄžÄŸÃœÃ¼Ã‡Ã§ÅžÅŸÄ°Ä±]+\s+\d{4})", "regex:month-date"),
+        (r"(\d{1,2}\s+[A-Za-zƏəÖöĞğÜüÇçŞşİı]+\s+\d{4})", "regex:month-date"),
         (r"(\d{1,2}\s+[а-яё]+\s*,?\s*\d{4}(?:\D{0,20}\d{1,2}[:.]\d{2})?)", "regex:ru-month-date"),
     ]
     for pattern, source in regex_patterns:
@@ -3993,7 +4012,7 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None)
     try:
         items = fetch_site(site, patterns_data)
     except Exception as exc:
-        print(f"❌ [{index}/{total}] {site['name']} | sayt emalı xətası: {exc}", flush=True)
+        print(f"❌ [{index}/{total}] {site['name']} | sayt emalı xətası: {redact_secrets(exc)}", flush=True)
         result["reason"] = "site_error"
         update_source_health(site, result)
         return result
@@ -4176,6 +4195,10 @@ def check_sites():
     started = time.time()
     connect_telegram_users_from_updates()
     cleanup_old_monitor_data_if_needed()
+    # Long-running mode (RUN_ONCE=0) keeps module state between cycles; keep the
+    # per-article title cache bounded instead of growing for the process lifetime.
+    if len(ARTICLE_TITLE_INFO_CACHE) > 20000:
+        ARTICLE_TITLE_INFO_CACHE.clear()
     sites = load_sites()
     if SCHEDULER_DRY_RUN:
         scheduler_decisions = [evaluate_source_schedule(site) for site in sites]
@@ -4211,7 +4234,7 @@ def check_sites():
             try:
                 result = future.result() or {}
             except Exception as exc:
-                print(f"Worker xətası: {exc}", flush=True)
+                print(f"Worker xətası: {redact_secrets(exc)}", flush=True)
                 stats["site_error"] += 1
                 continue
             sent = int(result.get("sent", 0) or 0)

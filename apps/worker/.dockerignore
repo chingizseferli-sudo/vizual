@@ -1,0 +1,12 @@
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.env
+**/.env.*
+!**/.env.example
+conftest.py
+pytest.ini
+requirements-dev.txt
+rss/test_*.py
+!rss/test_sources_readability.py
+page_change/test_*.py

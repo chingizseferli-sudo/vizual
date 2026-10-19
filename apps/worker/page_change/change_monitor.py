@@ -1,8 +1,10 @@
 import hashlib
+import ipaddress
 import os
 import random
 import json
 import re
+import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -66,6 +68,8 @@ def get_env():
         "max_backoff_minutes": as_int("MAX_BACKOFF_MINUTES", 120),
         "user_agent": os.getenv("USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36").strip(),
         "snapshot_text_max_chars": as_int("SNAPSHOT_TEXT_MAX_CHARS", 50000),
+        "max_response_bytes": as_int("MAX_RESPONSE_BYTES", 5 * 1024 * 1024),
+        "max_redirects": as_int("MAX_REDIRECTS", 5),
         "dry_run": as_bool(os.getenv("DRY_RUN", "true")),
     }
 
@@ -122,6 +126,117 @@ def get_domain(url):
         return urlparse(url).netloc.lower().removeprefix("www.")
     except Exception:
         return ""
+
+
+TELEGRAM_TOKEN_RE = re.compile(r"bot\d+:[A-Za-z0-9_-]+")
+
+
+def redact_secrets(text):
+    """Strip Telegram bot tokens (they appear in request URLs inside exception text)."""
+    return TELEGRAM_TOKEN_RE.sub("bot<redacted>", str(text or ""))
+
+
+class UnsafeUrlError(ValueError):
+    pass
+
+
+class ResponseTooLargeError(ValueError):
+    pass
+
+
+BLOCKED_HOSTNAMES = {"localhost", "metadata", "metadata.google.internal"}
+BLOCKED_HOST_SUFFIXES = (".localhost", ".local", ".internal", ".railway.internal")
+
+
+def is_public_ip(value):
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return ip.is_global and not ip.is_multicast
+
+
+def assert_public_url(url):
+    """Reject URLs that would make the worker fetch internal resources (SSRF).
+
+    Users supply these URLs, so only http(s) to hosts that resolve exclusively to
+    public addresses are allowed. Private, loopback, link-local (169.254.169.254
+    metadata), CGNAT, reserved and unspecified ranges are refused.
+    """
+    parsed = urlparse(str(url or ""))
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise UnsafeUrlError("unsafe_url")
+    if parsed.username or parsed.password:
+        raise UnsafeUrlError("unsafe_url")
+    host = parsed.hostname.lower().rstrip(".")
+    if host in BLOCKED_HOSTNAMES or host.endswith(BLOCKED_HOST_SUFFIXES):
+        raise UnsafeUrlError("unsafe_url")
+    try:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except ValueError as exc:
+        raise UnsafeUrlError("unsafe_url") from exc
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        raise ConnectionError("dns_failure") from exc
+    addresses = {info[4][0] for info in infos}
+    if not addresses or not all(is_public_ip(address.split("%")[0]) for address in addresses):
+        raise UnsafeUrlError("unsafe_url")
+
+
+def safe_http_request(method, url, config, headers=None, timeout=None, max_bytes=None, read_body=True):
+    """requests wrapper for user-supplied URLs: SSRF check on every redirect hop,
+    hard timeout, and a cap on how many body bytes are read."""
+    timeout = timeout or config.get("request_timeout_seconds") or 20
+    max_bytes = max_bytes or config.get("max_response_bytes") or 5 * 1024 * 1024
+    max_redirects = max(0, int(config.get("max_redirects") or 5))
+    deadline = time.monotonic() + timeout * 3
+    current_url = url
+
+    for _hop in range(max_redirects + 1):
+        assert_public_url(current_url)
+        response = requests.request(
+            method,
+            current_url,
+            headers=headers,
+            timeout=timeout,
+            allow_redirects=False,
+            stream=True,
+        )
+        if response.is_redirect and response.headers.get("Location"):
+            next_url = urljoin(current_url, response.headers["Location"])
+            response.close()
+            if method.upper() not in {"GET", "HEAD"}:
+                method = "GET"
+            current_url = next_url
+            continue
+
+        if not read_body or method.upper() == "HEAD":
+            response.close()
+            return response
+
+        declared = response.headers.get("Content-Length")
+        if declared and declared.isdigit() and int(declared) > max_bytes:
+            response.close()
+            raise ResponseTooLargeError("response_too_large")
+
+        body = bytearray()
+        try:
+            for chunk in response.iter_content(chunk_size=65536):
+                body.extend(chunk)
+                if len(body) > max_bytes:
+                    raise ResponseTooLargeError("response_too_large")
+                if time.monotonic() > deadline:
+                    raise requests.Timeout("read deadline exceeded")
+        finally:
+            response.close()
+        response._content = bytes(body)
+        response._content_consumed = True
+        return response
+
+    raise RuntimeError("too_many_redirects")
 
 
 def is_due(source):
@@ -381,17 +496,21 @@ def send_telegram(config, chat_id, text):
     if not chat_id:
         return False, "telegram_chat_id is missing"
 
-    response = requests.post(
-        f"https://api.telegram.org/bot{config['telegram_token']}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": text,
-            # Keep Telegram's native link preview enabled so the URL appears as a
-            # normal clickable card with title/image when the target page provides it.
-            "disable_web_page_preview": False,
-        },
-        timeout=config["request_timeout_seconds"],
-    )
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot{config['telegram_token']}/sendMessage",
+            json={
+                "chat_id": chat_id,
+                "text": text,
+                # Keep Telegram's native link preview enabled so the URL appears as a
+                # normal clickable card with title/image when the target page provides it.
+                "disable_web_page_preview": False,
+            },
+            timeout=config["request_timeout_seconds"],
+        )
+    except requests.RequestException as exc:
+        # The request URL contains the bot token; never let it reach logs or the DB.
+        return False, f"Telegram network_error: {redact_secrets(exc)[:300]}"
     if response.status_code == 200:
         return True, None
     return False, f"Telegram {response.status_code}: {response.text[:300]}"
@@ -999,22 +1118,14 @@ def verify_removed_link_items(candidate_items, config, limit=20):
             continue
 
         try:
-            response = requests.head(
-                url,
-                headers=headers,
-                timeout=min(config.get("request_timeout_seconds") or 20, 10),
-                allow_redirects=True,
-            )
+            check_timeout = min(config.get("request_timeout_seconds") or 20, 10)
+            response = safe_http_request("HEAD", url, config, headers=headers, timeout=check_timeout)
             if response.status_code in {405, 403, 429}:
-                response = requests.get(
-                    url,
-                    headers=headers,
-                    timeout=min(config.get("request_timeout_seconds") or 20, 10),
-                    allow_redirects=True,
-                    stream=True,
-                )
-                response.close()
-        except requests.RequestException as exc:
+                response = safe_http_request("GET", url, config, headers=headers, timeout=check_timeout, read_body=False)
+        except UnsafeUrlError:
+            unresolved.append({**item, "removal_check": "unsafe_or_invalid_url"})
+            continue
+        except (requests.RequestException, ConnectionError, RuntimeError) as exc:
             unresolved.append({**item, "removal_check": f"check_failed:{type(exc).__name__}"})
             continue
 
@@ -1213,6 +1324,8 @@ def calculate_backoff(reason, fail_count, config):
         "network_error": 10,
         "unsupported_content_type": 15,
         "empty_content": 15,
+        "unsafe_url": 120,
+        "response_too_large": 60,
     }.get(reason, 10)
     multiplier = 2 ** min(max(fail_count - 1, 0), 4)
     minutes = min(config["max_backoff_minutes"], base_minutes * multiplier)
@@ -1244,6 +1357,7 @@ def fetch_source(source, config, force_full=False):
     url = str(source.get("url") or "").strip()
     if not url.startswith(("http://", "https://")):
         raise ValueError("invalid_url")
+    assert_public_url(url)
 
     base_headers = {
         "User-Agent": config["user_agent"],
@@ -1267,23 +1381,13 @@ def fetch_source(source, config, force_full=False):
     print(f"Fetch started: {source.get('name') or url} | {url}", flush=True)
     started = time.monotonic()
     try:
-        response = requests.get(
-            url,
-            headers=base_headers,
-            timeout=config["request_timeout_seconds"],
-            allow_redirects=True,
-        )
+        response = safe_http_request("GET", url, config, headers=base_headers)
         if response.status_code in {403, 429}:
             print(
                 f"Fetch retry with browser headers: {source.get('name') or url} | status={response.status_code}",
                 flush=True,
             )
-            response = requests.get(
-                url,
-                headers=browser_headers,
-                timeout=config["request_timeout_seconds"],
-                allow_redirects=True,
-            )
+            response = safe_http_request("GET", url, config, headers=browser_headers)
     except requests.Timeout as exc:
         raise TimeoutError("timeout") from exc
     except requests.RequestException as exc:
@@ -1747,7 +1851,7 @@ def check_source(source, config, domain_limiter):
         print(f"Change detected: {name}", flush=True)
 
     except Exception as exc:
-        reason = str(exc) or exc.__class__.__name__
+        reason = redact_secrets(str(exc) or exc.__class__.__name__)[:300]
         if isinstance(exc, TimeoutError):
             reason = "timeout"
         elif isinstance(exc, PermissionError):
@@ -1778,11 +1882,11 @@ def run_loop():
                         try:
                             future.result()
                         except Exception as exc:
-                            print(f"Worker error: {exc}", flush=True)
+                            print(f"Worker error: {redact_secrets(exc)}", flush=True)
             else:
                 print("No due sources.", flush=True)
         except Exception as exc:
-            print(f"Loop error: {exc}", flush=True)
+            print(f"Loop error: {redact_secrets(exc)}", flush=True)
 
         time.sleep(config["loop_sleep_seconds"])
 
