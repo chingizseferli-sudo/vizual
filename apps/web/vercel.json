@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "pnpm run build",
+  "outputDirectory": "dist",
+  "redirects": [
+    {
+      "source": "/admin/change-monitor",
+      "destination": "/admin",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

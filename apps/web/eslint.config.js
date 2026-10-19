@@ -1,0 +1,86 @@
+import globals from 'globals'
+import js from '@eslint/js'
+import pluginQuery from '@tanstack/eslint-plugin-query'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import { defineConfig } from 'eslint/config'
+import tseslint from 'typescript-eslint'
+
+export default defineConfig(
+  {
+    ignores: [
+      'dist',
+      'coverage',
+      '.vitest-attachments',
+      'src/components/ui',
+      'src/routeTree.gen.ts',
+    ],
+  },
+  {
+    extends: [
+      js.configs.recommended,
+      ...tseslint.configs.recommended,
+      ...pluginQuery.configs['flat/recommended'],
+    ],
+    files: ['**/*.{ts,tsx}'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.browser,
+    },
+    plugins: {
+      'react-hooks': reactHooks,
+      'react-refresh': reactRefresh,
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+      // React Compiler diagnostics are kept visible while legacy screens are
+      // migrated to query-driven state. They must not block unrelated fixes.
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/preserve-manual-memoization': 'warn',
+      'react-hooks/use-memo': 'warn',
+      // TanStack Table intentionally returns non-memoizable functions.
+      'react-hooks/incompatible-library': 'off',
+      'react-refresh/only-export-components': [
+        'warn',
+        { allowConstantExport: true, allowExportNames: ['Route', 'useNews'] },
+      ],
+      'no-console': ['error', { allow: ['warn', 'error'] }],
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          args: 'all',
+          argsIgnorePattern: '^_',
+          caughtErrors: 'all',
+          caughtErrorsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
+      // Enforce type-only imports for TypeScript types
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        {
+          prefer: 'type-imports',
+          fixStyle: 'inline-type-imports',
+          disallowTypeAnnotations: false,
+        },
+      ],
+      // Prevent duplicate imports from the same module
+      'no-duplicate-imports': 'error',
+    },
+  },
+  {
+    files: ['server/**/*.mjs', 'tests/ai/**/*.mjs'],
+    extends: [js.configs.recommended],
+    languageOptions: { globals: globals.node, ecmaVersion: 'latest' },
+  },
+  {
+    files: ['src/routes/**/*.{ts,tsx}'],
+    rules: {
+      // TanStack file routes export route configuration and page helpers by design.
+      'react-refresh/only-export-components': 'off',
+    },
+  }
+)

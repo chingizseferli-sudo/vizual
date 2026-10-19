@@ -1,0 +1,86 @@
+/* Native fields and tables are still used by the data-heavy admin routes.
+   Scope their shared presentation here without changing the public portal. */
+.admin-shell {
+  min-width: 0;
+}
+
+/* Grid children must shrink so wide data tables scroll inside their panels. */
+.admin-shell .grid > * {
+  min-width: 0;
+}
+
+.admin-shell h1 + p {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.admin-shell input:is([type='checkbox'], [type='radio']) {
+  accent-color: var(--primary);
+}
+
+.admin-shell
+  :is(input:not([type='checkbox'], [type='radio']), textarea, select) {
+  color: var(--foreground);
+  background-color: var(--background);
+  border-color: var(--input);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.admin-shell :is(input, textarea)::placeholder {
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+
+.admin-shell :is(input, textarea, select):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.admin-shell :is(input, textarea, select)[aria-invalid='true'] {
+  border-color: var(--destructive);
+  outline-color: var(--destructive);
+}
+
+.admin-shell :is(input, textarea, select):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-shell table {
+  width: 100%;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-shell thead {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.admin-shell th {
+  padding: 0.625rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-shell td {
+  padding: 0.625rem 0.75rem;
+}
+
+.admin-shell tbody tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-shell tbody tr:hover {
+  background: color-mix(in oklab, var(--muted) 50%, transparent);
+}
+
+.admin-shell [data-slot='sidebar-menu-button'][data-active='true'],
+.admin-shell [data-slot='sidebar-menu-sub-button'][data-active='true'] {
+  background: var(--sidebar-accent);
+  box-shadow: inset 2px 0 var(--sidebar-primary);
+  font-weight: 600;
+}

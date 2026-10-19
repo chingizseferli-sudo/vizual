@@ -1,0 +1,372 @@
+// Synthetic browser-test data only. Never used by the application entry point.
+export const portalFixture = {
+  role: 'customer',
+  state: 'ready' as 'ready' | 'empty' | 'error' | 'loading',
+}
+
+const timestamp = '2026-10-11T08:00:00.000Z'
+const profile = {
+  user_id: 'fixture-user',
+  email: 'responsive-test@example.invalid',
+  role: 'customer',
+  status: 'active',
+  plan_id: 'fixture-plan',
+  telegram_chat_id: null,
+  created_at: timestamp,
+  updated_at: timestamp,
+}
+const plan = {
+  id: 'fixture-plan',
+  code: 'free',
+  name: 'Sınaq planı',
+  description: 'Yalnız interfeys testi üçün',
+  is_active: true,
+  is_public: true,
+  is_custom: false,
+  max_watches: 15,
+  minimum_interval_minutes: 10,
+  history_days: 30,
+  telegram_enabled: true,
+  limits: {},
+  features: ['Telegram bildirişləri'],
+  price_amount: 0,
+  currency: 'AZN',
+  billing_interval: 'month',
+  display_order: 10,
+}
+const monitor = {
+  id: 'fixture-monitor',
+  user_id: profile.user_id,
+  name: 'Bakı Dövlət Universiteti',
+  description: 'Sintetik monitor',
+  status: 'active',
+  notify_telegram: true,
+  telegram_chat_id: null,
+  created_at: timestamp,
+  updated_at: timestamp,
+}
+const items = [1, 2, 3].map((n) => ({
+  id: `fixture-item-${n}`,
+  source_id: `fixture-source-${n}`,
+  title:
+    'Bakı Dövlət Universitetində tələbələr üçün yeni tədris proqramı haqqında məlumat',
+  url: `https://publisher-${n}.example.invalid/articles/azerbaycan-universitetleri-haqqinda-uzun-basliq`,
+  published_at: timestamp,
+  detected_at: timestamp,
+  created_at: timestamp,
+  status: 'new',
+}))
+const sources = items.map((item, i) => ({
+  id: item.source_id,
+  name: `Sınaq media mənbəsi ${i + 1}`,
+  base_url: new URL(item.url).origin,
+  rss_url: `${new URL(item.url).origin}/rss`,
+  selector: null,
+  article_pattern: null,
+  status: 'active',
+  monitor_method: 'rss',
+  last_checked_at: timestamp,
+  last_success_at: timestamp,
+  last_article_found_at: timestamp,
+  last_result: 'ok',
+  last_error: null,
+  consecutive_fail_count: 0,
+}))
+const matches = items.map((item, i) => ({
+  id: `fixture-match-${i}`,
+  monitor_id: monitor.id,
+  item_id: item.id,
+  matched_keyword: 'Bakı Dövlət Universiteti',
+  created_at: timestamp,
+  user_monitors: monitor,
+  monitored_items: item,
+}))
+// Exact version-1 RPC projection, independent of legacy table fixture shape.
+// Metrics are fabricated test inputs, never claimed as RSS engagement data.
+const analyticsItems = [
+  ...items.map((item, index) => ({
+    id: item.id,
+    title:
+      index === 2
+        ? 'Universitetdə ictimai müzakirə üçün yeni proqram'
+        : item.title,
+    url: item.url,
+    source_id: item.source_id,
+    publisher: sources[index].name,
+    platform: 'rss',
+    published_at: '2026-10-08T08:00:00.000Z',
+    detected_at: timestamp,
+    metadata: {
+      version: 1,
+      content_type: 'article',
+      metrics: [
+        {
+          observed_at: '2026-10-11T06:00:00.000Z',
+          provider: 'Synthetic fixture',
+          method: 'test',
+          views: index * 10,
+          comments: 0,
+        },
+        {
+          observed_at: timestamp,
+          provider: 'Synthetic fixture',
+          method: 'test',
+          views: index * 100,
+          comments: index * 2,
+        },
+      ],
+    },
+    matches: [
+      { monitor_id: monitor.id, name: monitor.name, keyword: 'Universitet' },
+    ],
+  })),
+  {
+    id: 'fixture-missing-metrics',
+    title: 'Engagement məlumatı olmayan ayrıca nəşr',
+    url: 'https://publisher-missing.example.invalid/article',
+    source_id: 'fixture-source-missing',
+    publisher: 'Metriksiz sınaq mənbəsi',
+    platform: 'website',
+    published_at: null,
+    detected_at: timestamp,
+    metadata: null,
+    matches: [
+      { monitor_id: monitor.id, name: monitor.name, keyword: 'Universitet' },
+    ],
+  },
+]
+export const analyticsFixture = {
+  calls: [] as { name: string; args: Record<string, unknown> }[],
+  truncated: false,
+  invalid: false,
+  metricless: false,
+  unsafeEvidence: false,
+  ownerId: 'fixture-user',
+}
+const tables: Record<string, Record<string, unknown>[]> = {
+  user_profiles: [profile],
+  admin_users: [{ ...profile, role: 'admin' }],
+  subscription_plans: [plan],
+  user_profile_with_plan_limits: [{ ...profile, ...plan }],
+  user_subscriptions: [
+    {
+      id: 'fixture-subscription',
+      user_id: profile.user_id,
+      plan_id: plan.id,
+      status: 'active',
+      started_at: timestamp,
+      current_period_end: null,
+      subscription_plans: plan,
+      created_at: timestamp,
+    },
+  ],
+  user_monitors: [monitor],
+  monitor_keywords: [
+    {
+      id: 'fixture-keyword',
+      monitor_id: monitor.id,
+      keyword: 'Bakı Dövlət Universiteti',
+      match_type: 'contains',
+    },
+  ],
+  monitored_items: items,
+  sources,
+  monitor_matches: matches,
+  monitor_alerts: matches.map((match, i) => ({
+    id: `fixture-alert-${i}`,
+    match_id: match.id,
+    channel: 'telegram',
+    status: 'sent',
+    sent_at: timestamp,
+    created_at: timestamp,
+    monitor_matches: match,
+  })),
+  change_sources: [
+    {
+      id: 'fixture-watch',
+      user_id: profile.user_id,
+      name: 'Universitet saytı',
+      url: 'https://university.example.invalid/news',
+      selector: '.news-list',
+      status: 'active',
+      interval_minutes: 10,
+      created_at: timestamp,
+      updated_at: timestamp,
+      last_checked_at: timestamp,
+      last_status: 'unchanged',
+      last_error: null,
+    },
+  ],
+  change_events: [],
+  change_snapshots: [],
+  change_alerts: [],
+  news: [
+    {
+      id: 123,
+      title: 'İnterfeys üçün sınaq xəbəri',
+      slug: 'fixture-news',
+      content: 'Sintetik mətn',
+      status: 'draft',
+      created_at: timestamp,
+      updated_at: timestamp,
+      image_url: null,
+    },
+  ],
+}
+
+export function fixtureProfile() {
+  return {
+    user: { id: profile.user_id, email: profile.email },
+    profile: { ...profile, role: portalFixture.role },
+    isAuthenticated: true,
+    isAdmin: portalFixture.role === 'admin',
+    isBlocked: false,
+    error: null,
+  }
+}
+
+export const fixtureSupabase = {
+  auth: {
+    getUser: async () => ({
+      data: { user: { id: profile.user_id, email: profile.email } },
+      error: null,
+    }),
+    getSession: async () => ({
+      data: {
+        session: { user: { id: profile.user_id, email: profile.email } },
+      },
+      error: null,
+    }),
+    signOut: async () => ({ error: null }),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+  },
+  async rpc(name: string, args: Record<string, unknown>) {
+    analyticsFixture.calls.push({ name, args })
+    if (name !== 'get_content_analytics')
+      throw new Error('Unexpected fixture RPC')
+    if (portalFixture.state === 'loading') return new Promise(() => {})
+    if (portalFixture.state === 'error')
+      return { data: null, error: { message: 'Synthetic RPC failure' } }
+    if (analyticsFixture.invalid) return { data: { version: 99 }, error: null }
+    const selected = analyticsItems.filter(
+      (item) =>
+        (!args.p_source || item.source_id === args.p_source) &&
+        (!args.p_monitor ||
+          item.matches.some((match) => match.monitor_id === args.p_monitor)) &&
+        item.detected_at >= String(args.p_start) &&
+        item.detected_at < String(args.p_end)
+    )
+    return {
+      data: {
+        version: 1,
+        owner_id: analyticsFixture.ownerId,
+        items:
+          portalFixture.state === 'empty'
+            ? []
+            : selected.map((item) => ({
+                ...item,
+                metadata: analyticsFixture.metricless ? null : item.metadata,
+                url: analyticsFixture.unsafeEvidence
+                  ? 'javascript:alert("fixture")'
+                  : item.url,
+              })),
+        truncated: analyticsFixture.truncated,
+        limit: args.p_limit,
+        collected_at: timestamp,
+        start: args.p_start,
+        end: args.p_end,
+        retention_days: 30,
+        monitors: [{ id: monitor.id, name: monitor.name }],
+      },
+      error: null,
+    }
+  },
+  functions: {
+    invoke: async () => ({
+      data: { users: [{ ...profile, id: profile.user_id }] },
+      error: null,
+    }),
+  },
+  from(table: string) {
+    let single = false
+    let head = false
+    let offset = 0
+    const query = {
+      select(_fields?: string, options?: { head?: boolean }) {
+        head = !!options?.head
+        return query
+      },
+      eq() {
+        return query
+      },
+      in() {
+        return query
+      },
+      gte() {
+        return query
+      },
+      lte() {
+        return query
+      },
+      lt() {
+        return query
+      },
+      gt() {
+        return query
+      },
+      neq() {
+        return query
+      },
+      is() {
+        return query
+      },
+      not() {
+        return query
+      },
+      or() {
+        return query
+      },
+      order() {
+        return query
+      },
+      limit() {
+        return query
+      },
+      range(start: number) {
+        offset = start
+        return query
+      },
+      single() {
+        single = true
+        return query
+      },
+      maybeSingle() {
+        single = true
+        return query
+      },
+      then(resolve: (result: unknown) => unknown) {
+        if (portalFixture.state === 'loading') return new Promise(() => {})
+        const rows =
+          portalFixture.state === 'empty' || offset > 0
+            ? []
+            : tables[table] || []
+        return Promise.resolve({
+          data:
+            portalFixture.state === 'error'
+              ? null
+              : head
+                ? null
+                : single
+                  ? rows[0] || null
+                  : rows,
+          count: rows.length,
+          error:
+            portalFixture.state === 'error'
+              ? { message: 'Sintetik yükləmə xətası' }
+              : null,
+        }).then(resolve)
+      },
+    }
+    return query
+  },
+}

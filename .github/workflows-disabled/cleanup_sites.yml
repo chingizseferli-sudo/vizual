@@ -1,0 +1,30 @@
+name: Cleanup Sites
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      EXCLUDED_DOMAIN_SUFFIXES: gov.az
+
+    steps:
+      - name: Repo klonla
+        uses: actions/checkout@v4
+
+      - name: Python quraşdır
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Kitabxanaları quraşdır
+        run: |
+          pip install requests beautifulsoup4
+
+      - name: Sayt siyahılarını təmizlə
+        run: |
+          python -u cleanup_sites.py

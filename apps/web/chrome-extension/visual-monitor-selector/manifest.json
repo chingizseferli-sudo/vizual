@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Visual Monitor Selector",
+  "version": "0.1.4",
+  "description": "Select watched page areas for Visual Monitor Change Monitor.",
+  "permissions": [
+    "storage",
+    "clipboardWrite",
+    "scripting",
+    "activeTab",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_title": "Visual Monitor Selector",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content-script.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

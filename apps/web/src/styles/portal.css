@@ -1,0 +1,179 @@
+/* Shared portal layout contract: shrinkable panels, natural document flow,
+   readable controls and explicit local scrolling. Never conceal page overflow. */
+.portal-shell {
+  min-width: 0;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.portal-shell .grid > *,
+.portal-shell main,
+.portal-shell section,
+.portal-shell article,
+.portal-shell form {
+  min-width: 0;
+}
+
+.portal-content {
+  width: 100%;
+  min-width: 0;
+  max-width: 100rem;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+}
+
+.portal-page {
+  padding: 1rem;
+}
+
+.portal-shell h1 {
+  font-size: clamp(1.5rem, 1.2rem + 0.7vw, 1.875rem);
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+
+.portal-shell :is(button, a, input, select, textarea, summary):focus-visible,
+.responsive-table-scroll:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.portal-shell :is(input, select, textarea) {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.portal-shell :is(h1, h2, h3, p, label, a) {
+  overflow-wrap: anywhere;
+}
+
+.portal-shell [data-slot='sidebar-menu-button'][data-active='true'],
+.portal-shell [data-slot='sidebar-menu-sub-button'][data-active='true'] {
+  background: var(--sidebar-accent);
+  box-shadow: inset 3px 0 var(--sidebar-primary);
+  font-weight: 600;
+}
+
+.responsive-table-scroll {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border-radius: inherit;
+}
+
+.responsive-table[data-mobile-layout='scroll'] table {
+  min-width: 42rem;
+}
+
+@media (min-width: 768px) {
+  .portal-page {
+    padding: 1.5rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .portal-shell :is(button, [role='button'], summary),
+  [data-slot='dialog-content'] :is(button, input, select),
+  [data-slot='sheet-content'] :is(button, input, select),
+  .portal-shell :is(input:not([type='checkbox'], [type='radio']), select),
+  [data-mobile='true']
+    :is(
+      [data-slot='sidebar-menu-button'],
+      [data-slot='sidebar-menu-sub-button']
+    ) {
+    min-height: 2.75rem;
+  }
+  .portal-shell button:has(> svg):not(:has(> span)),
+  .portal-shell button[role='checkbox'],
+  [data-slot='dialog-close'],
+  [data-slot='sheet-close'] {
+    min-width: 2.75rem;
+  }
+  .portal-shell input:is([type='checkbox'], [type='radio']) {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  .portal-shell label:has(input:is([type='checkbox'], [type='radio'])) {
+    min-height: 2.75rem;
+  }
+  .portal-shell [data-slot='sidebar-inset'] {
+    margin: 0;
+    border-radius: 0;
+  }
+
+  /* Keep header semantics available to assistive technology. Every card cell
+     explicitly names its field; original links/menus and pagination remain. */
+  .responsive-table[data-mobile-layout='cards'] table {
+    width: 100%;
+    min-width: 0;
+    table-layout: auto;
+  }
+  .responsive-table[data-mobile-layout='cards'] thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .responsive-table[data-mobile-layout='cards'] :is(tbody, tr, td) {
+    display: block;
+    width: 100%;
+  }
+  .responsive-table[data-mobile-layout='cards'] tbody > tr {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .responsive-table[data-mobile-layout='cards'] tbody > tr:last-child {
+    border-bottom: 0;
+  }
+  .responsive-table[data-mobile-layout='cards'] td {
+    padding: 0.5rem 0;
+    text-align: start;
+    white-space: normal;
+  }
+  .responsive-table[data-mobile-layout='cards'] td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--muted-foreground);
+  }
+  .responsive-table[data-mobile-layout='cards'] td > div {
+    max-width: 100%;
+  }
+  .responsive-table[data-mobile-layout='cards'] td [class*='truncate'] {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .responsive-table[data-mobile-layout='cards']
+    td[data-label='Əməliyyatlar']
+    > div {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 374px) {
+  .portal-page {
+    padding: 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,74 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pinned pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint the code
+        run: pnpm lint
+
+      - name: Type-check the code
+        run: pnpm typecheck
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level high
+
+      # - name: Analyze unused files and dependencies
+      #   run: pnpm knip
+
+      - name: Run Prettier check
+        run: pnpm format:check
+
+      - name: Install browsers
+        run: pnpm test:browser:install
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Verify analytics migration and tenant isolation in disposable PostgreSQL
+        run: pnpm test:analytics:db
+
+      - name: Verify read-only readiness catalog collector
+        run: pnpm test:readiness:catalog
+
+      - name: Verify AI pipeline and synthetic evaluation
+        run: pnpm test:ai
+
+      - name: Verify disabled AI controls and tenant isolation in disposable PostgreSQL
+        run: pnpm test:ai:db
+
+      - name: Verify authorized content extraction and SSRF restrictions
+        run: pnpm test:content
+
+      - name: Verify content intake isolation and quality integration
+        run: pnpm test:content:db
+
+      - name: Verify immutable evaluation metrics and fixtures
+        run: pnpm test:ai:evaluator
+
+      - name: Build the project
+        run: pnpm build

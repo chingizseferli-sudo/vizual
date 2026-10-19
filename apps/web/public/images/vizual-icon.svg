@@ -1,0 +1,24 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="120" fill="#F8FBFF"/>
+  <defs>
+    <linearGradient id="v-gradient" x1="76" y1="74" x2="360" y2="392" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#071A44"/>
+      <stop offset="0.55" stop-color="#0B3B91"/>
+      <stop offset="1" stop-color="#1E63FF"/>
+    </linearGradient>
+    <linearGradient id="lens-gradient" x1="262" y1="110" x2="448" y2="302" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#21A5FF"/>
+      <stop offset="1" stop-color="#0B63E5"/>
+    </linearGradient>
+    <linearGradient id="bar-gradient" x1="318" y1="184" x2="392" y2="264" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22C55E"/>
+      <stop offset="1" stop-color="#18B6D9"/>
+    </linearGradient>
+  </defs>
+  <path d="M48 72H137C150 72 162 79 168 91L252 258L337 102C350 79 375 64 402 64H464L282 410H222L48 72Z" fill="url(#v-gradient)"/>
+  <path d="M296 132C340 88 412 88 456 132C500 176 500 248 456 292C412 336 340 336 296 292C252 248 252 176 296 132ZM330 166C305 191 305 233 330 258C355 283 397 283 422 258C447 233 447 191 422 166C397 141 355 141 330 166Z" fill="url(#lens-gradient)"/>
+  <path d="M449 282L497 330C510 343 510 364 497 377C484 390 463 390 450 377L402 329L449 282Z" fill="#0B63E5"/>
+  <rect x="338" y="226" width="20" height="46" rx="7" fill="#071A44"/>
+  <rect x="372" y="196" width="22" height="76" rx="8" fill="#0B3B91"/>
+  <rect x="409" y="160" width="24" height="112" rx="9" fill="url(#bar-gradient)"/>
+</svg>
