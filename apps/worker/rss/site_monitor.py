@@ -1682,6 +1682,22 @@ def fold_az(text):
     return normalize_text(str(text or "").translate(_AZ_FOLD))
 
 
+_CYRILLIC_SKELETON = str.maketrans({
+    "ж": "z", "ц": "c", "ч": "c", "ш": "s", "щ": "s", "х": "", "й": "", "ь": "", "ъ": "",
+    "а": "", "е": "", "ё": "", "и": "", "о": "", "у": "", "ы": "", "э": "", "ю": "", "я": "",
+    "б": "b", "в": "v", "г": "g", "д": "d", "з": "z", "к": "k", "л": "l", "м": "m", "н": "n",
+    "п": "p", "р": "r", "с": "s", "т": "t", "ф": "f",
+})
+_CYRILLIC_RE = re.compile(r"[а-яё]", re.IGNORECASE)
+
+
+def slug_skeleton(word):
+    """Consonant skeleton of a Latin slug word, so 'azerbajdzhan' and 'азербайджан' compare equal."""
+    word = re.sub(r"shch|dzh|tch|zh|ch|sh", lambda m: {"shch": "s", "dzh": "z", "tch": "c", "zh": "z", "ch": "c", "sh": "s"}[m.group(0)], word)
+    word = word.replace("kh", "h").replace("ts", "c")
+    return re.sub(r"[aeiouyjhx]", "", word)
+
+
 def meaningful_slug_words(article_url):
     slug_raw = title_from_url_slug(article_url)
     if len(slug_raw.split()) < 2:
@@ -1693,16 +1709,22 @@ def meaningful_slug_words(article_url):
         "siyaset", "siyasət", "iqtisadiyyat", "tehsil", "təhsil",
     }
     words = re.findall(r"[a-zA-Z0-9əöğüçıƏÖĞÜÇŞşİı]{4,}", slug_title)
-    return [word for word in words if word not in stop_words]
+    words = [re.sub(r"(?<=[a-z])\d+$", "", word) for word in words]  # 'azerbaycandir1' -> 'azerbaycandir'
+    return [word for word in words if len(word) >= 4 and word not in stop_words]
 
 
 def title_matches_url_slug(title, article_url):
     words = meaningful_slug_words(article_url)
     if not words:
         return True
-    title_norm = fold_az(clean_title_for_message(title))
-    overlap = sum(1 for word in words[:8] if word in title_norm)
-    return overlap >= min(2, max(1, len(words[:8]) // 3))
+    words = words[:8]
+    cleaned = clean_title_for_message(title)
+    title_norm = fold_az(cleaned)
+    overlap = sum(1 for word in words if word in title_norm)
+    if _CYRILLIC_RE.search(cleaned):
+        skeletons = {w.translate(_CYRILLIC_SKELETON) for w in re.findall(r"[а-яё]+", cleaned.lower())}
+        overlap = sum(1 for word in words if len(slug_skeleton(word)) >= 2 and slug_skeleton(word) in skeletons)
+    return overlap >= min(2, max(1, len(words) // 3))
 
 
 def title_rejection_reason(title, article_url=None, source_domain=None):
