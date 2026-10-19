@@ -100,6 +100,10 @@ def main():
         12: ("Dekabr", "Dek"),
     }
     fresh_month, fresh_short_month = month_names[fresh.month]
+    possessive = {
+        1: "Yanvarın", 2: "Fevralın", 3: "Martın", 4: "Aprelin", 5: "Mayın", 6: "İyunun",
+        7: "İyulun", 8: "Avqustun", 9: "Sentyabrın", 10: "Oktyabrın", 11: "Noyabrın", 12: "Dekabrın",
+    }
 
     fixtures = [
         ("RSS ISO fresh", "", fresh.isoformat(), "fresh"),
@@ -122,11 +126,11 @@ def main():
         ("Relative minutes fresh", "", "15 d\u0259qiq\u0259 \u0259vv\u0259l", "fresh"),
         ("Relative hours old", "", "2 saat \u0259vv\u0259l", "old_news"),
         ("Relative days old", "", "2 g\u00fcn \u0259vv\u0259l", "old_news"),
-        ("Month possessive fresh", f"\u0130yulun {now.day}-d\u0259 saat {fresh.hour:02d}:{fresh.minute:02d}", "", "fresh"),
+        ("Month possessive fresh", f"{possessive[fresh.month]} {fresh.day}-d\u0259 saat {fresh.hour:02d}:{fresh.minute:02d}", "", "fresh"),
         ("Numeric seconds old", "", "08.04.2026", "old_news"),
         ("Russian month old", "", "03 \u0438\u044e\u043b\u044f 2026 | 20:11", "old_news"),
         ("English month old", "", "27 Jun, 2026", "old_news"),
-        ("Time first Azerbaijani fresh", f"{fresh.hour:02d}:{fresh.minute:02d} - {fresh.day} \u0130yul {fresh.year}", "", "fresh"),
+        ("Time first Azerbaijani fresh", f"{fresh.hour:02d}:{fresh.minute:02d} - {fresh.day} {fresh_month} {fresh.year}", "", "fresh"),
     ]
 
     for label, title, article_time, expected in fixtures:
