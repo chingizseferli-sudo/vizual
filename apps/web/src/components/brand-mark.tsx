@@ -25,10 +25,15 @@ export function BrandMark({
         <img
           src={imageUrl}
           alt={siteName}
+          // Intrinsic size of the default logo/icon reserves space before the
+          // image loads; CSS sets the rendered size and the loaded image's own
+          // aspect ratio takes over.
+          width={variant === 'icon' ? 32 : 980}
+          height={variant === 'icon' ? 32 : 300}
           className={cn(
             variant === 'icon'
               ? 'size-8 object-contain'
-              : 'h-10 max-w-[190px] object-contain',
+              : 'h-10 w-auto max-w-[190px] object-contain',
             imageClassName
           )}
         />
