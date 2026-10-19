@@ -79,6 +79,13 @@ export default defineConfig({
               priority: 20,
             },
             {
+              // Only the icons the app imports (tree-shaken), in one chunk
+              // instead of one request per icon.
+              name: 'icons',
+              test: /node_modules[\\/]lucide-react[\\/]/,
+              priority: 20,
+            },
+            {
               name: 'editor',
               test: /node_modules[\\/](@tiptap|prosemirror-)[\\/]/,
               priority: 20,
