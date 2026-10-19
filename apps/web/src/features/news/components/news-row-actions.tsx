@@ -1,5 +1,6 @@
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { ExternalLink, Pencil, Trash2 } from 'lucide-react'
+import { openExternalUrl } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -60,7 +61,7 @@ export function NewsRowActions({ news }: NewsRowActionsProps) {
         {news.source && (
           <DropdownMenuItem
             onClick={() => {
-              window.open(news.source || '', '_blank')
+              openExternalUrl(news.source)
             }}
           >
             Mənbəyə bax

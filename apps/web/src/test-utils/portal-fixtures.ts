@@ -81,68 +81,6 @@ const matches = items.map((item, i) => ({
   user_monitors: monitor,
   monitored_items: item,
 }))
-// Exact version-1 RPC projection, independent of legacy table fixture shape.
-// Metrics are fabricated test inputs, never claimed as RSS engagement data.
-const analyticsItems = [
-  ...items.map((item, index) => ({
-    id: item.id,
-    title:
-      index === 2
-        ? 'Universitetdə ictimai müzakirə üçün yeni proqram'
-        : item.title,
-    url: item.url,
-    source_id: item.source_id,
-    publisher: sources[index].name,
-    platform: 'rss',
-    published_at: '2026-10-08T08:00:00.000Z',
-    detected_at: timestamp,
-    metadata: {
-      version: 1,
-      content_type: 'article',
-      metrics: [
-        {
-          observed_at: '2026-10-11T06:00:00.000Z',
-          provider: 'Synthetic fixture',
-          method: 'test',
-          views: index * 10,
-          comments: 0,
-        },
-        {
-          observed_at: timestamp,
-          provider: 'Synthetic fixture',
-          method: 'test',
-          views: index * 100,
-          comments: index * 2,
-        },
-      ],
-    },
-    matches: [
-      { monitor_id: monitor.id, name: monitor.name, keyword: 'Universitet' },
-    ],
-  })),
-  {
-    id: 'fixture-missing-metrics',
-    title: 'Engagement məlumatı olmayan ayrıca nəşr',
-    url: 'https://publisher-missing.example.invalid/article',
-    source_id: 'fixture-source-missing',
-    publisher: 'Metriksiz sınaq mənbəsi',
-    platform: 'website',
-    published_at: null,
-    detected_at: timestamp,
-    metadata: null,
-    matches: [
-      { monitor_id: monitor.id, name: monitor.name, keyword: 'Universitet' },
-    ],
-  },
-]
-export const analyticsFixture = {
-  calls: [] as { name: string; args: Record<string, unknown> }[],
-  truncated: false,
-  invalid: false,
-  metricless: false,
-  unsafeEvidence: false,
-  ownerId: 'fixture-user',
-}
 const tables: Record<string, Record<string, unknown>[]> = {
   user_profiles: [profile],
   admin_users: [{ ...profile, role: 'admin' }],
@@ -240,46 +178,8 @@ export const fixtureSupabase = {
     signOut: async () => ({ error: null }),
     onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
   },
-  async rpc(name: string, args: Record<string, unknown>) {
-    analyticsFixture.calls.push({ name, args })
-    if (name !== 'get_content_analytics')
-      throw new Error('Unexpected fixture RPC')
-    if (portalFixture.state === 'loading') return new Promise(() => {})
-    if (portalFixture.state === 'error')
-      return { data: null, error: { message: 'Synthetic RPC failure' } }
-    if (analyticsFixture.invalid) return { data: { version: 99 }, error: null }
-    const selected = analyticsItems.filter(
-      (item) =>
-        (!args.p_source || item.source_id === args.p_source) &&
-        (!args.p_monitor ||
-          item.matches.some((match) => match.monitor_id === args.p_monitor)) &&
-        item.detected_at >= String(args.p_start) &&
-        item.detected_at < String(args.p_end)
-    )
-    return {
-      data: {
-        version: 1,
-        owner_id: analyticsFixture.ownerId,
-        items:
-          portalFixture.state === 'empty'
-            ? []
-            : selected.map((item) => ({
-                ...item,
-                metadata: analyticsFixture.metricless ? null : item.metadata,
-                url: analyticsFixture.unsafeEvidence
-                  ? 'javascript:alert("fixture")'
-                  : item.url,
-              })),
-        truncated: analyticsFixture.truncated,
-        limit: args.p_limit,
-        collected_at: timestamp,
-        start: args.p_start,
-        end: args.p_end,
-        retention_days: 30,
-        monitors: [{ id: monitor.id, name: monitor.name }],
-      },
-      error: null,
-    }
+  async rpc(name: string) {
+    throw new Error(`Unexpected fixture RPC: ${name}`)
   },
   functions: {
     invoke: async () => ({

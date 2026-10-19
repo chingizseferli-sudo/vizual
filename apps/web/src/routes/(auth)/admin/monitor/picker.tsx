@@ -430,6 +430,13 @@ function SelectorPickerPage() {
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      // Only trust messages from the sandboxed picker frame.
+      if (
+        !iframeRef.current ||
+        event.source !== iframeRef.current.contentWindow
+      )
+        return
+
       if (event.data?.type === 'visual-monitor-navigate') {
         const nextUrl = event.data.url || ''
         if (nextUrl) void loadPage(nextUrl)
@@ -670,7 +677,7 @@ function SelectorPickerPage() {
             ref={iframeRef}
             title='Selector picker'
             srcDoc={html}
-            sandbox='allow-scripts allow-same-origin allow-popups'
+            sandbox='allow-scripts allow-popups'
             className='h-full min-h-[calc(100vh-260px)] w-full bg-white'
           />
         ) : (

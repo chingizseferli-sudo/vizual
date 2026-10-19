@@ -40,9 +40,7 @@ import { Route as authMonitorStoryIntelligenceRouteImport } from './routes/(auth
 import { Route as authMonitorResultsRouteImport } from './routes/(auth)/monitor/results'
 import { Route as authMonitorProfileRouteImport } from './routes/(auth)/monitor/profile'
 import { Route as authMonitorMonitorsRouteImport } from './routes/(auth)/monitor/monitors'
-import { Route as authMonitorAnalyticsRouteImport } from './routes/(auth)/monitor/analytics'
 import { Route as authMonitorAlertsRouteImport } from './routes/(auth)/monitor/alerts'
-import { Route as authMonitorAiInsightsRouteImport } from './routes/(auth)/monitor/ai-insights'
 import { Route as authAdminSubscriptionsRouteImport } from './routes/(auth)/admin/subscriptions'
 import { Route as authAdminNewsRouteImport } from './routes/(auth)/admin/news'
 import { Route as authAdminSettingsRouteRouteImport } from './routes/(auth)/admin/settings/route'
@@ -230,19 +228,9 @@ const authMonitorMonitorsRoute = authMonitorMonitorsRouteImport.update({
   path: '/monitors',
   getParentRoute: () => authMonitorRouteRoute,
 } as any)
-const authMonitorAnalyticsRoute = authMonitorAnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
-  getParentRoute: () => authMonitorRouteRoute,
-} as any)
 const authMonitorAlertsRoute = authMonitorAlertsRouteImport.update({
   id: '/alerts',
   path: '/alerts',
-  getParentRoute: () => authMonitorRouteRoute,
-} as any)
-const authMonitorAiInsightsRoute = authMonitorAiInsightsRouteImport.update({
-  id: '/ai-insights',
-  path: '/ai-insights',
   getParentRoute: () => authMonitorRouteRoute,
 } as any)
 const authAdminSubscriptionsRoute = authAdminSubscriptionsRouteImport.update({
@@ -417,9 +405,7 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof authAdminSettingsRouteRouteWithChildren
   '/admin/news': typeof authAdminNewsRouteWithChildren
   '/admin/subscriptions': typeof authAdminSubscriptionsRoute
-  '/monitor/ai-insights': typeof authMonitorAiInsightsRoute
   '/monitor/alerts': typeof authMonitorAlertsRoute
-  '/monitor/analytics': typeof authMonitorAnalyticsRoute
   '/monitor/monitors': typeof authMonitorMonitorsRoute
   '/monitor/profile': typeof authMonitorProfileRoute
   '/monitor/results': typeof authMonitorResultsRoute
@@ -475,9 +461,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/admin/sign-in': typeof AdminSignInRoute
   '/admin/subscriptions': typeof authAdminSubscriptionsRoute
-  '/monitor/ai-insights': typeof authMonitorAiInsightsRoute
   '/monitor/alerts': typeof authMonitorAlertsRoute
-  '/monitor/analytics': typeof authMonitorAnalyticsRoute
   '/monitor/monitors': typeof authMonitorMonitorsRoute
   '/monitor/profile': typeof authMonitorProfileRoute
   '/monitor/results': typeof authMonitorResultsRoute
@@ -538,9 +522,7 @@ export interface FileRoutesById {
   '/(auth)/admin/settings': typeof authAdminSettingsRouteRouteWithChildren
   '/(auth)/admin/news': typeof authAdminNewsRouteWithChildren
   '/(auth)/admin/subscriptions': typeof authAdminSubscriptionsRoute
-  '/(auth)/monitor/ai-insights': typeof authMonitorAiInsightsRoute
   '/(auth)/monitor/alerts': typeof authMonitorAlertsRoute
-  '/(auth)/monitor/analytics': typeof authMonitorAnalyticsRoute
   '/(auth)/monitor/monitors': typeof authMonitorMonitorsRoute
   '/(auth)/monitor/profile': typeof authMonitorProfileRoute
   '/(auth)/monitor/results': typeof authMonitorResultsRoute
@@ -603,9 +585,7 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/news'
     | '/admin/subscriptions'
-    | '/monitor/ai-insights'
     | '/monitor/alerts'
-    | '/monitor/analytics'
     | '/monitor/monitors'
     | '/monitor/profile'
     | '/monitor/results'
@@ -661,9 +641,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/admin/sign-in'
     | '/admin/subscriptions'
-    | '/monitor/ai-insights'
     | '/monitor/alerts'
-    | '/monitor/analytics'
     | '/monitor/monitors'
     | '/monitor/profile'
     | '/monitor/results'
@@ -723,9 +701,7 @@ export interface FileRouteTypes {
     | '/(auth)/admin/settings'
     | '/(auth)/admin/news'
     | '/(auth)/admin/subscriptions'
-    | '/(auth)/monitor/ai-insights'
     | '/(auth)/monitor/alerts'
-    | '/(auth)/monitor/analytics'
     | '/(auth)/monitor/monitors'
     | '/(auth)/monitor/profile'
     | '/(auth)/monitor/results'
@@ -1004,25 +980,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authMonitorMonitorsRouteImport
       parentRoute: typeof authMonitorRouteRoute
     }
-    '/(auth)/monitor/analytics': {
-      id: '/(auth)/monitor/analytics'
-      path: '/analytics'
-      fullPath: '/monitor/analytics'
-      preLoaderRoute: typeof authMonitorAnalyticsRouteImport
-      parentRoute: typeof authMonitorRouteRoute
-    }
     '/(auth)/monitor/alerts': {
       id: '/(auth)/monitor/alerts'
       path: '/alerts'
       fullPath: '/monitor/alerts'
       preLoaderRoute: typeof authMonitorAlertsRouteImport
-      parentRoute: typeof authMonitorRouteRoute
-    }
-    '/(auth)/monitor/ai-insights': {
-      id: '/(auth)/monitor/ai-insights'
-      path: '/ai-insights'
-      fullPath: '/monitor/ai-insights'
-      preLoaderRoute: typeof authMonitorAiInsightsRouteImport
       parentRoute: typeof authMonitorRouteRoute
     }
     '/(auth)/admin/subscriptions': {
@@ -1330,9 +1292,7 @@ const authAdminRouteRouteWithChildren = authAdminRouteRoute._addFileChildren(
 )
 
 interface authMonitorRouteRouteChildren {
-  authMonitorAiInsightsRoute: typeof authMonitorAiInsightsRoute
   authMonitorAlertsRoute: typeof authMonitorAlertsRoute
-  authMonitorAnalyticsRoute: typeof authMonitorAnalyticsRoute
   authMonitorMonitorsRoute: typeof authMonitorMonitorsRoute
   authMonitorProfileRoute: typeof authMonitorProfileRoute
   authMonitorResultsRoute: typeof authMonitorResultsRoute
@@ -1345,9 +1305,7 @@ interface authMonitorRouteRouteChildren {
 }
 
 const authMonitorRouteRouteChildren: authMonitorRouteRouteChildren = {
-  authMonitorAiInsightsRoute: authMonitorAiInsightsRoute,
   authMonitorAlertsRoute: authMonitorAlertsRoute,
-  authMonitorAnalyticsRoute: authMonitorAnalyticsRoute,
   authMonitorMonitorsRoute: authMonitorMonitorsRoute,
   authMonitorProfileRoute: authMonitorProfileRoute,
   authMonitorResultsRoute: authMonitorResultsRoute,

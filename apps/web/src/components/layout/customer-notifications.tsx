@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Bell, CheckCheck, ExternalLink, Loader2 } from 'lucide-react'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
-import { cn } from '@/lib/utils'
+import { cn, openExternalUrl } from '@/lib/utils'
 import {
   Dialog,
   DialogTrigger,
@@ -90,32 +90,15 @@ async function fetchCustomerNotifications(): Promise<NotificationData> {
 
   if (userError || !user) return { alerts: [], userId: null }
 
-  const { data: monitors, error: monitorsError } = await supabase
-    .from('user_monitors')
-    .select('id')
-    .eq('user_id', user.id)
-
-  if (monitorsError) throw monitorsError
-
-  const monitorIds = (monitors || []).map((monitor) => monitor.id)
-  if (monitorIds.length === 0) return { alerts: [], userId: user.id }
-
-  const { data: matches, error: matchesError } = await supabase
-    .from('monitor_matches')
-    .select('id')
-    .in('monitor_id', monitorIds)
-
-  if (matchesError) throw matchesError
-
-  const matchIds = (matches || []).map((match) => match.id)
-  if (matchIds.length === 0) return { alerts: [], userId: user.id }
-
+  // Single round-trip: filter alerts by monitor owner through inner joins
+  // instead of fetching every monitor and every match id first (the old
+  // 3-query waterfall built an unbounded `in (...)` list of match ids).
   const { data, error } = await supabase
     .from('monitor_alerts')
     .select(
-      'id,channel,status,sent_at,monitor_matches(matched_keyword,user_monitors(name),monitored_items(title,url))'
+      'id,channel,status,sent_at,monitor_matches!inner(matched_keyword,user_monitors!inner(name),monitored_items(title,url))'
     )
-    .in('match_id', matchIds)
+    .eq('monitor_matches.user_monitors.user_id', user.id)
     .order('sent_at', { ascending: false })
     .limit(20)
 
@@ -171,7 +154,7 @@ export function CustomerNotifications() {
   function openAlert(alert: NotificationRow) {
     markOneAsRead(alert.id)
     const url = alert.monitor_matches?.monitored_items?.url
-    if (url) window.open(url, '_blank', 'noopener,noreferrer')
+    openExternalUrl(url)
   }
 
   return (

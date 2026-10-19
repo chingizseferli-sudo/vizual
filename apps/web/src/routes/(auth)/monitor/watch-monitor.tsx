@@ -14,6 +14,7 @@ import {
   type PixelPickedElement,
 } from '@/lib/selector-picker'
 import { supabase } from '@/lib/supabase'
+import { openExternalUrl } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -1608,7 +1609,7 @@ function ChangeMonitorPage() {
       updateForm('name', domain)
     }
 
-    window.open(rawUrl, '_blank', 'noopener,noreferrer')
+    openExternalUrl(rawUrl)
     toast.message(
       'Sayt yeni tabda açıldı. Extension panelindən Selector seç düyməsini istifadə et.'
     )
@@ -2275,10 +2276,7 @@ function ChangeMonitorPage() {
     markAlertRead(item.alert.id)
     setNotificationOpen(false)
 
-    if (item.url) {
-      window.open(item.url, '_blank', 'noopener,noreferrer')
-      return
-    }
+    if (item.url && openExternalUrl(item.url)) return
 
     if (item.source) {
       if (expandedSourceId !== item.source.id) {
@@ -2408,7 +2406,15 @@ function ChangeMonitorPage() {
   }, [sources, recentEvents])
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      // Picker messages must come from the sandboxed preview frame; extension
+      // messages are posted by the content script into this same window.
+      const fromFrame =
+        !!iframeRef.current && event.source === iframeRef.current.contentWindow
+      const fromSelf =
+        event.source === window && event.origin === window.location.origin
+
       if (event.data?.type === 'visual-monitor-navigate') {
+        if (!fromFrame) return
         const nextUrl = event.data.url || ''
         if (nextUrl) void loadVisualPage(nextUrl)
         return
@@ -2420,6 +2426,7 @@ function ChangeMonitorPage() {
       const isExtension =
         event.data?.type === 'visual-monitor-extension-selector'
       if (!isPicked && !isSuggested && !isExtension) return
+      if (isExtension ? !fromSelf : !fromFrame) return
 
       const payload = isExtension ? event.data.payload || {} : event.data
 
@@ -4106,7 +4113,7 @@ function ChangeMonitorPage() {
                   ref={iframeRef}
                   title='Change selector picker'
                   srcDoc={visualHtml}
-                  sandbox='allow-scripts allow-same-origin allow-popups'
+                  sandbox='allow-scripts allow-popups'
                   className='h-[60dvh] min-h-80 w-full bg-card'
                 />
               ) : (

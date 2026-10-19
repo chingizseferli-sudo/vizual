@@ -23,18 +23,7 @@
     "test:browser": "vitest",
     "test:coverage": "vitest run --coverage --browser.headless",
     "test:browser:install": "playwright install chromium --with-deps",
-    "test:analytics:db": "node scripts/test-analytics-db.mjs",
-    "test:readiness:catalog": "node scripts/test-production-catalog.mjs",
-    "test:ai": "node --test --experimental-test-isolation=none server/ai/*.test.mjs",
-    "test:ai:db": "node scripts/test-ai-db.mjs",
-    "ai:once": "node server/ai/run-once.mjs",
-    "test:content": "node --test --experimental-test-isolation=none server/content/*.test.mjs",
-    "test:content:db": "node scripts/test-content-db.mjs",
-    "test:ai:quality": "node scripts/evaluate-ai-quality.mjs all",
-    "evaluate:ai:live": "node server/ai/evaluate-live.mjs",
-    "content:once": "node server/content/run-once.mjs",
-    "verify:staging:fixtures": "node scripts/verify-ai-staging.mjs",
-    "test:ai:evaluator": "node --test --experimental-test-isolation=none server/ai/quality-evaluator.test.mjs"
+    "test:readiness:catalog": "node scripts/test-production-catalog.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -66,7 +55,6 @@
     "cmdk": "1.1.1",
     "input-otp": "^1.4.2",
     "lucide-react": "^1.8.0",
-    "parse5": "8.0.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-hook-form": "^7.72.1",

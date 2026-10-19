@@ -99,7 +99,7 @@ export default defineConfig({
     },
   },
   test: {
-    exclude: [...configDefaults.exclude, 'server/**', 'tests/ai/**'],
+    exclude: [...configDefaults.exclude],
     silent: 'passed-only',
     unstubEnvs: true,
     browser: {

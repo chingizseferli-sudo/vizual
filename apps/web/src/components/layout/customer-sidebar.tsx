@@ -10,7 +10,6 @@ import {
   MapPinned,
   Radio,
   ShieldCheck,
-  Sparkles,
   UserRound,
 } from 'lucide-react'
 import {
@@ -42,8 +41,6 @@ const customerNavItems = [
     url: '/monitor',
     icon: LayoutDashboard,
   },
-  { title: 'Analitika', url: '/monitor/analytics', icon: BarChart3 },
-  { title: 'AI təhlili', url: '/monitor/ai-insights', icon: Sparkles },
   {
     title: 'Monitorlar',
     url: '/monitor/monitors',

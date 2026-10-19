@@ -54,3 +54,20 @@ export function getPageNumbers(currentPage: number, totalPages: number) {
 
   return rangeWithDots
 }
+
+/**
+ * Opens an untrusted (scraped / user-supplied) URL in a new tab, but only when
+ * it is an absolute http(s) URL. Blocks javascript:, data: and similar schemes.
+ */
+export function openExternalUrl(raw: string | null | undefined) {
+  if (!raw) return false
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+  window.open(url.href, '_blank', 'noopener,noreferrer')
+  return true
+}

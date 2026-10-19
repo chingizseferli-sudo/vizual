@@ -25,6 +25,8 @@ type IdRow = {
   id: string;
 };
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -215,7 +217,9 @@ Deno.serve(async (req) => {
   if (body.action === "create_temporary_password") {
     const targetUserId = body.user_id?.trim();
 
-    if (!targetUserId) return json({ error: "user_id is required" }, 400);
+    if (!targetUserId || !UUID_PATTERN.test(targetUserId)) {
+      return json({ error: "user_id must be a valid UUID" }, 400);
+    }
 
     const targetAdmin = await readAdminRole(supabaseUrl, serviceRoleKey, targetUserId);
     if (targetAdmin?.role === "admin" || targetAdmin?.role === "superadmin") {
@@ -235,7 +239,9 @@ Deno.serve(async (req) => {
   if (body.action === "delete_user") {
     const targetUserId = body.user_id?.trim();
 
-    if (!targetUserId) return json({ error: "user_id is required" }, 400);
+    if (!targetUserId || !UUID_PATTERN.test(targetUserId)) {
+      return json({ error: "user_id must be a valid UUID" }, 400);
+    }
     if (targetUserId === auth.user.id) {
       return json({ error: "You cannot delete your own admin session account" }, 400);
     }
