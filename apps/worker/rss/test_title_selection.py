@@ -34,3 +34,25 @@ def test_site_name_meta_does_not_block_real_h1():
     h1 = "Dövlət qulluğunda inzibati vəzifələrin B növünə aid BB vəzifə qrupu üzrə imtahandan müvəffəqiyyət əldə etmiş şəxslərin nəzərinə"
     html = f'<html><head><meta property="og:title" content="Dövlət İmtahan Mərkəzi"></head><body><h1>{h1}</h1></body></html>'
     assert extract(html, url, "dim.gov.az")["method"] == "selector:h1"
+
+
+def test_cyrillic_title_matches_transliterated_slug():
+    title_rejection_reason = m.title_rejection_reason
+    cases = [
+        ("https://media.az/society/v-baku-pri-stolknovenii-dvuh-avtomobilej-pogib-peshehod", "Стали известны подробности гибели пешехода в Баку"),
+        ("https://korrespondent.az/news/v-azerbaydjane-novyy-ministr-zdravoohraneniya/111366", "В Азербайджане новый министр здравоохранения"),
+        ("https://media.az/economy/v-selah-hodzhavendskogo-rajona-vedetsya-prokladka-gazovyh-linij", "В селах Ходжавендского района ведется прокладка газовых линий"),
+    ]
+    for url, title in cases:
+        assert title_rejection_reason(title, url) == "", (url, title)
+
+
+def test_cyrillic_title_for_unrelated_slug_is_still_rejected():
+    title_rejection_reason = m.title_rejection_reason
+    url = "https://media.az/society/v-baku-pri-stolknovenii-dvuh-avtomobilej-pogib-peshehod"
+    assert title_rejection_reason("Курс доллара вырос на бирже сегодня утром", url) == "slug_mismatch"
+
+
+def test_trailing_digit_in_slug_word_is_ignored():
+    title_rejection_reason = m.title_rejection_reason
+    assert title_rejection_reason("Qarabağ - Azərbaycandır!", "https://musicacademy.edu.az/az/kheberler/lahiyeler/qarabaq-azerbaycandir1.html") == ""
