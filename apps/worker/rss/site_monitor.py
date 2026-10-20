@@ -1367,8 +1367,9 @@ TELEGRAM_REPLY_LINK_INVALID = "Link etibarsızdır. Profil səhifəsində «Tele
 TELEGRAM_REPLY_LINK_EXPIRED = "Linkin vaxtı bitib. Profil səhifəsindən yeni link yaradın."
 TELEGRAM_REPLY_LINK_USED = "Bu link artıq istifadə olunub. Profil səhifəsindən yeni link yaradın."
 TELEGRAM_REPLY_ERROR = "Əməliyyat alınmadı. Bir az sonra yenidən cəhd edin."
-TELEGRAM_REPLY_STOPPED = "Telegram bildirişləri dayandırıldı. Yenidən qoşmaq üçün profil səhifəsindən link yaradın."
+TELEGRAM_REPLY_STOPPED = "Telegram bildirişləri dayandırıldı. Yenidən qoşmaq üçün bu çatda /start yazın."
 TELEGRAM_REPLY_NOT_LINKED = "Bu çat heç bir hesaba qoşulmayıb."
+TELEGRAM_REPLY_ALREADY_LINKED = "Bu çat artıq hesaba qoşulub. Vəziyyət üçün /status yazın."
 TELEGRAM_REPLY_PAUSED = "Bildirişlər müvəqqəti dayandırıldı. Yenidən açmaq üçün /resume yazın."
 TELEGRAM_REPLY_RESUMED = "Bildirişlər yenidən açıldı."
 TELEGRAM_REPLY_NO_MONITORS = "Bu hesabda monitor yoxdur. Monitorları saytda yarada bilərsiniz."
@@ -1566,6 +1567,35 @@ def redeem_telegram_link_token(token, chat_id):
         )
         return TELEGRAM_REPLY_ERROR
     print(f"Telegram profil ve monitorlar baglandi (token): user={user_id}", flush=True)
+    return TELEGRAM_REPLY_LINKED
+
+
+def relink_previous_chat(chat_id):
+    """Plain /start from a chat that was linked before (and unlinked) turns its alerts back on."""
+    if find_users_by_telegram_chat(chat_id):
+        return TELEGRAM_REPLY_ALREADY_LINKED
+    response = requests.get(
+        f"{SUPABASE_URL}/rest/v1/user_profiles",
+        headers=supabase_headers(),
+        params={
+            "select": "user_id",
+            "last_telegram_chat_id": f"eq.{chat_id}",
+            "telegram_chat_id": "is.null",
+            "limit": "50",
+        },
+        timeout=REQUEST_TIMEOUT,
+    )
+    # 400 until the last_telegram_chat_id migration is applied: behave like before.
+    user_ids = [row.get("user_id") for row in (response.json() or [])] if response.status_code == 200 else []
+    user_ids = [user_id for user_id in user_ids if user_id]
+    if not user_ids:
+        return TELEGRAM_REPLY_HELP
+    for user_id in user_ids:
+        connected, reason = enable_user_telegram_subscription(user_id, chat_id)
+        if not connected:
+            print(f"Telegram profil/monitor yazma xetasi: {reason}", flush=True)
+            return TELEGRAM_REPLY_ERROR
+    print(f"Telegram çat yenidən bağlandı (/start): users={len(user_ids)}", flush=True)
     return TELEGRAM_REPLY_LINKED
 
 
@@ -1813,6 +1843,8 @@ def handle_telegram_command(text, chat_id):
     payload = parts[1].strip() if len(parts) > 1 else ""
     if command == "/start" and payload:
         return link_telegram_chat(payload, chat_id)
+    if command == "/start":
+        return relink_previous_chat(chat_id)
     if command == "/stop":
         return unlink_telegram_chat(chat_id)
     if command == "/status":

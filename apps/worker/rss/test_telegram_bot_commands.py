@@ -285,7 +285,7 @@ def test_admin_stats_reads_exact_counts(sm):
 
 def test_help_shows_admin_commands_only_to_admins(sm):
     assert "/stats" not in run_updates(sm, "/help", {**LINKED, **NOT_ADMIN}).sent_texts()[0]
-    assert "/stats" in run_updates(sm, "/start", {**LINKED, **ADMIN}).sent_texts()[0]
+    assert "/stats" in run_updates(sm, "/help", {**LINKED, **ADMIN}).sent_texts()[0]
 
 
 def test_command_menu_scopes_admin_commands_to_admin_chats(sm):
@@ -380,3 +380,36 @@ def test_alert_chat_follows_profile_and_cache_expires(sm, monkeypatch):
     assert sm.get_user_telegram_chat_id(USER_ID) == CHAT_ID  # cached
     clock[0] += sm.USER_TELEGRAM_CACHE_SECONDS + 1
     assert sm.get_user_telegram_chat_id(USER_ID) == ""
+
+
+def previous_chat_routes(previous_rows):
+    def profiles(kw):
+        if "last_telegram_chat_id" in kw["params"]:
+            return FakeResponse(200, previous_rows)
+        return FakeResponse(200, [])  # not linked now
+    return {
+        ("GET", "user_profiles"): profiles,
+        ("POST", "user_profiles"): FakeResponse(201, []),
+        ("PATCH", "user_monitors"): FakeResponse(204, None, text=""),
+    }
+
+
+def test_plain_start_relinks_previously_linked_chat(sm):
+    fake = run_updates(sm, "/start", previous_chat_routes([{"user_id": USER_ID}]))
+    lookup = [c for c in fake.find("GET", "user_profiles") if "last_telegram_chat_id" in c["params"]][0]
+    assert lookup["params"]["last_telegram_chat_id"] == f"eq.{CHAT_ID}"
+    assert lookup["params"]["telegram_chat_id"] == "is.null"
+    assert fake.find("POST", "user_profiles")[0]["json"]["telegram_chat_id"] == CHAT_ID
+    assert fake.find("PATCH", "user_monitors")[0]["json"]["notify_telegram"] is True
+    assert fake.sent_texts() == [sm.TELEGRAM_REPLY_LINKED]
+
+
+def test_plain_start_from_unknown_chat_only_helps(sm):
+    fake = run_updates(sm, "/start", {**previous_chat_routes([]), **NOT_ADMIN})
+    assert not fake.find("POST", "user_profiles")
+    assert "/status" in fake.sent_texts()[0]
+
+
+def test_plain_start_in_linked_chat_says_so(sm):
+    fake = run_updates(sm, "/start", LINKED)
+    assert fake.sent_texts() == [sm.TELEGRAM_REPLY_ALREADY_LINKED]
