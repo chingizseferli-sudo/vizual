@@ -698,7 +698,8 @@ def get_with_reader_fallback(url, domain, kwargs):
     if response.status_code == 403 and not is_local_only_url(url):
         via_reader = fetch_via_reader(url, kwargs.get("timeout"))
         if via_reader is not None:
-            READER_BLOCKED_DOMAINS[domain] = time.time()
+            if urlparse(url).path in ("", "/"):
+                READER_BLOCKED_DOMAINS[domain] = time.time()
             print(f"Reader fallback ilə oxundu: {url}", flush=True)
             return via_reader
     return response
@@ -4217,6 +4218,8 @@ def fetch_site(site, patterns_data):
 
         items = unique_items(items)
         if not items:
+            hrefs = [a["href"] for a in BeautifulSoup(page_html, "html.parser").find_all("a", href=True)]
+            print(f"Boş nəticə: html={len(page_html)} | linklər={len(hrefs)} | nümunə={hrefs[:3]}", flush=True)
             final_method = "fallback" if site.get("_fallback_used") else (monitor_method or "latest_page")
             final_reason = empty_reason_for_method(final_method)
             if not site.get("_read_failure_reason") or final_reason in {"homepage_empty", "latest_page_empty", "fallback_empty"}:
