@@ -277,5 +277,39 @@ class ReaderFallbackTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+class MethodAdoptionTests(unittest.TestCase):
+    def build(self, streak, method="selector", succeeded="fallback", candidates=3):
+        state = {"fallback_method": "latest_page", "fallback_streak": streak} if streak else {}
+        notes = site_monitor.merge_crawl_state_notes("", state) if state else ""
+        site = {
+            "name": "x.az",
+            "monitor_method": method,
+            "notes": notes,
+            "_method_succeeded": succeeded,
+            "_fallback_used": True,
+        }
+        return site_monitor.build_source_health_payload(
+            site, {"reason": "old_news", "candidates": candidates, "sent": 0}, "2026-06-25T20:00:00+04:00"
+        )[0]
+
+    def test_switches_after_three_fallback_cycles(self):
+        payload = self.build(streak=2)
+        self.assertEqual(payload["monitor_method"], "latest_page")
+        self.assertNotIn("fallback_streak", payload["notes"])
+
+    def test_counts_streak_before_switching(self):
+        payload = self.build(streak=0)
+        self.assertNotIn("monitor_method", payload)
+        self.assertIn('"fallback_streak":1', payload["notes"])
+
+    def test_no_switch_without_articles_or_for_same_method(self):
+        self.assertNotIn("monitor_method", self.build(streak=2, candidates=0))
+        self.assertNotIn("monitor_method", self.build(streak=2, method="latest_page"))
+
+    def test_google_news_and_rss_are_never_adopted(self):
+        self.assertNotIn("monitor_method", self.build(streak=2, method="google_news_fallback"))
+        self.assertNotIn("monitor_method", self.build(streak=2, succeeded="rss"))
+
+
 if __name__ == "__main__":
     unittest.main()

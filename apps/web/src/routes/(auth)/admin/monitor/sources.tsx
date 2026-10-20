@@ -434,6 +434,43 @@ function SourcesPage() {
       return
     }
     if (data.ok) {
+      const fixable = bot.state === 'degraded' || bot.state === 'review'
+      const found = {
+        monitor_method: nullableText(data.update?.monitor_method),
+        latest_url: nullableText(data.update?.latest_url),
+        rss_url: nullableText(data.update?.rss_url),
+        selector: nullableText(data.update?.selector),
+        article_pattern: nullableText(data.update?.article_pattern),
+      }
+      const changed =
+        found.monitor_method !== source.monitor_method ||
+        found.latest_url !== source.latest_url ||
+        found.rss_url !== source.rss_url ||
+        found.selector !== source.selector
+      if (fixable && found.monitor_method && changed) {
+        const { error: fixError } = await supabase
+          .from('sources')
+          .update({
+            ...found,
+            consecutive_fail_count: 0,
+            last_error: null,
+            ...(bot.state === 'review'
+              ? {
+                  status: 'inactive',
+                  discovery_status: 'accepted',
+                  notes: trialNotes(source.notes),
+                }
+              : {}),
+          })
+          .eq('id', source.id)
+        setMessage(
+          fixError
+            ? `${sourceTitle(source)}: düzgün üsul tapıldı, amma saxlanmadı (${fixError.message})`
+            : `${sourceTitle(source)}: düzgün üsul tapıldı və saxlandı: ${formatMethod(found.monitor_method)}, ${data.candidateCount} link.${bot.state === 'review' ? ' Sınağa qoyuldu.' : ''}`
+        )
+        await loadSources()
+        return
+      }
       setMessage(
         `${sourceTitle(source)} oxuna bilir: ${formatMethod(data.method)}, ${data.candidateCount} link tapıldı. Heç nə dəyişdirilmədi.${botNote}`
       )
