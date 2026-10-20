@@ -5,7 +5,7 @@ import { consumeRateLimit } from "../_shared/rate_limit.ts";
 
 const MAX_RESPONSE_BYTES = 1_500_000;
 const RATE_LIMIT = { requests: 60, windowSeconds: 600 };
-const SELECTOR_PROXY_VERSION = "1.4-readable-proxy-failures";
+const SELECTOR_PROXY_VERSION = "1.5-upstream-status";
 
 type ProxyFetchResult = {
   contentType: string;
@@ -179,6 +179,10 @@ function friendlyProxyError(message: string) {
     return "Sayt Edge/proxy oxumasını blokladı. Bu halda selectoru real brauzer extension-u ilə seçin.";
   }
 
+  if (/http 5\d\d/.test(lower)) {
+    return "Saytın serveri xəta qaytardı. Bir az sonra yenidən yoxlayın.";
+  }
+
   if (lower.includes("429") || lower.includes("rate")) {
     return "Sayt sorğuları müvəqqəti məhdudlaşdırdı. Bir az sonra yenidən yoxlayın.";
   }
@@ -252,6 +256,15 @@ Deno.serve(withCors(async (req) => {
         error: "Sayt Cloudflare/DNS səbəbilə bu domenlə açılmadı. www/non-www variantı da işlək HTML qaytarmadı.",
         status: result.status,
         contentType: result.contentType,
+        finalUrl: result.finalUrl,
+        version: SELECTOR_PROXY_VERSION,
+      });
+    }
+
+    if (result.status >= 400) {
+      return json({
+        error: friendlyProxyError(`HTTP ${result.status} ${result.status === 403 ? "forbidden" : ""}`.trim()),
+        status: result.status,
         finalUrl: result.finalUrl,
         version: SELECTOR_PROXY_VERSION,
       });

@@ -420,6 +420,9 @@ function SourcesPage() {
       { body: { source } }
     )
     setBusyId(null)
+    const bot = getSourceState(source, now)
+    const botNote =
+      bot.state === 'degraded' ? ` Botun gördüyü: ${bot.reason}` : ''
 
     if (error || !data) {
       setMessage(
@@ -429,7 +432,7 @@ function SourcesPage() {
     }
     if (data.ok) {
       setMessage(
-        `${sourceTitle(source)} oxuna bilir: ${formatMethod(data.method)}, ${data.candidateCount} link tapıldı. Heç nə dəyişdirilmədi.`
+        `${sourceTitle(source)} oxuna bilir: ${formatMethod(data.method)}, ${data.candidateCount} link tapıldı. Heç nə dəyişdirilmədi.${botNote}`
       )
       return
     }
@@ -439,7 +442,7 @@ function SourcesPage() {
     const reason = shortReason(data.reason)
     if (source.status === 'active' || TRIAL_TAG.test(source.notes || '')) {
       setMessage(
-        `${sourceTitle(source)}: Edge oxuya bilmədi (${reason}). Bu, botun oxuya bilmədiyi demək deyil; sayt aktivdirsə və xəbər gəlirsə, problem yoxdur.`
+        `${sourceTitle(source)}: Edge oxuya bilmədi (${reason}). Bu, botun oxuya bilmədiyi demək deyil; sayt aktivdirsə və xəbər gəlirsə, problem yoxdur.${botNote}`
       )
       return
     }
