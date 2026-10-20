@@ -250,7 +250,7 @@ class ReaderFallbackTests(unittest.TestCase):
         def fake_get(url, **kwargs):
             self.calls.append(url)
             if url.startswith(site_monitor.READER_FALLBACK_URL):
-                return self.Resp(200, "<html>" + "x" * 300 + "</html>", url)
+                return self.Resp(200, "<html><a href=\"/x\">" + "x" * 300 + "</a></html>", url)
             return self.Resp(403 if "blocked.az" in url else 200, "ok", url)
 
         site_monitor.requests.get = fake_get
@@ -265,6 +265,13 @@ class ReaderFallbackTests(unittest.TestCase):
         self.calls.clear()
         site_monitor.get_with_reader_fallback("https://blocked.az/news/1", "blocked.az", {"timeout": 5})
         self.assertEqual(self.calls, [site_monitor.READER_FALLBACK_URL + "https://blocked.az/news/1"])
+
+    def test_reader_page_without_links_is_not_a_read(self):
+        site_monitor.requests.get = lambda url, **k: self.Resp(
+            200 if url.startswith(site_monitor.READER_FALLBACK_URL) else 403, "<html>" + "x" * 300 + "</html>", url
+        )
+        response = site_monitor.get_with_reader_fallback("https://blocked.az/", "blocked.az", {"timeout": 5})
+        self.assertEqual(response.status_code, 403)
 
     def test_normal_site_never_uses_reader(self):
         response = site_monitor.get_with_reader_fallback("https://fine.az/", "fine.az", {"timeout": 5})

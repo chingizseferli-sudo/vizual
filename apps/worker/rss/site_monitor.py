@@ -682,6 +682,9 @@ def fetch_via_reader(url, timeout):
     text = getattr(response, "text", "") or ""
     if response.status_code != 200 or len(text) < 200 or "Target URL returned error" in text[:400]:
         return None
+    # A challenge or empty shell page is not a read: without links the 403 must stay a 403.
+    if "href=" not in text:
+        return None
     response.url = url
     return response
 
