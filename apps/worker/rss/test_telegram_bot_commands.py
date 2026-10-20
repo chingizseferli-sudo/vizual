@@ -366,3 +366,17 @@ def test_reserve_new_headline_is_written(sm):
     sm.requests = fake
     assert sm.reserve_news("https://a.az/z", "Yeni başlıq", {"name": "A"}, source_id="s1") is True
     assert fake.find("POST", "sent_news")[0]["json"]["link"] == "https://a.az/z"
+
+
+def test_alert_chat_follows_profile_and_cache_expires(sm, monkeypatch):
+    profile = {"telegram_chat_id": CHAT_ID}
+    fake = FakeRequests({("GET", "user_profiles"): lambda _kw: FakeResponse(200, [dict(profile)])})
+    sm.requests = fake
+    clock = [1000.0]
+    monkeypatch.setattr(sm.time, "time", lambda: clock[0])
+    assert sm.get_user_telegram_chat_id(USER_ID) == CHAT_ID
+
+    profile["telegram_chat_id"] = None  # unlinked on the website
+    assert sm.get_user_telegram_chat_id(USER_ID) == CHAT_ID  # cached
+    clock[0] += sm.USER_TELEGRAM_CACHE_SECONDS + 1
+    assert sm.get_user_telegram_chat_id(USER_ID) == ""

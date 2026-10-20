@@ -59,6 +59,10 @@ CRAWLER_USER_AGENT = os.getenv(
 PATTERNS_FILE = "patterns.json"
 BAKU_TZ = ZoneInfo("Asia/Baku")
 USER_TELEGRAM_CACHE = {}
+USER_TELEGRAM_CACHE_AT = {}
+# The profile is the only source of truth for a customer's chat: re-read it often so
+# unlinking on the website stops alerts within minutes in this long-running process.
+USER_TELEGRAM_CACHE_SECONDS = 300
 ARTICLE_TITLE_INFO_CACHE = {}
 
 # Verdicts for articles already judged, so a source that is polled every few minutes
@@ -4365,8 +4369,9 @@ def create_monitor_alert(match_id):
 def get_user_telegram_chat_id(user_id):
     if not supabase_ready() or not user_id:
         return ""
-    if user_id in USER_TELEGRAM_CACHE:
+    if user_id in USER_TELEGRAM_CACHE and time.time() - USER_TELEGRAM_CACHE_AT.get(user_id, 0) < USER_TELEGRAM_CACHE_SECONDS:
         return USER_TELEGRAM_CACHE[user_id]
+    USER_TELEGRAM_CACHE_AT[user_id] = time.time()
     try:
         response = requests.get(
             f"{SUPABASE_URL}/rest/v1/user_profiles",
@@ -4567,7 +4572,7 @@ def find_matching_user_monitors(title, monitor_keywords_cache=None):
                     "monitor_id": row.get("monitor_id"),
                     "monitor_name": monitor.get("name") or "Monitor",
                     "keyword": keyword_original,
-                    "telegram_chat_id": monitor.get("telegram_chat_id") or get_user_telegram_chat_id(monitor.get("user_id")),
+                    "telegram_chat_id": get_user_telegram_chat_id(monitor.get("user_id")),
                     "notify_telegram": monitor.get("notify_telegram") is not False,
                 }
             )
@@ -4616,7 +4621,7 @@ def match_user_monitors(item_id, title, monitor_keywords_cache=None):
                         "monitor_id": row.get("monitor_id"),
                         "monitor_name": monitor.get("name") or "Monitor",
                         "keyword": keyword_original,
-                        "telegram_chat_id": monitor.get("telegram_chat_id") or get_user_telegram_chat_id(monitor.get("user_id")),
+                        "telegram_chat_id": get_user_telegram_chat_id(monitor.get("user_id")),
                         "notify_telegram": monitor.get("notify_telegram") is not False,
                     }
                 )

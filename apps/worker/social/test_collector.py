@@ -125,7 +125,9 @@ def base_routes(settings, cache, usage=None):
     return {
         ("GET", "social_settings"): FakeResponse(200, [settings]),
         ("GET", "monitor_keywords"): FakeResponse(200, cache),
-        ("GET", "user_profiles"): FakeResponse(200, [{"user_id": USER_A, "plan_id": None, "social_interval_minutes": None}]),
+        # One response serves both the interval read and the chat lookup (profile is the source of truth).
+        ("GET", "user_profiles"): FakeResponse(200, [{"user_id": USER_A, "plan_id": None, "social_interval_minutes": None,
+                                                      "telegram_chat_id": "777"}]),
         ("GET", "subscription_plans"): FakeResponse(200, []),
         ("GET", "sources"): FakeResponse(200, [
             {"id": "src-fb", "base_url": "https://www.facebook.com"},
