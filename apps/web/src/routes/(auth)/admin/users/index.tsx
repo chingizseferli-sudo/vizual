@@ -195,19 +195,18 @@ function UsersPage() {
       const userMatches = matches.filter((match) =>
         monitorIds.has(match.monitor_id)
       )
+      // Archived monitors only keep old results; their keywords are not tracked.
+      const liveMonitorIds = new Set(
+        userMonitors
+          .filter((monitor) => monitor.status !== 'archived')
+          .map((monitor) => monitor.id)
+      )
       const keywordCount = keywords.filter((keyword) =>
-        monitorIds.has(keyword.monitor_id)
-      ).length
-      const activeCount = userMonitors.filter(
-        (monitor) => monitor.status === 'active'
+        liveMonitorIds.has(keyword.monitor_id)
       ).length
       const issueLabels = [
         !profile.telegram_chat_id ? 'Telegram yoxdur' : '',
-        userMonitors.length === 0 ? 'Monitor yoxdur' : '',
-        userMonitors.length > 0 && activeCount === 0
-          ? 'Aktiv monitor yoxdur'
-          : '',
-        userMonitors.length > 0 && keywordCount === 0 ? 'Açar söz yoxdur' : '',
+        keywordCount === 0 ? 'Açar söz yoxdur' : '',
       ].filter(Boolean)
 
       return {
@@ -244,8 +243,8 @@ function UsersPage() {
         (statusFilter === 'problem' && hasProblem) ||
         (statusFilter === 'telegram' && hasTelegram) ||
         (statusFilter === 'no_telegram' && !hasTelegram) ||
-        (statusFilter === 'has_monitor' && row.monitors.length > 0) ||
-        (statusFilter === 'no_monitor' && row.monitors.length === 0)
+        (statusFilter === 'has_keywords' && row.keywordCount > 0) ||
+        (statusFilter === 'no_keywords' && row.keywordCount === 0)
 
       if (!matchesStatus) return false
       if (!q) return true
@@ -280,7 +279,7 @@ function UsersPage() {
       pending: rows.filter((row) => row.status === 'pending').length,
       problem: rows.filter((row) => row.issueLabels.length > 0).length,
       telegram: rows.filter((row) => row.telegram_chat_id).length,
-      withMonitor: rows.filter((row) => row.monitors.length > 0).length,
+      withKeywords: rows.filter((row) => row.keywordCount > 0).length,
     }
   }, [rows])
 
@@ -514,14 +513,14 @@ function UsersPage() {
         <button
           type='button'
           onClick={() => {
-            setStatusFilter('has_monitor')
+            setStatusFilter('has_keywords')
             resetFilteredView()
           }}
           className='rounded-lg border bg-card p-3 text-left hover:bg-muted'
         >
-          <div className='text-sm text-muted-foreground'>Monitoru olan</div>
+          <div className='text-sm text-muted-foreground'>Açar sözü olan</div>
           <div className='text-2xl font-bold text-foreground'>
-            {stats.withMonitor}
+            {stats.withKeywords}
           </div>
         </button>
       </div>
@@ -552,8 +551,8 @@ function UsersPage() {
           <option value='problem'>Müdaxilə lazımdır</option>
           <option value='telegram'>Telegram bağlıdır</option>
           <option value='no_telegram'>Telegram yoxdur</option>
-          <option value='has_monitor'>Monitoru var</option>
-          <option value='no_monitor'>Monitoru yoxdur</option>
+          <option value='has_keywords'>Açar sözü var</option>
+          <option value='no_keywords'>Açar sözü yoxdur</option>
         </select>
       </div>
 
@@ -563,7 +562,7 @@ function UsersPage() {
             <tr role='row' className='border-b'>
               <th>İstifadəçi</th>
               <th>Plan</th>
-              <th>Monitor / Açar söz / Nəticə</th>
+              <th>Açar söz / Nəticə</th>
               <th>Telegram</th>
               <th>Son aktivlik</th>
               <th className='text-right'>Əməliyyatlar</th>
@@ -605,10 +604,10 @@ function UsersPage() {
                 </td>
                 <td
                   role='cell'
-                  data-label='Monitor / Açar söz / Nəticə'
+                  data-label='Açar söz / Nəticə'
                   className='tabular-nums'
                 >
-                  {row.monitors.length} / {row.keywordCount} / {row.resultCount}
+                  {row.keywordCount} / {row.resultCount}
                 </td>
                 <td
                   role='cell'

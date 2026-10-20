@@ -5,43 +5,15 @@ import {
   CheckCircle2,
   ExternalLink,
   Hash,
-  Radio,
   Send,
 } from 'lucide-react'
+import {
+  EMPTY_DASHBOARD,
+  fetchDashboardData,
+} from '@/features/keywords/dashboard'
 import { customerQueryKeys } from '@/lib/query-keys'
-import { supabase } from '@/lib/supabase'
 import { PortalLoading, PortalError } from '@/components/layout/portal-state'
 import { dateLocale, t } from '@/lib/i18n'
-
-type MatchRow = {
-  id: string
-  monitor_id: string
-  matched_keyword: string | null
-  created_at: string | null
-  user_monitors: {
-    name: string
-  } | null
-  monitored_items: {
-    title: string
-    url: string
-  } | null
-}
-
-type DashboardData = {
-  monitorCount: number
-  keywordCount: number
-  resultCount: number
-  alertCount: number
-  recentMatches: MatchRow[]
-}
-
-const EMPTY_DASHBOARD: DashboardData = {
-  monitorCount: 0,
-  keywordCount: 0,
-  resultCount: 0,
-  alertCount: 0,
-  recentMatches: [],
-}
 
 function decodeHtml(text: string) {
   const textarea = document.createElement('textarea')
@@ -62,65 +34,6 @@ function formatDate(value: string | null) {
   })
 }
 
-async function fetchDashboardData(): Promise<DashboardData> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) return EMPTY_DASHBOARD
-
-  const { data: monitors, error: monitorsError } = await supabase
-    .from('user_monitors')
-    .select('id')
-    .eq('user_id', user.id)
-
-  if (monitorsError) throw monitorsError
-
-  const monitorIds = (monitors || []).map((item) => item.id)
-
-  if (monitorIds.length === 0) return EMPTY_DASHBOARD
-
-  const [keywordsRes, matchesRes] = await Promise.all([
-    supabase
-      .from('monitor_keywords')
-      .select('id', { count: 'exact', head: true })
-      .in('monitor_id', monitorIds),
-
-    supabase
-      .from('monitor_matches')
-      .select(
-        'id,monitor_id,matched_keyword,created_at,user_monitors(name),monitored_items(title,url)'
-      )
-      .in('monitor_id', monitorIds)
-      .order('created_at', { ascending: false })
-      .limit(10),
-  ])
-
-  if (keywordsRes.error) throw keywordsRes.error
-  if (matchesRes.error) throw matchesRes.error
-
-  const matches = (matchesRes.data || []) as unknown as MatchRow[]
-  const matchIds = matches.map((item) => item.id)
-  let alertCount = 0
-
-  if (matchIds.length > 0) {
-    const { count, error } = await supabase
-      .from('monitor_alerts')
-      .select('id', { count: 'exact', head: true })
-      .in('match_id', matchIds)
-    if (error) throw error
-    alertCount = count || 0
-  }
-
-  return {
-    monitorCount: monitorIds.length,
-    keywordCount: keywordsRes.count || 0,
-    resultCount: matchIds.length,
-    alertCount,
-    recentMatches: matches,
-  }
-}
-
 function MetricCard({
   label,
   description,
@@ -131,7 +44,7 @@ function MetricCard({
   label: string
   description: string
   value: string | number
-  to: '/monitor/monitors' | '/monitor/results' | '/monitor/alerts'
+  to: '/monitor/keywords' | '/monitor/results' | '/monitor/alerts'
   icon: typeof Bell
 }) {
   return (
@@ -161,8 +74,8 @@ function MetricCard({
 
 function FirstRunGuide() {
   const steps = [
-    t("Monitor yaradın"),
     t("Açar söz əlavə edin"),
+    t("Telegram-ı qoşun"),
     t("Nəticələri və bildirişləri izləyin"),
   ]
 
@@ -175,12 +88,12 @@ function FirstRunGuide() {
             <h2 className='mt-2 text-2xl font-semibold tracking-tight text-foreground'>{t("Vizual.Az-a xoş gəlmisiniz")}</h2>
             <p className='mt-2 text-sm leading-6 text-muted-foreground'>{t("Vizual.Az seçdiyiniz açar sözləri media mənbələrində izləyir. Uyğun material tapıldıqda nəticələr paneldə görünür və bildiriş tarixçəsi yaranır.")}</p>
           </div>
-          <p className='text-sm leading-6 text-muted-foreground'>{t("Başlamaq üçün ilk monitorunuzu yaradın, sonra izlənəcək açar sözləri əlavə edin. Sistem mənbələri yoxladıqca uyğun xəbərlər burada görünəcək.")}</p>
+          <p className='text-sm leading-6 text-muted-foreground'>{t("Başlamaq üçün izlənəcək açar sözləri əlavə edin. Sistem mənbələri yoxladıqca uyğun xəbərlər burada görünəcək.")}</p>
           <Link
-            to='/monitor/monitors'
+            to='/monitor/keywords'
             className='inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90'
           >
-            <Send className='h-4 w-4' />{t("İlk monitoru yarat")}</Link>
+            <Send className='h-4 w-4' />{t("İlk açar sözü əlavə et")}</Link>
         </div>
 
         <div className='grid gap-2'>
@@ -215,9 +128,14 @@ function UserMonitorDashboard() {
     staleTime: 30 * 1000,
   })
 
-  const { monitorCount, keywordCount, resultCount, alertCount, recentMatches } =
-    data
-  const hasNoMonitors = monitorCount === 0
+  const {
+    keywordCount,
+    activeKeywordCount,
+    resultCount,
+    alertCount,
+    recentMatches,
+  } = data
+  const hasNoKeywords = keywordCount === 0
 
   if (isLoading) return <PortalLoading label={t("Monitorinq paneli yüklənir...")} />
   if (isError)
@@ -234,16 +152,16 @@ function UserMonitorDashboard() {
         <div>
           <p className='text-sm font-semibold tracking-wide text-primary uppercase'>{t("İş masası")}</p>
           <h1 className='mt-2 text-3xl font-semibold tracking-tight text-foreground'>
-            Monitorinq panelim
+            {t("Monitorinq panelim")}
           </h1>
           <p className='mt-2 max-w-2xl text-sm leading-6 text-muted-foreground'>{t("Cari vəziyyəti görün, növbəti addımı seçin və monitorinq nəticələrinə tez keçin.")}</p>
         </div>
 
         <Link
-          to='/monitor/monitors'
+          to='/monitor/keywords'
           className='inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90'
         >
-          <Send className='h-4 w-4' />{t("Monitorları idarə et")}</Link>
+          <Send className='h-4 w-4' />{t("Açar sözləri idarə et")}</Link>
       </div>
 
       <nav aria-label={t("Tez keçidlər")} className='flex flex-wrap gap-2'>
@@ -260,21 +178,14 @@ function UserMonitorDashboard() {
           className='rounded-lg border bg-card px-3 py-2 text-sm font-medium hover:bg-muted'
         >{t("Xəbər xəritəsi")}</Link>
       </nav>
-      {hasNoMonitors ? <FirstRunGuide /> : null}
+      {hasNoKeywords ? <FirstRunGuide /> : null}
 
-      <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-        <MetricCard
-          label='Monitorlar'
-          description={t("İzlənən mövzular")}
-          value={monitorCount}
-          to='/monitor/monitors'
-          icon={Radio}
-        />
+      <div className='grid gap-3 sm:grid-cols-3'>
         <MetricCard
           label={t("Açar sözlər")}
-          description={t("İzlənən ifadələr")}
-          value={keywordCount}
-          to='/monitor/monitors'
+          description={t("Aktiv izlənən ifadələr")}
+          value={activeKeywordCount}
+          to='/monitor/keywords'
           icon={Hash}
         />
         <MetricCard
@@ -293,7 +204,7 @@ function UserMonitorDashboard() {
         />
       </div>
 
-      {!hasNoMonitors ? (
+      {!hasNoKeywords ? (
         <section className='rounded-2xl border border-border bg-card p-4 shadow-sm'>
           <div className='flex flex-col gap-2 md:flex-row md:items-center md:justify-between'>
             <div>
@@ -302,7 +213,7 @@ function UserMonitorDashboard() {
             </div>
             <div className='flex flex-wrap gap-2 text-sm'>
               <span className='inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700'>
-                <CheckCircle2 className='h-4 w-4' />{t("Monitor aktivdir")}</span>
+                <CheckCircle2 className='h-4 w-4' />{t("İzləmə aktivdir")}</span>
               <span className='rounded-full border border-border px-2 py-1 text-muted-foreground'>{t("Nəticələr avtomatik yenilənir")}</span>
             </div>
           </div>
@@ -313,7 +224,7 @@ function UserMonitorDashboard() {
         <div className='flex flex-col items-start justify-between gap-3 border-b border-border p-4 sm:flex-row sm:items-center'>
           <div>
             <h2 className='text-lg font-bold text-foreground'>{t("Son uyğunluqlar")}</h2>
-            <p className='text-sm text-muted-foreground'>{t("Ən yeni monitor nəticələri")}</p>
+            <p className='text-sm text-muted-foreground'>{t("Ən yeni nəticələr")}</p>
           </div>
 
           <Link
@@ -325,20 +236,20 @@ function UserMonitorDashboard() {
         {recentMatches.length === 0 ? (
           <div className='grid gap-2 p-8 text-center'>
             <div className='font-semibold text-foreground'>
-              {hasNoMonitors
-                ? t("Başlamaq üçün monitor yaradın")
+              {hasNoKeywords
+                ? t("Başlamaq üçün açar söz əlavə edin")
                 : t("Hələ nəticə yoxdur")}
             </div>
             <p className='mx-auto max-w-md text-sm leading-6 text-muted-foreground'>
-              {hasNoMonitors
-                ? t("İlk monitoru yaratdıqdan və açar söz əlavə etdikdən sonra sistem uyğun media materiallarını izləməyə başlayacaq.")
-                : t("Monitorlarınız yeni uyğun media materialı tapdıqda son nəticələr burada görünəcək.")}
+              {hasNoKeywords
+                ? t("Açar söz əlavə etdikdən sonra sistem uyğun media materiallarını izləməyə başlayacaq.")
+                : t("Açar sözlərinizə uyğun yeni media materialı tapıldıqda son nəticələr burada görünəcək.")}
             </p>
             <Link
-              to='/monitor/monitors'
+              to='/monitor/keywords'
               className='mx-auto mt-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-muted/50'
             >
-              {hasNoMonitors ? t("İlk monitoru yarat") : t("Monitorları yoxla")}
+              {hasNoKeywords ? t("İlk açar sözü əlavə et") : t("Açar sözləri yoxla")}
             </Link>
           </div>
         ) : (
@@ -354,9 +265,6 @@ function UserMonitorDashboard() {
                   <div className='grid gap-3 lg:grid-cols-[1fr_auto]'>
                     <div className='min-w-0'>
                       <div className='mb-2 flex flex-wrap items-center gap-2'>
-                        <span className='rounded-full border border-border px-2 py-1 text-xs text-muted-foreground'>
-                          {match.user_monitors?.name || t("Monitor")}
-                        </span>
                         <span className='rounded-full border border-border px-2 py-1 text-xs text-muted-foreground'>
                           {match.matched_keyword || '-'}
                         </span>

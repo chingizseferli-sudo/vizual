@@ -43,8 +43,8 @@ const customerNavItems = [
     icon: LayoutDashboard,
   },
   {
-    title: 'Monitorlar',
-    url: '/monitor/monitors',
+    title: t("Açar sözlər"),
+    url: '/monitor/keywords',
     icon: Radio,
   },
   {

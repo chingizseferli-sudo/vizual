@@ -18,6 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
 import { dateLocale, t } from '@/lib/i18n'
@@ -32,9 +33,6 @@ type ResultRow = {
   item_id: string
   matched_keyword: string | null
   created_at: string | null
-  user_monitors: {
-    name: string
-  } | null
   monitored_items: {
     title: string
     url: string
@@ -200,7 +198,6 @@ function escapeHtml(value: string | null | undefined) {
 function mapExportRow(row: ResultRow) {
   const item = row.monitored_items
   return {
-    monitor: row.user_monitors?.name || t("Monitor"),
     keyword: row.matched_keyword || '-',
     title: item?.title ? decodeHtml(item.title) : t("Xəbər tapılmadı"),
     source: getHost(item?.url),
@@ -289,20 +286,17 @@ async function fetchResultsData(): Promise<ResultsData> {
     }
   }
 
-  const { data: monitors, error: monitorsError } = await supabase
-    .from('user_monitors')
-    .select('id')
-    .eq('user_id', user.id)
-
-  if (monitorsError) {
-    console.error('User monitor load error:', monitorsError)
+  // Archived monitors are included: their results stay visible.
+  let monitorIds: string[]
+  try {
+    monitorIds = await fetchAllMonitorIds(user.id)
+  } catch (error) {
+    console.error('User monitor load error:', error)
     return {
       rows: [],
-      errorMessage: t("Monitorlar yüklənmədi. Bir az sonra yenidən yoxlayın."),
+      errorMessage: t("Nəticələri yükləmək mümkün olmadı."),
     }
   }
-
-  const monitorIds = (monitors || []).map((item) => item.id)
 
   if (monitorIds.length === 0) return { rows: [], errorMessage: '' }
 
@@ -316,7 +310,7 @@ async function fetchResultsData(): Promise<ResultsData> {
     const { data, error } = await supabase
       .from('monitor_matches')
       .select(
-        'id,monitor_id,item_id,matched_keyword,created_at,user_monitors(name),monitored_items(title,url,published_at,detected_at,status)'
+        'id,monitor_id,item_id,matched_keyword,created_at,monitored_items(title,url,published_at,detected_at,status)'
       )
       .in('monitor_id', monitorIds)
       .gte('created_at', retentionStart.toISOString())
@@ -339,25 +333,21 @@ async function fetchResultsData(): Promise<ResultsData> {
 }
 
 function collapseByItem(rows: ResultRow[]): ResultRow[] {
-  const byItem = new Map<string, { row: ResultRow; monitors: Set<string>; keywords: Set<string> }>()
+  const byItem = new Map<string, { row: ResultRow; keywords: Set<string> }>()
   for (const row of rows) {
     const entry = byItem.get(row.item_id)
-    const monitor = row.user_monitors?.name
     if (!entry) {
       byItem.set(row.item_id, {
         row,
-        monitors: new Set(monitor ? [monitor] : []),
         keywords: new Set(row.matched_keyword ? [row.matched_keyword] : []),
       })
       continue
     }
-    if (monitor) entry.monitors.add(monitor)
     if (row.matched_keyword) entry.keywords.add(row.matched_keyword)
   }
-  return [...byItem.values()].map(({ row, monitors, keywords }) => ({
+  return [...byItem.values()].map(({ row, keywords }) => ({
     ...row,
     matched_keyword: keywords.size ? [...keywords].join(', ') : row.matched_keyword,
-    user_monitors: monitors.size ? { name: [...monitors].join(', ') } : row.user_monitors,
   }))
 }
 
@@ -371,7 +361,6 @@ function ResultsPage() {
   const rows = useMemo(() => data?.rows ?? [], [data?.rows])
   const errorMessage = data?.errorMessage || ''
   const [search, setSearch] = useState('')
-  const [monitorFilter, setMonitorFilter] = useState(ALL)
   const [keywordFilter, setKeywordFilter] = useState(ALL)
   const sourceSearch = Route.useSearch()
   const navigate = Route.useNavigate()
@@ -390,7 +379,6 @@ function ResultsPage() {
     setPage(1)
   }, [
     search,
-    monitorFilter,
     keywordFilter,
     sourceCategory,
     selectedSites,
@@ -408,16 +396,6 @@ function ResultsPage() {
       return value ? new Date(value) >= start : false
     })
   }, [rows, exportRange])
-
-  const monitorOptions = useMemo<FilterOption[]>(() => {
-    const map = new Map<string, string>()
-    periodRows.forEach((row) =>
-      map.set(row.monitor_id, row.user_monitors?.name || t("Monitor"))
-    )
-    return Array.from(map, ([value, label]) => ({ value, label })).sort(
-      (a, b) => a.label.localeCompare(b.label, 'az')
-    )
-  }, [periodRows])
 
   const keywordOptions = useMemo<FilterOption[]>(() => {
     const values = Array.from(
@@ -476,12 +454,10 @@ function ResultsPage() {
         !q ||
         (item?.title || '').toLocaleLowerCase('az-AZ').includes(q) ||
         (item?.url || '').toLocaleLowerCase('az-AZ').includes(q) ||
-        (row.matched_keyword || '').toLocaleLowerCase('az-AZ').includes(q) ||
-        (row.user_monitors?.name || '').toLocaleLowerCase('az-AZ').includes(q)
+        (row.matched_keyword || '').toLocaleLowerCase('az-AZ').includes(q)
 
       return (
         matchesSearch &&
-        (monitorFilter === ALL || row.monitor_id === monitorFilter) &&
         (keywordFilter === ALL || row.matched_keyword === keywordFilter) &&
         matchesSourceFilter(host, sourceCategory, selectedSites, socialNetwork) &&
         (!dateFilter || foundDate === dateFilter)
@@ -490,7 +466,6 @@ function ResultsPage() {
   }, [
     periodRows,
     search,
-    monitorFilter,
     keywordFilter,
     sourceCategory,
     selectedSites,
@@ -498,7 +473,8 @@ function ResultsPage() {
     dateFilter,
   ])
 
-  // One article matched by several monitors is one result, not one card per monitor.
+  // One article matched by several keywords (or by an old and the current
+  // monitor) is one result.
   const itemRows = useMemo(() => collapseByItem(filteredRows), [filteredRows])
 
   const exportRows = itemRows
@@ -514,14 +490,12 @@ function ResultsPage() {
       .map((row) => getHost(row.monitored_items?.url))
       .filter((value) => value !== '-')
   ).size
-  const uniqueMonitors = new Set(filteredRows.map((row) => row.monitor_id)).size
   const uniqueKeywords = new Set(
     filteredRows.map((row) => row.matched_keyword).filter(Boolean)
   ).size
 
   function clearResultFilters() {
     setSearch('')
-    setMonitorFilter(ALL)
     setKeywordFilter(ALL)
     setSourceSearch({})
     setDateFilter('')
@@ -533,7 +507,6 @@ function ResultsPage() {
     if (format === 'csv') {
       downloadCsv('tapilan-xeberler.csv', [
         [
-          t("Monitor"),
           t("Açar söz"),
           t("Başlıq"),
           t("Mənbə"),
@@ -542,7 +515,6 @@ function ResultsPage() {
           t("Tapılma vaxtı"),
         ],
         ...mappedRows.map((row) => [
-          row.monitor,
           row.keyword,
           row.title,
           row.source,
@@ -582,7 +554,6 @@ function ResultsPage() {
 
         return `
           <tr>
-            <td><span class="monitor-pill">${escapeHtml(row.monitor)}</span></td>
             <td>${escapeHtml(row.source)}</td>
             <td><a href="${escapeHtml(row.url)}" target="_blank" rel="noreferrer">${escapeHtml(row.title)}</a></td>
             <td><span class="keyword-pill">${escapeHtml(row.keyword)}</span></td>
@@ -601,7 +572,6 @@ function ResultsPage() {
         ? `<table>
           <thead>
             <tr>
-              <th>Monitor</th>
               <th>Mənbə</th>
               <th>Başlıq</th>
               <th>Açar söz</th>
@@ -680,7 +650,7 @@ function ResultsPage() {
       tr:nth-child(even) td{background:#fbfdff}
       tr:hover td{background:#f5fbff}
       a{color:#0f4fd7;font-weight:800;text-decoration:none}
-      .monitor-pill,.keyword-pill{
+      .keyword-pill{
         display:inline-flex;
         min-height:28px;
         align-items:center;
@@ -690,7 +660,6 @@ function ResultsPage() {
         font-weight:900;
         white-space:nowrap;
       }
-      .monitor-pill{color:#0f4fd7;background:#eaf1ff}
       .keyword-pill{color:#0f766e;background:#dcfdfa}
       .date-cell{display:grid;gap:6px;min-width:118px}
       .date-cell strong{font-size:14px;white-space:nowrap}
@@ -798,13 +767,6 @@ function ResultsPage() {
             </button>
             <button
               type='button'
-              onClick={() => setMonitorFilter(ALL)}
-              className='rounded-xl bg-muted/50 px-3 py-2 font-semibold text-muted-foreground transition hover:bg-muted'
-            >
-              {uniqueMonitors} monitor
-            </button>
-            <button
-              type='button'
               onClick={() => setKeywordFilter(ALL)}
               className='rounded-xl bg-muted/50 px-3 py-2 font-semibold text-muted-foreground transition hover:bg-muted'
             >
@@ -856,31 +818,17 @@ function ResultsPage() {
           </div>
         </div>
 
-        <div className='mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.6fr)_1fr_1fr_1fr_auto]'>
+        <div className='mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.6fr)_1fr_1fr_auto]'>
           <div className='relative'>
             <Search className='pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
             <input
-              aria-label={t("Başlıq, monitor, link və ya açar söz üzrə axtar...")}
+              aria-label={t("Başlıq, link və ya açar söz üzrə axtar...")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder={t("Başlıq, monitor, link və ya açar söz üzrə axtar...")}
+              placeholder={t("Başlıq, link və ya açar söz üzrə axtar...")}
               className='h-10 w-full rounded-xl border border-border bg-card pr-3 pl-9 text-sm'
             />
           </div>
-
-          <select
-            aria-label={t("Monitor")}
-            value={monitorFilter}
-            onChange={(event) => setMonitorFilter(event.target.value)}
-            className='h-10 rounded-xl border border-border bg-card px-3 text-sm'
-          >
-            <option value={ALL}>{t("Bütün monitorlar")}</option>
-            {monitorOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
 
           <select
             aria-label={t("Açar söz")}
@@ -1040,9 +988,6 @@ function ResultsPage() {
                 <div className='flex min-w-0 items-start gap-3'>
                   <div className='min-w-0 flex-1'>
                     <div className='flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-muted-foreground'>
-                      <span className='rounded-full bg-muted px-2 py-0.5'>
-                        {row.user_monitors?.name || t("Monitor")}
-                      </span>
                       <span className='rounded-full bg-primary/10 px-2 py-0.5 text-primary'>
                         {row.matched_keyword || t("Açar söz yoxdur")}
                       </span>
@@ -1092,10 +1037,10 @@ function ResultsPage() {
               <div className='font-medium'>{t("Hələ nəticə yoxdur")}</div>
               <p className='mx-auto mt-1 max-w-md text-sm text-muted-foreground'>{t("Sistem mənbələri yoxladıqca uyğun media materialları burada görünəcək. Uzun müddət nəticə yaranmırsa, açar sözləri daha konkret yazmağı yoxlayın.")}</p>
               <Link
-                to='/monitor/monitors'
+                to='/monitor/keywords'
                 className='mt-3 inline-flex rounded-lg border px-3 py-2 text-sm hover:bg-muted'
               >
-                Monitorlara bax
+                {t("Açar sözlərə bax")}
               </Link>
             </div>
           )}

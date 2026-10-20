@@ -39,7 +39,7 @@ export function CustomerLayout() {
                 />
                 <div className='min-w-0'>
                   <div className='truncate text-sm font-semibold text-foreground'>{t("İş masası")}</div>
-                  <div className='hidden truncate text-xs text-muted-foreground sm:block'>{t("Monitorlar, nəticələr və bildirişlər")}</div>
+                  <div className='hidden truncate text-xs text-muted-foreground sm:block'>{t("Açar sözlər, nəticələr və bildirişlər")}</div>
                 </div>
               </div>
               <div className='flex shrink-0 items-center gap-2'>

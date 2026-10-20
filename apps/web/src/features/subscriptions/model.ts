@@ -51,6 +51,7 @@ export type PlanFormValues = {
   billingInterval: BillingInterval
   displayOrder: string
   maxWatches: string
+  maxKeywords: string
   minimumIntervalMinutes: string
   historyDays: string
   telegramEnabled: boolean
@@ -94,6 +95,7 @@ export const emptyPlanForm: PlanFormValues = {
   billingInterval: 'month',
   displayOrder: '0',
   maxWatches: '',
+  maxKeywords: '',
   minimumIntervalMinutes: '',
   historyDays: '',
   telegramEnabled: true,
@@ -111,6 +113,18 @@ export function planSocialIntervalMinutes(
 ) {
   const value = Number(plan?.limits?.social_interval_minutes)
   return SOCIAL_INTERVAL_MINUTES.includes(value) ? value : null
+}
+
+// Active keywords a plan allows; mirrors keyword_limit_for_user() in SQL:
+// limits.max_keywords, else 20 per web watch, else unlimited (null).
+export function planKeywordLimit(
+  plan: Pick<SubscriptionPlan, 'limits' | 'max_watches'> | undefined
+) {
+  const value = plan?.limits?.max_keywords
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+    return value
+  }
+  return plan?.max_watches != null ? plan.max_watches * 20 : null
 }
 
 export function normalizePlanCode(value: string) {
@@ -156,7 +170,7 @@ function parseOptionalNumber(
 }
 
 // baseLimits: the plan's current limits, so keys this form does not edit
-// (max_keywords, ...) are kept.
+// are kept.
 export function buildPlanPayload(
   values: PlanFormValues,
   baseLimits: Record<string, unknown> = {}
@@ -185,10 +199,15 @@ export function buildPlanPayload(
   })
   if (displayOrder.error) return { error: displayOrder.error }
 
-  const maxWatches = parseOptionalNumber(values.maxWatches, 'Monitor limiti', {
+  const maxWatches = parseOptionalNumber(values.maxWatches, 'Veb izləmə limiti', {
     integer: true,
   })
   if (maxWatches.error) return { error: maxWatches.error }
+
+  const maxKeywords = parseOptionalNumber(values.maxKeywords, 'Açar söz limiti', {
+    integer: true,
+  })
+  if (maxKeywords.error) return { error: maxKeywords.error }
 
   const minimumInterval = parseOptionalNumber(
     values.minimumIntervalMinutes,
@@ -219,6 +238,8 @@ export function buildPlanPayload(
   const limits: Record<string, unknown> = { ...baseLimits }
   delete limits.social_interval_minutes
   if (socialInterval !== null) limits.social_interval_minutes = socialInterval
+  delete limits.max_keywords
+  if (maxKeywords.value !== null) limits.max_keywords = maxKeywords.value
 
   const features = Array.from(
     new Set(
@@ -260,6 +281,10 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     billingInterval: plan.billing_interval,
     displayOrder: plan.display_order.toString(),
     maxWatches: plan.max_watches?.toString() || '',
+    maxKeywords:
+      typeof plan.limits.max_keywords === 'number'
+        ? String(plan.limits.max_keywords)
+        : '',
     minimumIntervalMinutes: plan.minimum_interval_minutes?.toString() || '',
     historyDays: plan.history_days?.toString() || '',
     telegramEnabled: plan.telegram_enabled,

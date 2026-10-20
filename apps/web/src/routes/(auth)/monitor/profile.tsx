@@ -15,6 +15,7 @@ import {
   Smartphone,
   type LucideIcon,
 } from 'lucide-react'
+import { fetchKeywordsData } from '@/features/keywords/data'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { formatSocialInterval } from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
@@ -31,7 +32,6 @@ type ProfileRow = {
 
 type PlanInfo = {
   name: string | null
-  max_watches: number | null
   history_days: number | null
   telegram_enabled: boolean | null
 }
@@ -49,7 +49,8 @@ type ProfileState = {
   status: string
   createdAt: string | null
   telegramChatId: string | null
-  monitorCount: number
+  keywordCount: number
+  keywordLimit: number | null
   plan: PlanInfo | null
   planAvailable: boolean
   social: SocialAccess | null
@@ -128,7 +129,7 @@ async function loadOptionalPlan(
 
   const planResult = await supabase
     .from('subscription_plans')
-    .select('name,max_watches,history_days,telegram_enabled')
+    .select('name,history_days,telegram_enabled')
     .eq('id', planId)
     .maybeSingle()
 
@@ -155,27 +156,20 @@ async function fetchProfileData(): Promise<{
     }
   }
 
-  const [profileResult, monitorCountResult, planResult, socialResult] =
+  const [profileResult, keywordsResult, planResult, socialResult] =
     await Promise.all([
       supabase
         .from('user_profiles')
         .select('user_id,email,role,status,telegram_chat_id')
         .eq('user_id', user.id)
         .maybeSingle(),
-      supabase
-        .from('user_monitors')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id),
+      fetchKeywordsData().catch(() => null),
       loadOptionalPlan(user.id),
       supabase.rpc('current_user_social_access').maybeSingle(),
     ])
 
   if (profileResult.error) {
     console.error('Customer profile load error:', profileResult.error)
-  }
-
-  if (monitorCountResult.error) {
-    console.error('Customer monitor count error:', monitorCountResult.error)
   }
 
   const profile = (profileResult.data || null) as ProfileRow | null
@@ -188,7 +182,8 @@ async function fetchProfileData(): Promise<{
       status: getStatusLabel(profile?.status || null),
       createdAt: user.created_at || null,
       telegramChatId: profile?.telegram_chat_id || null,
-      monitorCount: monitorCountResult.count || 0,
+      keywordCount: keywordsResult?.activeCount ?? 0,
+      keywordLimit: keywordsResult?.maxKeywords ?? null,
       plan: planResult.plan,
       planAvailable: planResult.available,
       // Missing until migration 20261020000002 is applied: the tile is hidden.
@@ -338,9 +333,9 @@ function ProfilePage() {
     )
   }
 
-  const planLimit = profileState.plan?.max_watches ?? null
+  const planLimit = profileState.keywordLimit
   const hasReachedPlanLimit =
-    typeof planLimit === 'number' && profileState.monitorCount >= planLimit
+    typeof planLimit === 'number' && profileState.keywordCount >= planLimit
   const telegramActive = Boolean(profileState.telegramChatId)
   const emailReady = profileState.email !== '-'
   const telegramBotUrl = getTelegramBotUrl()
@@ -385,14 +380,14 @@ function ProfilePage() {
           </div>
 
           <div className='rounded-xl border border-border bg-card p-4'>
-            <div className='text-sm text-muted-foreground'>{t("Yaradılmış monitorlar")}</div>
+            <div className='text-sm text-muted-foreground'>{t("Aktiv açar sözlər")}</div>
             <div className='mt-2 text-2xl font-semibold'>
-              {profileState.monitorCount}
+              {profileState.keywordCount}
             </div>
             <div className='mt-1 text-sm text-muted-foreground'>
-              {planLimit
-                ? t("{0} monitor limitindən {1} istifadə olunur", [planLimit, profileState.monitorCount])
-                : t("Monitor limiti haqqında məlumat yoxdur")}
+              {planLimit !== null
+                ? t("{0} açar söz limitindən {1} istifadə olunur", [planLimit, profileState.keywordCount])
+                : t("Açar söz limiti yoxdur")}
             </div>
           </div>
         </section>
@@ -469,7 +464,7 @@ function ProfilePage() {
           <CreditCard className='h-5 w-5 text-muted-foreground' />
           <h2 className='text-lg font-semibold'>{t("Plan və limitlər")}</h2>
         </div>
-        <p className='mb-4 text-sm text-muted-foreground'>{t("Planınız neçə monitor yarada biləcəyinizi və Facebook, Instagram axtarışının tezliyini müəyyən edir. Xəbər saytları bütün planlarda təxminən hər 5-20 dəqiqədən bir yoxlanır.")}</p>
+        <p className='mb-4 text-sm text-muted-foreground'>{t("Planınız neçə açar sözü izləyə biləcəyinizi və Facebook, Instagram axtarışının tezliyini müəyyən edir. Xəbər saytları bütün planlarda təxminən hər 5-20 dəqiqədən bir yoxlanır.")}</p>
 
         {profileState.planAvailable && profileState.plan ? (
           <div className='grid gap-3'>
@@ -479,8 +474,8 @@ function ProfilePage() {
                 value={profileState.plan.name || '-'}
               />
               <InfoTile
-                label={t("Monitor limiti")}
-                value={planLimit ?? 'Limitsiz'}
+                label={t("Açar söz limiti")}
+                value={planLimit ?? t("Limitsiz")}
               />
               <InfoTile
                 label={t("Facebook və Instagram yoxlaması")}
@@ -498,8 +493,8 @@ function ProfilePage() {
 
             <div className='rounded-2xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground'>
               {hasReachedPlanLimit
-                ? t("Monitor limitinə çatmısınız. Yeni monitor yaratmaq üçün mövcud monitorlardan birini silmək və ya planı genişləndirmək lazımdır.")
-                : t("Limitə çatmadığınız müddətdə yeni monitorlar yarada bilərsiniz. Limit dolduqda sistem yeni monitor yaradılmasına icazə verməyəcək.")}
+                ? t("Açar söz limitinə çatmısınız. Yeni açar söz üçün birini silin, dayandırın və ya planı genişləndirin.")
+                : t("Limitə çatmadığınız müddətdə yeni açar sözlər əlavə edə bilərsiniz. Dayandırılmış açar sözlər limitə daxil deyil.")}
             </div>
           </div>
         ) : (

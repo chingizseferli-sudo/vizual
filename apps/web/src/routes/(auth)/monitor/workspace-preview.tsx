@@ -11,25 +11,17 @@ import {
   Radio,
   ShieldCheck,
 } from 'lucide-react'
+import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
+import { fetchKeywordsData } from '@/features/keywords/data'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
 import { dateLocale, t } from '@/lib/i18n'
-
-type MonitorRow = {
-  id: string
-  name: string | null
-  status: string | null
-  created_at: string | null
-}
 
 type MatchRow = {
   id: string
   monitor_id: string
   matched_keyword: string | null
   created_at: string | null
-  user_monitors: {
-    name: string | null
-  } | null
   monitored_items: {
     title: string | null
     url: string | null
@@ -45,9 +37,6 @@ type AlertRow = {
   sent_at: string | null
   monitor_matches: {
     matched_keyword: string | null
-    user_monitors: {
-      name: string | null
-    } | null
     monitored_items: {
       title: string | null
       url: string | null
@@ -60,38 +49,29 @@ type ProfileRow = {
   plan_id?: string | null
 }
 
-type PlanRow = {
-  name: string | null
-  max_watches: number | null
-}
-
 type WorkspaceData = {
-  monitorCount: number
-  activeMonitorCount: number
+  activeKeywordCount: number
   keywordCount: number
   resultCount: number
   alertCount: number
   recentMatches: MatchRow[]
   recentAlerts: AlertRow[]
-  monitors: MonitorRow[]
   telegramConnected: boolean
   planName: string | null
-  maxWatches: number | null
+  maxKeywords: number | null
   errorMessage: string
 }
 
 const EMPTY_WORKSPACE: WorkspaceData = {
-  monitorCount: 0,
-  activeMonitorCount: 0,
+  activeKeywordCount: 0,
   keywordCount: 0,
   resultCount: 0,
   alertCount: 0,
   recentMatches: [],
   recentAlerts: [],
-  monitors: [],
   telegramConnected: false,
   planName: null,
-  maxWatches: null,
+  maxKeywords: null,
   errorMessage: '',
 }
 
@@ -137,60 +117,50 @@ async function fetchWorkspaceData(): Promise<WorkspaceData> {
     }
   }
 
-  const [profileRes, monitorsRes] = await Promise.all([
-    supabase
-      .from('user_profiles')
-      .select('telegram_chat_id,plan_id')
-      .eq('user_id', user.id)
-      .maybeSingle(),
-    supabase
-      .from('user_monitors')
-      .select('id,name,status,created_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false }),
-  ])
-
-  if (monitorsRes.error) {
+  let keywords: Awaited<ReturnType<typeof fetchKeywordsData>>
+  let monitorIds: string[]
+  try {
+    ;[keywords, monitorIds] = await Promise.all([
+      fetchKeywordsData(),
+      fetchAllMonitorIds(user.id),
+    ])
+  } catch {
     return {
       ...EMPTY_WORKSPACE,
-      errorMessage: t("Monitor məlumatlarını yükləmək mümkün olmadı."),
+      errorMessage: t("Açar sözlər oxunmadı: {0}", [t("Naməlum xəta")]),
     }
   }
 
-  const monitors = (monitorsRes.data || []) as MonitorRow[]
-  const monitorIds = monitors.map((monitor) => monitor.id)
+  const profileRes = await supabase
+    .from('user_profiles')
+    .select('telegram_chat_id,plan_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
   const profile = (profileRes.data || null) as ProfileRow | null
   let planName: string | null = null
-  let maxWatches: number | null = null
 
   if (profile?.plan_id) {
     const planRes = await supabase
       .from('subscription_plans')
-      .select('name,max_watches')
+      .select('name')
       .eq('id', profile.plan_id)
       .maybeSingle()
+    planName = (planRes.data as { name?: string | null } | null)?.name || null
+  }
 
-    if (!planRes.error && planRes.data) {
-      const plan = planRes.data as PlanRow
-      planName = plan.name || null
-      maxWatches = plan.max_watches ?? null
-    }
+  const keywordStats = {
+    keywordCount: keywords.keywords.length,
+    activeKeywordCount: keywords.activeCount,
+    maxKeywords: keywords.maxKeywords,
+    telegramConnected: Boolean(profile?.telegram_chat_id),
+    planName,
   }
 
   if (monitorIds.length === 0) {
-    return {
-      ...EMPTY_WORKSPACE,
-      telegramConnected: Boolean(profile?.telegram_chat_id),
-      planName,
-      maxWatches,
-    }
+    return { ...EMPTY_WORKSPACE, ...keywordStats }
   }
 
-  const [keywordsRes, resultCountRes, matchesRes] = await Promise.all([
-    supabase
-      .from('monitor_keywords')
-      .select('id', { count: 'exact', head: true })
-      .in('monitor_id', monitorIds),
+  const [resultCountRes, matchesRes] = await Promise.all([
     supabase
       .from('monitor_matches')
       .select('id', { count: 'exact', head: true })
@@ -198,7 +168,7 @@ async function fetchWorkspaceData(): Promise<WorkspaceData> {
     supabase
       .from('monitor_matches')
       .select(
-        'id,monitor_id,matched_keyword,created_at,user_monitors(name),monitored_items(title,url,published_at,detected_at)'
+        'id,monitor_id,matched_keyword,created_at,monitored_items(title,url,published_at,detected_at)'
       )
       .in('monitor_id', monitorIds)
       .order('created_at', { ascending: false })
@@ -219,7 +189,7 @@ async function fetchWorkspaceData(): Promise<WorkspaceData> {
       supabase
         .from('monitor_alerts')
         .select(
-          'id,status,channel,sent_at,monitor_matches(matched_keyword,user_monitors(name),monitored_items(title,url))'
+          'id,status,channel,sent_at,monitor_matches(matched_keyword,monitored_items(title,url))'
         )
         .in('match_id', matchIds)
         .order('sent_at', { ascending: false })
@@ -231,19 +201,11 @@ async function fetchWorkspaceData(): Promise<WorkspaceData> {
   }
 
   return {
-    monitorCount: monitors.length,
-    activeMonitorCount: monitors.filter(
-      (monitor) => monitor.status !== 'inactive'
-    ).length,
-    keywordCount: keywordsRes.count || 0,
+    ...keywordStats,
     resultCount: resultCountRes.count || recentMatches.length,
     alertCount,
     recentMatches,
     recentAlerts,
-    monitors,
-    telegramConnected: Boolean(profile?.telegram_chat_id),
-    planName,
-    maxWatches,
     errorMessage: matchesRes.error
       ? t("Son nəticələri yükləmək mümkün olmadı.")
       : '',
@@ -307,14 +269,15 @@ function WorkspacePreviewPage() {
     staleTime: 30 * 1000,
   })
 
-  const hasNoMonitors = data.monitorCount === 0
+  const hasNoKeywords = data.keywordCount === 0
   const latestMatch = data.recentMatches[0]
   const latestMatchTime = latestMatch?.created_at
     ? formatDate(latestMatch.created_at)
     : '-'
-  const planUsage = data.maxWatches
-    ? `${data.monitorCount} / ${data.maxWatches}`
-    : `${data.monitorCount}`
+  const planUsage =
+    data.maxKeywords !== null
+      ? `${data.activeKeywordCount} / ${data.maxKeywords}`
+      : `${data.activeKeywordCount}`
   const signals = [
     data.resultCount > 0
       ? t("{0} uyğun media nəticəsi tapılıb.", [data.resultCount])
@@ -322,9 +285,9 @@ function WorkspacePreviewPage() {
     data.alertCount > 0
       ? t("{0} bildiriş qeydi mövcuddur.", [data.alertCount])
       : t("Bildiriş yaranması üçün əvvəlcə uyğun nəticə tapılmalıdır."),
-    data.activeMonitorCount > 0
-      ? t("{0} monitor aktiv izləmədədir.", [data.activeMonitorCount])
-      : t("Aktiv monitor yoxdur. Monitor yaradaraq izləməyə başlayın."),
+    data.activeKeywordCount > 0
+      ? t("{0} açar söz aktiv izləmədədir.", [data.activeKeywordCount])
+      : t("Aktiv açar söz yoxdur. Açar söz əlavə edərək izləməyə başlayın."),
   ]
 
   if (isLoading) {
@@ -344,14 +307,14 @@ function WorkspacePreviewPage() {
             <div className='inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary'>{t("Dinamik iş masası")}</div>
             <p className='mt-4 text-sm font-semibold text-muted-foreground'>{t("Sabahınız xeyir.")}</p>
             <h1 className='mt-2 max-w-3xl text-3xl font-semibold tracking-tight text-foreground md:text-5xl'>{t("Bu gün təşkilatınız haqqında nə baş verir?")}</h1>
-            <p className='mt-4 max-w-2xl text-base leading-7 text-muted-foreground'>{t("Monitorlarınızın son vəziyyəti, tapılan nəticələr və bildirişlər burada bir səhifədə toplanır.")}</p>
+            <p className='mt-4 max-w-2xl text-base leading-7 text-muted-foreground'>{t("Açar sözlərinizin son vəziyyəti, tapılan nəticələr və bildirişlər burada bir səhifədə toplanır.")}</p>
           </div>
           <div className='rounded-2xl border border-emerald-200 bg-emerald-50 p-4'>
             <div className='flex items-center gap-2 text-sm font-semibold text-emerald-700'>
               <CheckCircle2 className='h-4 w-4' />{t("Günün statusu")}</div>
             <p className='mt-3 text-2xl font-semibold text-foreground'>
-              {data.activeMonitorCount > 0
-                ? 'Monitorinq aktivdir'
+              {data.activeKeywordCount > 0
+                ? t("Monitorinq aktivdir")
                 : t("Başlamağa hazırdır")}
             </p>
             <p className='mt-2 text-sm text-muted-foreground'>{t("Son yoxlama:")}{' '}{latestMatchTime}
@@ -392,9 +355,9 @@ function WorkspacePreviewPage() {
             icon={Bell}
           />
           <SummaryCard
-            label={t("Aktiv monitor")}
-            value={data.activeMonitorCount}
-            note={t("{0} monitor içindən", [data.monitorCount])}
+            label={t("Aktiv açar söz")}
+            value={data.activeKeywordCount}
+            note={t("{0} açar söz içindən", [data.keywordCount])}
             icon={Radio}
           />
           <SummaryCard
@@ -430,17 +393,17 @@ function WorkspacePreviewPage() {
           {data.recentMatches.length === 0 ? (
             <div className='rounded-xl border border-dashed border-border p-6 text-center'>
               <div className='font-semibold text-foreground'>
-                {hasNoMonitors ? t("Monitor yaradın") : t("Hələ nəticə yoxdur")}
+                {hasNoKeywords ? t("Açar söz əlavə edin") : t("Hələ nəticə yoxdur")}
               </div>
               <p className='mx-auto mt-1 max-w-md text-sm text-muted-foreground'>
-                {hasNoMonitors
-                  ? t("İlk monitoru yaradın və açar söz əlavə edin. Sistem uyğun materialları tapdıqca burada göstərəcək.")
+                {hasNoKeywords
+                  ? t("Açar söz əlavə edin. Sistem uyğun materialları tapdıqca burada göstərəcək.")
                   : t("Sistem mənbələri yoxladıqca uyğun nəticələr bu axında görünəcək.")}
               </p>
               <Link
-                to='/monitor/monitors'
+                to='/monitor/keywords'
                 className='mt-3 inline-flex rounded-lg border border-border px-3 py-2 text-sm font-bold hover:bg-muted/50'
-              >{t("Monitorlara keç")}</Link>
+              >{t("Açar sözlərə keç")}</Link>
             </div>
           ) : (
             <div className='grid gap-2'>
@@ -492,11 +455,11 @@ function WorkspacePreviewPage() {
           <div className='grid gap-3 md:grid-cols-3'>
             {[
               {
-                label: hasNoMonitors
-                  ? t("İlk monitoru yarat")
-                  : t("Monitorları idarə et"),
-                description: t("Mövzuları və açar sözləri yeniləyin"),
-                to: '/monitor/monitors' as const,
+                label: hasNoKeywords
+                  ? t("İlk açar sözü əlavə et")
+                  : t("Açar sözləri idarə et"),
+                description: t("İzlənən açar sözləri yeniləyin"),
+                to: '/monitor/keywords' as const,
               },
               {
                 label: t("Nəticələrə bax"),
@@ -533,8 +496,8 @@ function WorkspacePreviewPage() {
           <div className='grid gap-2'>
             {[
               [
-                'Monitorinq',
-                data.activeMonitorCount > 0 ? t("Aktiv") : t("Monitor lazımdır"),
+                t("Monitorinq"),
+                data.activeKeywordCount > 0 ? t("Aktiv") : t("Açar söz lazımdır"),
               ],
               [t("Telegram"), data.telegramConnected ? t("Aktiv") : t("Aktiv deyil")],
               [t("Plan"), data.planName || t("Məlumat yoxdur")],

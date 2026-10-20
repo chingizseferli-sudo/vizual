@@ -105,6 +105,8 @@ const tables: Record<string, Record<string, unknown>[]> = {
       monitor_id: monitor.id,
       keyword: 'Bakı Dövlət Universiteti',
       match_type: 'contains',
+      status: 'active',
+      created_at: timestamp,
     },
   ],
   monitored_items: items,
@@ -178,7 +180,11 @@ export const fixtureSupabase = {
     signOut: async () => ({ error: null }),
     onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
   },
-  async rpc(name: string) {
+  rpc(name: string) {
+    if (name === 'current_user_plan_limits') {
+      const result = { data: { max_watches: 15, max_keywords: 300 }, error: null }
+      return { maybeSingle: async () => result }
+    }
     throw new Error(`Unexpected fixture RPC: ${name}`)
   },
   functions: {

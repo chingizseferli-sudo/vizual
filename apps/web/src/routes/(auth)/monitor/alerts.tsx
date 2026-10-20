@@ -10,6 +10,7 @@ import {
   Send,
   XCircle,
 } from 'lucide-react'
+import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
 import { dateLocale, t } from '@/lib/i18n'
@@ -27,9 +28,6 @@ type AlertRow = {
   monitor_matches: {
     id: string
     matched_keyword: string | null
-    user_monitors: {
-      name: string
-    } | null
     monitored_items: {
       title: string
       url: string
@@ -184,20 +182,13 @@ async function fetchAlertsData(): Promise<AlertsData> {
     }
   }
 
-  const { data: monitors, error: monitorsError } = await supabase
-    .from('user_monitors')
-    .select('id')
-    .eq('user_id', user.id)
-
-  if (monitorsError) {
-    console.error('User monitor load error:', monitorsError)
-    return {
-      alerts: [],
-      errorMessage: t("Monitorlar yüklənmədi. Bir az sonra yenidən yoxlayın."),
-    }
+  let monitorIds: string[]
+  try {
+    monitorIds = await fetchAllMonitorIds(user.id)
+  } catch (error) {
+    console.error('User monitor load error:', error)
+    return { alerts: [], errorMessage: t("Bildiriş məlumatları yüklənmədi.") }
   }
-
-  const monitorIds = (monitors || []).map((item) => item.id)
 
   if (monitorIds.length === 0) return { alerts: [], errorMessage: '' }
 
@@ -218,7 +209,7 @@ async function fetchAlertsData(): Promise<AlertsData> {
   const { data, error } = await supabase
     .from('monitor_alerts')
     .select(
-      'id,match_id,channel,recipient,status,sent_at,monitor_matches(id,matched_keyword,user_monitors(name),monitored_items(title,url))'
+      'id,match_id,channel,recipient,status,sent_at,monitor_matches(id,matched_keyword,monitored_items(title,url))'
     )
     .in('match_id', matchIds)
     .order('sent_at', { ascending: false })
@@ -243,23 +234,22 @@ function AlertsPage() {
   const errorMessage = data?.errorMessage || ''
   const [channelFilter, setChannelFilter] = useState(ALL)
   const [statusFilter, setStatusFilter] = useState(ALL)
-  const [monitorFilter, setMonitorFilter] = useState(ALL)
+  const [keywordFilter, setKeywordFilter] = useState(ALL)
   const [page, setPage] = useState(1)
 
   useEffect(() => {
     setPage(1)
-  }, [channelFilter, statusFilter, monitorFilter])
+  }, [channelFilter, statusFilter, keywordFilter])
 
-  const monitorOptions = useMemo<FilterOption[]>(() => {
-    const map = new Map<string, string>()
-    alerts.forEach((alert) => {
-      const matchId = alert.monitor_matches?.id
-      const name = alert.monitor_matches?.user_monitors?.name
-      if (matchId && name) map.set(name, name)
-    })
-    return Array.from(map, ([value, label]) => ({ value, label })).sort(
-      (a, b) => a.label.localeCompare(b.label, 'az')
+  const keywordOptions = useMemo<FilterOption[]>(() => {
+    const values = new Set(
+      alerts
+        .map((alert) => alert.monitor_matches?.matched_keyword)
+        .filter((value): value is string => Boolean(value))
     )
+    return Array.from(values)
+      .sort((a, b) => a.localeCompare(b, 'az'))
+      .map((value) => ({ value, label: value }))
   }, [alerts])
 
   const statusOptions = useMemo<FilterOption[]>(() => {
@@ -275,16 +265,15 @@ function AlertsPage() {
     return alerts.filter((alert) => {
       const channel = alert.channel || 'web'
       const status = alert.status || 'new'
-      const monitorName =
-        alert.monitor_matches?.user_monitors?.name || t("Monitor")
+      const keyword = alert.monitor_matches?.matched_keyword
 
       return (
         (channelFilter === ALL || channel === channelFilter) &&
         (statusFilter === ALL || status === statusFilter) &&
-        (monitorFilter === ALL || monitorName === monitorFilter)
+        (keywordFilter === ALL || keyword === keywordFilter)
       )
     })
-  }, [alerts, channelFilter, statusFilter, monitorFilter])
+  }, [alerts, channelFilter, statusFilter, keywordFilter])
 
   const totalPages = Math.max(1, Math.ceil(filteredAlerts.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
@@ -309,9 +298,8 @@ function AlertsPage() {
   )
 
   function exportAlerts() {
-    downloadCsv('monitor-alerts.csv', [
+    downloadCsv('bildirisler.csv', [
       [
-        t("Monitor"),
         t("Açar söz"),
         t("Başlıq"),
         t("Mənbə"),
@@ -324,7 +312,6 @@ function AlertsPage() {
         const match = alert.monitor_matches
         const item = match?.monitored_items
         return [
-          match?.user_monitors?.name || t("Monitor"),
           match?.matched_keyword || '-',
           item?.title ? decodeHtml(item.title) : t("Xəbər tapılmadı"),
           getHost(item?.url),
@@ -474,13 +461,13 @@ function AlertsPage() {
         </select>
 
         <select
-          aria-label={t("Monitor")}
-          value={monitorFilter}
-          onChange={(event) => setMonitorFilter(event.target.value)}
+          aria-label={t("Açar söz")}
+          value={keywordFilter}
+          onChange={(event) => setKeywordFilter(event.target.value)}
           className='rounded-xl border border-border bg-card px-3 py-2 text-sm'
         >
-          <option value={ALL}>{t("Bütün monitorlar")}</option>
-          {monitorOptions.map((option) => (
+          <option value={ALL}>{t("Bütün açar sözlər")}</option>
+          {keywordOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -510,9 +497,6 @@ function AlertsPage() {
               <div className='flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'>
                 <div className='min-w-0 flex-1'>
                   <div className='mb-2 flex flex-wrap items-center gap-2'>
-                    <span className='rounded-full border px-2 py-1 text-xs'>
-                      {match?.user_monitors?.name || t("Monitor")}
-                    </span>
                     <span className='rounded-full border px-2 py-1 text-xs'>
                       {match?.matched_keyword || t("Açar söz yoxdur")}
                     </span>

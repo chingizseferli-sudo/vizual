@@ -34,7 +34,7 @@ const routes = [
   '/monitor',
   '/monitor/workspace-preview',
   '/monitor/workspace-previe',
-  '/monitor/monitors',
+  '/monitor/keywords',
   '/monitor/results',
   '/monitor/alerts',
   '/monitor/profile',
@@ -73,7 +73,7 @@ const routes = [
 const visualRoutes = new Set([
   '/monitor',
   '/admin',
-  '/monitor/monitors',
+  '/monitor/keywords',
   '/monitor/watch-monitor',
   '/admin/users',
   '/admin/subscriptions',
@@ -258,7 +258,7 @@ it.each(['loading', 'empty', 'error'] as const)(
     if (state === 'empty')
       await expect
         .element(
-          page.getByText('Başlamaq üçün monitor yaradın', { exact: true })
+          page.getByText('Başlamaq üçün açar söz əlavə edin', { exact: true })
         )
         .toBeVisible()
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
@@ -288,7 +288,8 @@ it('mobile subscription fields keep their visible accessible names', async () =>
     .toBeVisible()
   for (const name of [
     'Qiymət',
-    'Monitor limiti',
+    'Açar söz limiti',
+    'Veb izləmə limiti',
     'Minimum interval (dəqiqə)',
     'Tarixçə (gün)',
   ]) {
@@ -303,17 +304,15 @@ it('mobile subscription fields keep their visible accessible names', async () =>
     .toBeVisible()
 })
 
-it('mobile monitor form retains keyword entry and filtering', async () => {
+it('mobile keyword form retains keyword entry and filtering', async () => {
   await page.viewport(320, 700)
-  await openRoute('/monitor/monitors')
+  await openRoute('/monitor/keywords')
   await expect
     .element(
-      page.getByRole('textbox', { name: 'Monitorun açar sözləri', exact: true })
+      page.getByRole('textbox', { name: 'Yeni açar sözlər', exact: true })
     )
     .toBeVisible()
-  const search = page.getByRole('textbox', {
-    name: 'Monitor adı, təsvir və ya status üzrə axtar...',
-  })
+  const search = page.getByRole('textbox', { name: 'Açar söz axtar...' })
   await userEvent.fill(search, 'unmatched-fixture')
   await expect
     .element(page.getByText('Bakı Dövlət Universiteti', { exact: true }))

@@ -1373,14 +1373,14 @@ TELEGRAM_REPLY_NOT_LINKED = "Bu çat heç bir hesaba qoşulmayıb."
 TELEGRAM_REPLY_ALREADY_LINKED = "Bu çat artıq hesaba qoşulub. Vəziyyət üçün /status yazın."
 TELEGRAM_REPLY_PAUSED = "Bildirişlər müvəqqəti dayandırıldı. Yenidən açmaq üçün /resume yazın."
 TELEGRAM_REPLY_RESUMED = "Bildirişlər yenidən açıldı."
-TELEGRAM_REPLY_NO_MONITORS = "Bu hesabda monitor yoxdur. Monitorları saytda yarada bilərsiniz."
+TELEGRAM_REPLY_NO_KEYWORDS = "Bu hesabda açar söz yoxdur. Açar sözləri saytda əlavə edə bilərsiniz."
 TELEGRAM_REPLY_ADMIN_ONLY = "Bu əmr yalnız adminlər üçündür."
 TELEGRAM_REPLY_ALL_PAUSED = "Bütün müştəri bildirişləri dayandırıldı. Açmaq üçün /resume_all yazın."
 TELEGRAM_REPLY_ALL_RESUMED = "Bütün müştəri bildirişləri yenidən açıldı."
 # (command, description) pairs: the "/" menu in Telegram and the /help text.
 TELEGRAM_CUSTOMER_COMMANDS = [
     ("status", "Qoşulma vəziyyəti"),
-    ("monitors", "Monitorlarım və açar sözlər"),
+    ("keywords", "Açar sözlərim"),
     ("pause", "Bildirişləri müvəqqəti dayandır"),
     ("resume", "Bildirişləri yenidən aç"),
     ("stop", "Telegram-ı hesabdan ayır"),
@@ -1647,58 +1647,53 @@ def unlink_telegram_chat(chat_id):
     return TELEGRAM_REPLY_STOPPED
 
 
-def telegram_chat_status(chat_id):
-    user_ids = find_users_by_telegram_chat(chat_id)
-    if not user_ids:
-        return TELEGRAM_REPLY_NOT_LINKED
+def find_user_keywords(user_ids):
+    """Keywords of the users' monitors that are not archived (one per customer)."""
     response = requests.get(
-        f"{SUPABASE_URL}/rest/v1/user_monitors",
+        f"{SUPABASE_URL}/rest/v1/monitor_keywords",
         headers=supabase_headers(),
         params={
-            "select": "id",
-            "user_id": f"in.({','.join(user_ids)})",
-            "status": "eq.active",
-            "notify_telegram": "not.is.false",
+            "select": "*,user_monitors!inner(user_id,status,notify_telegram)",
+            "user_monitors.user_id": f"in.({','.join(user_ids)})",
+            "user_monitors.status": "neq.archived",
+            "order": "created_at",
             "limit": "1000",
         },
         timeout=REQUEST_TIMEOUT,
     )
     if response.status_code != 200:
-        raise RuntimeError(f"monitors:{response.status_code}:{response.text[:160]}")
-    return f"Çat qoşulub. Aktiv monitor sayı: {len(response.json() or [])}."
-
-
-def find_user_monitors(user_ids, select="id"):
-    response = requests.get(
-        f"{SUPABASE_URL}/rest/v1/user_monitors",
-        headers=supabase_headers(),
-        params={"select": select, "user_id": f"in.({','.join(user_ids)})", "order": "created_at", "limit": "1000"},
-        timeout=REQUEST_TIMEOUT,
-    )
-    if response.status_code != 200:
-        raise RuntimeError(f"monitors:{response.status_code}:{response.text[:160]}")
+        raise RuntimeError(f"keywords:{response.status_code}:{response.text[:160]}")
     return response.json() or []
 
 
-def telegram_monitor_list(chat_id):
+def keyword_is_active(row):
+    monitor = row.get("user_monitors") or {}
+    return monitor.get("status") == "active" and row.get("status", "active") != "paused"
+
+
+def telegram_chat_status(chat_id):
     user_ids = find_users_by_telegram_chat(chat_id)
     if not user_ids:
         return TELEGRAM_REPLY_NOT_LINKED
-    monitors = find_user_monitors(user_ids, "name,status,notify_telegram,monitor_keywords(keyword)")
-    if not monitors:
-        return TELEGRAM_REPLY_NO_MONITORS
-    lines = ["Monitorlarınız:"]
-    for monitor in monitors:
-        if monitor.get("status") != "active":
-            state = "deaktiv"
-        elif monitor.get("notify_telegram") is False:
-            state = "bildiriş dayandırılıb"
-        else:
-            state = "aktiv"
-        keywords = [clean_text(row.get("keyword")) for row in monitor.get("monitor_keywords") or []]
-        keywords = [keyword for keyword in keywords if keyword]
-        shown = ", ".join(keywords[:10]) + (f" və daha {len(keywords) - 10}" if len(keywords) > 10 else "")
-        lines.append(f"• {clean_text(monitor.get('name'))} ({state}): {shown or 'açar söz yoxdur'}")
+    active = [row for row in find_user_keywords(user_ids) if keyword_is_active(row)]
+    return f"Çat qoşulub. Aktiv açar söz sayı: {len(active)}."
+
+
+def telegram_keyword_list(chat_id):
+    user_ids = find_users_by_telegram_chat(chat_id)
+    if not user_ids:
+        return TELEGRAM_REPLY_NOT_LINKED
+    rows = [row for row in find_user_keywords(user_ids) if clean_text(row.get("keyword"))]
+    if not rows:
+        return TELEGRAM_REPLY_NO_KEYWORDS
+    lines = ["Açar sözləriniz:"]
+    for row in rows[:50]:
+        state = "" if keyword_is_active(row) else " (dayandırılıb)"
+        lines.append(f"• {clean_text(row.get('keyword'))}{state}")
+    if len(rows) > 50:
+        lines.append(f"və daha {len(rows) - 50}")
+    if any((row.get("user_monitors") or {}).get("notify_telegram") is False for row in rows):
+        lines.append("\nTelegram bildirişləri dayandırılıb. Açmaq üçün /resume yazın.")
     return "\n".join(lines)
 
 
@@ -1774,7 +1769,6 @@ def telegram_admin_stats():
     lines = [
         "Vizual statistika:",
         f"İstifadəçi: {count_rows('user_profiles', {})}",
-        f"Aktiv monitor: {count_rows('user_monitors', {'status': 'eq.active'})}",
         f"Açar söz: {count_rows('monitor_keywords', {})}",
         f"Aktiv mənbə: {count_rows('sources', {'status': 'eq.active'})}",
         f"Xətalı mənbə (3+ uğursuz oxu): {count_rows('sources', {'status': 'eq.active', 'consecutive_fail_count': 'gte.3'})}",
@@ -1850,8 +1844,8 @@ def handle_telegram_command(text, chat_id):
         return unlink_telegram_chat(chat_id)
     if command == "/status":
         return telegram_chat_status(chat_id)
-    if command == "/monitors":
-        return telegram_monitor_list(chat_id)
+    if command in ("/keywords", "/monitors"):
+        return telegram_keyword_list(chat_id)
     if command == "/pause":
         return set_chat_notifications(chat_id, False)
     if command == "/resume":
@@ -4635,7 +4629,7 @@ def load_active_monitor_keywords():
             f"{SUPABASE_URL}/rest/v1/monitor_keywords",
             headers=supabase_headers(),
             params={
-                "select": "id,keyword,match_type,monitor_id,user_monitors(id,name,user_id,status,notify_telegram,telegram_chat_id)"
+                "select": "*,user_monitors(id,name,user_id,status,notify_telegram,telegram_chat_id)"
             },
             timeout=REQUEST_TIMEOUT,
         )
@@ -4649,10 +4643,10 @@ def load_active_monitor_keywords():
         active_rows = [
             row
             for row in rows
-            if (row.get("user_monitors") or {}).get("status") == "active"
+            if keyword_is_active(row)
             and (row.get("user_monitors") or {}).get("user_id") not in inactive_owners
         ]
-        print(f"Aktiv monitor keyword cache: {len(active_rows)}", flush=True)
+        print(f"Aktiv açar söz cache: {len(active_rows)}", flush=True)
         return active_rows
     except Exception as exc:
         print(f"Monitor keyword cache istisnasi: {exc}", flush=True)
@@ -4670,7 +4664,7 @@ def find_matching_user_monitors(title, monitor_keywords_cache=None):
         seen_matches = set()
         for row in keywords:
             monitor = row.get("user_monitors") or {}
-            if monitor.get("status") != "active":
+            if not keyword_is_active(row):
                 continue
             keyword_original = row.get("keyword", "")
             keyword = normalize_text(keyword_original)
@@ -4707,8 +4701,7 @@ def match_user_monitors(item_id, title, monitor_keywords_cache=None):
         seen_matches = set()
         for row in keywords:
             monitor = row.get("user_monitors") or {}
-            monitor_status = monitor.get("status")
-            if monitor_status != "active":
+            if not keyword_is_active(row):
                 continue
             keyword_original = row.get("keyword", "")
             keyword = normalize_text(keyword_original)
@@ -5084,9 +5077,7 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None)
                 continue
             chat_matches = [match for match in monitor_matches if clean_text(match.get("telegram_chat_id")) == chat_id]
             chat_keywords = clean_matched_keywords([match.get("keyword") for match in chat_matches])
-            chat_monitors = clean_matched_keywords([match.get("monitor_name") for match in chat_matches])
             chat_keywords_text = ", ".join(chat_keywords) or matched_keywords_text
-            chat_monitors_text = ", ".join(chat_monitors) or "Monitor"
             chat_message = f"""Yeni uyğun xəbər
 
 Başlıq:
@@ -5094,9 +5085,6 @@ Başlıq:
 
 Mənbə:
 {source}
-
-Monitor:
-{chat_monitors_text}
 
 Açar sözlər:
 {chat_keywords_text}

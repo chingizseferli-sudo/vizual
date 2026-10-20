@@ -10,6 +10,7 @@ import {
   emptyPlanForm,
   formatPlanPrice,
   normalizePlanRow,
+  planKeywordLimit,
   planSocialIntervalMinutes,
   planToFormValues,
   type PlanFormValues,
@@ -396,7 +397,21 @@ function SubscriptionPlansPage() {
             />
           </label>
           <label className='grid gap-1.5 text-sm font-medium'>
-            Monitor limiti
+            Açar söz limiti
+            <input
+              type='number'
+              min='0'
+              step='1'
+              value={form.maxKeywords}
+              onChange={(event) => updateForm('maxKeywords', event.target.value)}
+              className='rounded-lg border bg-background px-3 py-2 font-normal'
+              placeholder={
+                form.maxWatches ? `${Number(form.maxWatches) * 20}` : 'Limitsiz'
+              }
+            />
+          </label>
+          <label className='grid gap-1.5 text-sm font-medium'>
+            Veb izləmə limiti
             <input
               type='number'
               min='0'
@@ -588,8 +603,10 @@ function SubscriptionPlansPage() {
                   </div>
                 </div>
                 <div className='rounded-lg bg-muted/50 p-2'>
-                  <div className='text-xs text-muted-foreground'>Monitor</div>
-                  <div className='font-semibold'>{plan.max_watches ?? '∞'}</div>
+                  <div className='text-xs text-muted-foreground'>Açar söz</div>
+                  <div className='font-semibold'>
+                    {planKeywordLimit(plan) ?? '∞'}
+                  </div>
                 </div>
                 <div className='rounded-lg bg-muted/50 p-2'>
                   <div className='text-xs text-muted-foreground'>Interval</div>

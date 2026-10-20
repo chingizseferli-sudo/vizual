@@ -104,7 +104,7 @@ def keyword_intervals(keyword_rows, profiles, plans, default_interval):
     targets = {}
     for row in keyword_rows:
         monitor = row.get("user_monitors") or {}
-        if monitor.get("status") != "active":
+        if not sm.keyword_is_active(row):
             continue
         original = sm.clean_text(row.get("keyword"))
         folded = sm.keyword_fold(original).strip()
@@ -310,12 +310,11 @@ def store_post(platform, source_id, post):
     return None
 
 
-def alert_text(platform, post, monitor_names, keywords):
+def alert_text(platform, post, keywords):
     published = post["published_at"].astimezone(sm.BAKU_TZ).strftime("%d.%m.%Y %H:%M") if post.get("published_at") else "-"
     return (
         f"Yeni uyğun {PLATFORM_LABELS[platform]} paylaşımı\n\n"
         f"Mətn:\n{post_title(post)}\n\n"
-        f"Monitor:\n{monitor_names}\n\n"
         f"Açar sözlər:\n{keywords}\n\n"
         f"Tarix və saat:\n{published}\n\n"
         f"Link:\n{post['url']}\n"
@@ -342,9 +341,8 @@ def handle_post(platform, source_id, post, keyword_cache, now):
         if match.get("notify_telegram", True) and chat_id:
             chats.setdefault(chat_id, []).append(match)
     for chat_id, chat_matches in chats.items():
-        monitors = ", ".join(sm.clean_matched_keywords([m.get("monitor_name") for m in chat_matches])) or "Monitor"
         keywords = ", ".join(sm.clean_matched_keywords([m.get("keyword") for m in chat_matches]))
-        if sm.send_telegram(alert_text(platform, post, monitors, keywords), chat_id=chat_id):
+        if sm.send_telegram(alert_text(platform, post, keywords), chat_id=chat_id):
             sent += 1
     return sent
 

@@ -149,10 +149,10 @@ function MonitorDashboard() {
         </Link>
 
         <Link
-          to='/admin/monitor/monitors'
+          to='/admin/users'
           className='rounded-lg border bg-card p-4 hover:bg-muted/50'
         >
-          <div className='text-sm text-muted-foreground'>Aktiv monitorlar</div>
+          <div className='text-sm text-muted-foreground'>Açar söz izləyən müştərilər</div>
           <div className='text-2xl font-bold'>{activeMonitorsCount}</div>
         </Link>
 

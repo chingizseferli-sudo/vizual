@@ -1,14 +1,11 @@
 import { type QueryClient } from '@tanstack/react-query'
+import {
+  fetchAllMonitorIds,
+  fetchDashboardData,
+} from '@/features/keywords/dashboard'
+import { fetchKeywordsData } from '@/features/keywords/data'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
-
-const EMPTY_DASHBOARD = {
-  monitorCount: 0,
-  keywordCount: 0,
-  resultCount: 0,
-  alertCount: 0,
-  recentMatches: [],
-}
 
 async function getCurrentUserId() {
   const {
@@ -16,160 +13,6 @@ async function getCurrentUserId() {
   } = await supabase.auth.getUser()
 
   return user?.id || ''
-}
-
-async function fetchMonitorIds(userId: string) {
-  const { data, error } = await supabase
-    .from('user_monitors')
-    .select('id')
-    .eq('user_id', userId)
-
-  if (error) throw new Error(error.message)
-  return (data || []).map((item) => item.id)
-}
-
-async function prefetchDashboardData() {
-  const userId = await getCurrentUserId()
-  if (!userId) return EMPTY_DASHBOARD
-
-  const monitorIds = await fetchMonitorIds(userId)
-  if (monitorIds.length === 0) return EMPTY_DASHBOARD
-
-  const [keywordsRes, matchesRes] = await Promise.all([
-    supabase
-      .from('monitor_keywords')
-      .select('id', { count: 'exact', head: true })
-      .in('monitor_id', monitorIds),
-    supabase
-      .from('monitor_matches')
-      .select(
-        'id,monitor_id,matched_keyword,created_at,user_monitors(name),monitored_items(title,url)'
-      )
-      .in('monitor_id', monitorIds)
-      .order('created_at', { ascending: false })
-      .limit(10),
-  ])
-
-  const matches = matchesRes.data || []
-  const matchIds = matches.map((item) => item.id)
-  let alertCount = 0
-
-  if (matchIds.length > 0) {
-    const { count } = await supabase
-      .from('monitor_alerts')
-      .select('id', { count: 'exact', head: true })
-      .in('match_id', matchIds)
-    alertCount = count || 0
-  }
-
-  return {
-    monitorCount: monitorIds.length,
-    keywordCount: keywordsRes.count || 0,
-    resultCount: matchIds.length,
-    alertCount,
-    recentMatches: matches,
-  }
-}
-
-async function loadMonitorPlanLimits(userId: string) {
-  const unavailable = {
-    available: false,
-    name: null,
-    maxWatches: null,
-    warning: 'Plan məlumatı hələ aktiv deyil.',
-  }
-
-  const profilePlan = await supabase
-    .from('user_profiles')
-    .select('plan_id')
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  const planId = (profilePlan.data as { plan_id?: string | null } | null)
-    ?.plan_id
-  if (profilePlan.error || !planId) return unavailable
-
-  const planResult = await supabase
-    .from('subscription_plans')
-    .select('name,max_watches')
-    .eq('id', planId)
-    .maybeSingle()
-
-  if (planResult.error || !planResult.data) return unavailable
-
-  const plan = planResult.data as {
-    name?: string | null
-    max_watches?: number | null
-  }
-
-  return {
-    available: true,
-    name: plan.name || null,
-    maxWatches: plan.max_watches ?? null,
-    warning: null,
-  }
-}
-
-async function prefetchMonitorsData() {
-  const userId = await getCurrentUserId()
-  if (!userId) throw new Error('İstifadəçi sessiyası tapılmadı.')
-
-  const [profileRes, monitorRes, planRes] = await Promise.all([
-    supabase
-      .from('user_profiles')
-      .select('user_id,telegram_chat_id')
-      .eq('user_id', userId)
-      .maybeSingle(),
-    supabase
-      .from('user_monitors')
-      .select('id,name,description,status,telegram_chat_id,created_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false }),
-    loadMonitorPlanLimits(userId),
-  ])
-
-  if (monitorRes.error)
-    throw new Error(`Monitorlar oxunmadı: ${monitorRes.error.message}`)
-
-  const monitors = monitorRes.data || []
-  const monitorIds = monitors.map((item) => item.id)
-
-  if (monitorIds.length === 0) {
-    return {
-      userId,
-      profile: profileRes.error ? null : profileRes.data || null,
-      planLimits: planRes,
-      monitors,
-      keywords: [],
-      matches: [],
-      message: '',
-    }
-  }
-
-  const [keywordsRes, matchesRes] = await Promise.all([
-    supabase
-      .from('monitor_keywords')
-      .select('id,monitor_id,keyword,match_type,created_at')
-      .in('monitor_id', monitorIds)
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('monitor_matches')
-      .select('id,monitor_id,created_at')
-      .in('monitor_id', monitorIds)
-      .order('created_at', { ascending: false }),
-  ])
-
-  return {
-    userId,
-    profile: profileRes.error ? null : profileRes.data || null,
-    planLimits: planRes,
-    monitors,
-    keywords: keywordsRes.error ? [] : keywordsRes.data || [],
-    matches: matchesRes.error ? [] : matchesRes.data || [],
-    message: keywordsRes.error
-      ? `Açar sözlər oxunmadı: ${keywordsRes.error.message}`
-      : '',
-  }
 }
 
 async function prefetchWatchMonitorData() {
@@ -210,7 +53,7 @@ async function prefetchResultsData() {
     }
   }
 
-  const monitorIds = await fetchMonitorIds(userId)
+  const monitorIds = await fetchAllMonitorIds(userId)
   if (monitorIds.length === 0) return { rows: [], errorMessage: '' }
 
   const retentionStart = new Date()
@@ -219,7 +62,7 @@ async function prefetchResultsData() {
   const { data, error } = await supabase
     .from('monitor_matches')
     .select(
-      'id,monitor_id,item_id,matched_keyword,created_at,user_monitors(name),monitored_items(title,url,published_at,detected_at,status)'
+      'id,monitor_id,item_id,matched_keyword,created_at,monitored_items(title,url,published_at,detected_at,status)'
     )
     .in('monitor_id', monitorIds)
     .gte('created_at', retentionStart.toISOString())
@@ -242,7 +85,7 @@ async function prefetchAlertsData() {
     }
   }
 
-  const monitorIds = await fetchMonitorIds(userId)
+  const monitorIds = await fetchAllMonitorIds(userId)
   if (monitorIds.length === 0) return { alerts: [], errorMessage: '' }
 
   const { data: matches, error: matchesError } = await supabase
@@ -259,7 +102,7 @@ async function prefetchAlertsData() {
   const { data, error } = await supabase
     .from('monitor_alerts')
     .select(
-      'id,match_id,channel,recipient,status,sent_at,monitor_matches(id,matched_keyword,user_monitors(name),monitored_items(title,url))'
+      'id,match_id,channel,recipient,status,sent_at,monitor_matches(id,matched_keyword,monitored_items(title,url))'
     )
     .in('match_id', matchIds)
     .order('sent_at', { ascending: false })
@@ -285,17 +128,14 @@ async function prefetchProfileData() {
     }
   }
 
-  const [profileResult, monitorCountResult, planResult, socialResult] =
+  const [profileResult, keywordsResult, planResult, socialResult] =
     await Promise.all([
       supabase
         .from('user_profiles')
         .select('user_id,email,role,status,telegram_chat_id')
         .eq('user_id', user.id)
         .maybeSingle(),
-      supabase
-        .from('user_monitors')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id),
+      fetchKeywordsData().catch(() => null),
       (async () => {
         const profilePlan = await supabase
           .from('user_profiles')
@@ -308,7 +148,7 @@ async function prefetchProfileData() {
           return { plan: null, available: false }
         const planResult = await supabase
           .from('subscription_plans')
-          .select('name,max_watches,history_days,telegram_enabled')
+          .select('name,history_days,telegram_enabled')
           .eq('id', planId)
           .maybeSingle()
         if (planResult.error || !planResult.data)
@@ -338,7 +178,8 @@ async function prefetchProfileData() {
       status: getStatusLabel(profile?.status || null),
       createdAt: user.created_at || null,
       telegramChatId: profile?.telegram_chat_id || null,
-      monitorCount: monitorCountResult.count || 0,
+      keywordCount: keywordsResult?.activeCount ?? 0,
+      keywordLimit: keywordsResult?.maxKeywords ?? null,
       plan: planResult.plan,
       planAvailable: planResult.available,
       social: socialResult.error ? null : socialResult.data,
@@ -353,16 +194,16 @@ export function prefetchCustomerRoute(queryClient: QueryClient, url: string) {
   if (url === '/monitor') {
     void queryClient.prefetchQuery({
       queryKey: customerQueryKeys.dashboard(),
-      queryFn: prefetchDashboardData,
+      queryFn: fetchDashboardData,
       staleTime: 30 * 1000,
     })
     return
   }
 
-  if (url === '/monitor/monitors') {
+  if (url === '/monitor/keywords') {
     void queryClient.prefetchQuery({
-      queryKey: customerQueryKeys.monitors(),
-      queryFn: prefetchMonitorsData,
+      queryKey: customerQueryKeys.keywords(),
+      queryFn: fetchKeywordsData,
       staleTime: 60 * 1000,
     })
     return

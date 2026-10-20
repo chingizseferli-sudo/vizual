@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
+import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
 import { dateLocale, t } from '@/lib/i18n'
 
 const STORY_FETCH_LIMIT = 700
@@ -27,9 +28,6 @@ type StoryMatchRow = {
   item_id: string
   matched_keyword: string | null
   created_at: string | null
-  user_monitors: {
-    name: string | null
-  } | null
   monitored_items: {
     title: string | null
     url: string | null
@@ -47,7 +45,6 @@ type StoryItem = {
   url: string
   detectedAt: string | null
   keyword: string
-  monitor: string
 }
 
 type StoryGroup = {
@@ -193,7 +190,6 @@ function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
         url,
         detectedAt: getDetectedAt(row),
         keyword,
-        monitor: row.user_monitors?.name || t("Monitor"),
       } satisfies StoryItem
     })
     .filter(Boolean) as StoryItem[]
@@ -264,20 +260,16 @@ async function fetchStoryData(): Promise<StoryData> {
     }
   }
 
-  const { data: monitors, error: monitorsError } = await supabase
-    .from('user_monitors')
-    .select('id')
-    .eq('user_id', user.id)
-
-  if (monitorsError) {
+  let monitorIds: string[]
+  try {
+    monitorIds = await fetchAllMonitorIds(user.id)
+  } catch {
     return {
       groups: [],
       totalRows: 0,
-      errorMessage: t("Monitor məlumatlarını yükləmək mümkün olmadı."),
+      errorMessage: t("Nəticələri yükləmək mümkün olmadı."),
     }
   }
-
-  const monitorIds = (monitors || []).map((monitor) => monitor.id)
   if (monitorIds.length === 0) {
     return { groups: [], totalRows: 0, errorMessage: '' }
   }
@@ -288,7 +280,7 @@ async function fetchStoryData(): Promise<StoryData> {
   const { data, error } = await supabase
     .from('monitor_matches')
     .select(
-      'id,monitor_id,item_id,matched_keyword,created_at,user_monitors(name),monitored_items(title,url,published_at,detected_at,status)'
+      'id,monitor_id,item_id,matched_keyword,created_at,monitored_items(title,url,published_at,detected_at,status)'
     )
     .in('monitor_id', monitorIds)
     .gte('created_at', retentionStart.toISOString())
@@ -389,7 +381,7 @@ function StoryIntelligence() {
           <StateCard
             icon={Newspaper}
             title={t("Hələ yayılma xəritəsi üçün məlumat yoxdur")}
-            description={t("Monitor nəticələri toplandıqca eyni mövzu üzrə yayılan xəbərlər burada qruplaşdırılacaq.")}
+            description={t("Nəticələr toplandıqca eyni mövzu üzrə yayılan xəbərlər burada qruplaşdırılacaq.")}
           />
         ) : (
           <>
@@ -555,7 +547,7 @@ function StoryIntelligence() {
                           {formatTime(item.detectedAt)} · {item.source}
                         </p>
                         <p className='text-sm text-muted-foreground'>
-                          {item.keyword} · {item.monitor}
+                          {item.keyword}
                         </p>
                       </div>
                     </div>

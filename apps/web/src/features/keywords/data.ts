@@ -1,0 +1,163 @@
+import { supabase } from '@/lib/supabase'
+import { t } from '@/lib/i18n'
+
+// Customers manage a flat list of keywords. user_monitors stays as a hidden
+// container (one non-archived monitor per customer since migration
+// 20261020000008); archived monitors only keep old results.
+
+export type KeywordStatus = 'active' | 'paused'
+
+export type CustomerKeyword = {
+  id: string
+  monitor_id: string
+  keyword: string
+  status: KeywordStatus
+  created_at: string | null
+}
+
+export type KeywordsData = {
+  keywords: CustomerKeyword[]
+  activeCount: number
+  maxKeywords: number | null
+  // False until the migration adds monitor_keywords.status: pausing is hidden.
+  statusSupported: boolean
+}
+
+type MonitorRow = { id: string; status: string | null; created_at: string | null }
+type KeywordRow = {
+  id: string
+  monitor_id: string
+  keyword: string
+  status?: string | null
+  created_at: string | null
+}
+type RpcError = { code?: string; message: string } | null
+
+async function currentUserId() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error(t("İstifadəçi sessiyası tapılmadı."))
+  return user.id
+}
+
+async function loadMonitors(userId: string) {
+  const { data, error } = await supabase
+    .from('user_monitors')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+  if (error) throw new Error(t("Açar sözlər oxunmadı: {0}", [error.message]))
+  return ((data || []) as MonitorRow[]).filter(
+    (monitor) => monitor.status !== 'archived'
+  )
+}
+
+export async function fetchKeywordsData(): Promise<KeywordsData> {
+  const userId = await currentUserId()
+  const [monitors, limitsRes] = await Promise.all([
+    loadMonitors(userId),
+    supabase.rpc('current_user_plan_limits').maybeSingle(),
+  ])
+  const maxKeywords =
+    (limitsRes.data as { max_keywords?: number | null } | null)
+      ?.max_keywords ?? null
+
+  if (monitors.length === 0) {
+    return { keywords: [], activeCount: 0, maxKeywords, statusSupported: true }
+  }
+
+  const monitorStatus = new Map(monitors.map((item) => [item.id, item.status]))
+  const { data, error } = await supabase
+    .from('monitor_keywords')
+    .select('*')
+    .in('monitor_id', [...monitorStatus.keys()])
+    .order('created_at', { ascending: true })
+  if (error) throw new Error(t("Açar sözlər oxunmadı: {0}", [error.message]))
+
+  const rows = (data || []) as KeywordRow[]
+  const statusSupported = rows.length === 0 || 'status' in rows[0]
+  const keywords = rows.map((row) => ({
+    id: row.id,
+    monitor_id: row.monitor_id,
+    keyword: row.keyword,
+    created_at: row.created_at,
+    status:
+      monitorStatus.get(row.monitor_id) === 'active' && row.status !== 'paused'
+        ? ('active' as const)
+        : ('paused' as const),
+  }))
+
+  return {
+    keywords,
+    activeCount: keywords.filter((item) => item.status === 'active').length,
+    maxKeywords,
+    statusSupported,
+  }
+}
+
+export function keywordErrorMessage(error: { message: string }) {
+  const message = error.message || ''
+  if (message.includes('PLAN_KEYWORD_LIMIT_REACHED')) {
+    return t("Planınızda açar söz limiti dolub. Bir açar sözü silin, dayandırın və ya planınızı yüksəldin.")
+  }
+  if (message.includes('KEYWORD_EXISTS')) {
+    return t("Bu açar söz artıq əlavə edilib.")
+  }
+  if (message.includes('ACCOUNT_NOT_ACTIVE')) {
+    return t("Hesabınız aktiv deyil. Açar söz əlavə etmək üçün hesabın aktiv olması lazımdır.")
+  }
+  if (message.includes('KEYWORD_LENGTH_INVALID')) {
+    return t("Açar söz 1-200 simvol olmalıdır.")
+  }
+  return message || t("Naməlum xəta")
+}
+
+function isMissingFunction(error: RpcError) {
+  return error?.code === 'PGRST202'
+}
+
+// Before migration 20261020000008 there is no add_keyword(): the keyword goes
+// to the customer's first active monitor, created if needed.
+async function addKeywordLegacy(keyword: string) {
+  const userId = await currentUserId()
+  const monitors = await loadMonitors(userId)
+  let monitorId = monitors.find((item) => item.status === 'active')?.id
+
+  if (!monitorId) {
+    const { data, error } = await supabase.rpc(
+      'create_user_monitor_with_limit',
+      { p_name: 'Açar sözlər', p_description: null, p_notify_telegram: true }
+    )
+    if (error) return error
+    monitorId = ((Array.isArray(data) ? data[0] : data) as { id: string })
+      ?.id
+  }
+
+  const { error } = await supabase
+    .from('monitor_keywords')
+    .insert({ monitor_id: monitorId, keyword, match_type: 'contains' })
+  return error
+}
+
+export async function addKeyword(keyword: string) {
+  const { error } = await supabase.rpc('add_keyword', {
+    p_keyword: keyword,
+    p_match_type: 'contains',
+  })
+  if (isMissingFunction(error)) return addKeywordLegacy(keyword)
+  return error
+}
+
+export async function setKeywordStatus(id: string, status: KeywordStatus) {
+  const { error } = await supabase.rpc('set_keyword_status', {
+    p_keyword_id: id,
+    p_status: status,
+  })
+  return error
+}
+
+export async function deleteKeyword(id: string) {
+  const { error } = await supabase.from('monitor_keywords').delete().eq('id', id)
+  return error
+}

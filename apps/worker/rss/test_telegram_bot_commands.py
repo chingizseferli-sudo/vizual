@@ -179,12 +179,19 @@ def test_stop_unlinks_chat(sm):
     assert fake.sent_texts() == [sm.TELEGRAM_REPLY_STOPPED]
 
 
-def test_status_reports_active_monitors(sm):
+def keyword_row(keyword, status="active", notify=True):
+    return {"keyword": keyword, "status": status,
+            "user_monitors": {"user_id": USER_ID, "status": "active", "notify_telegram": notify}}
+
+
+def test_status_reports_active_keywords(sm):
     fake = run_updates(sm, "/status", {
         ("GET", "user_profiles"): FakeResponse(200, [{"user_id": USER_ID}]),
-        ("GET", "user_monitors"): FakeResponse(200, [{"id": "m1"}, {"id": "m2"}, {"id": "m3"}]),
+        ("GET", "monitor_keywords"): FakeResponse(200, [
+            keyword_row("ABB"), keyword_row("Kapital Bank"), keyword_row("Neft", "paused"),
+        ]),
     })
-    assert fake.sent_texts() == ["Çat qoşulub. Aktiv monitor sayı: 3."]
+    assert fake.sent_texts() == ["Çat qoşulub. Aktiv açar söz sayı: 2."]
 
 
 def test_pause_blocks_alerts_but_not_command_replies(sm):
@@ -225,16 +232,22 @@ NOT_ADMIN = {("GET", "admin_users"): FakeResponse(200, [])}
 ADMIN = {("GET", "admin_users"): FakeResponse(200, [{"user_id": USER_ID}])}
 
 
-def test_monitors_lists_names_state_and_keywords(sm):
-    fake = run_updates(sm, "/monitors", {**LINKED, ("GET", "user_monitors"): FakeResponse(200, [
-        {"name": "Bank", "status": "active", "notify_telegram": True,
-         "monitor_keywords": [{"keyword": "ABB"}, {"keyword": "Kapital Bank"}]},
-        {"name": "Köhnə", "status": "inactive", "notify_telegram": True, "monitor_keywords": []},
+@pytest.mark.parametrize("command", ["/keywords", "/monitors"])
+def test_keywords_lists_keywords_and_paused_state(sm, command):
+    fake = run_updates(sm, command, {**LINKED, ("GET", "monitor_keywords"): FakeResponse(200, [
+        keyword_row("ABB", notify=False), keyword_row("Neft", "paused", notify=False),
     ])})
-    assert "monitor_keywords(keyword)" in fake.find("GET", "user_monitors")[0]["params"]["select"]
+    params = fake.find("GET", "monitor_keywords")[0]["params"]
+    assert params["user_monitors.status"] == "neq.archived"
     assert fake.sent_texts() == [
-        "Monitorlarınız:\n• Bank (aktiv): ABB, Kapital Bank\n• Köhnə (deaktiv): açar söz yoxdur"
+        "Açar sözləriniz:\n• ABB\n• Neft (dayandırılıb)"
+        "\n\nTelegram bildirişləri dayandırılıb. Açmaq üçün /resume yazın."
     ]
+
+
+def test_keywords_empty(sm):
+    fake = run_updates(sm, "/keywords", {**LINKED, ("GET", "monitor_keywords"): FakeResponse(200, [])})
+    assert fake.sent_texts() == [sm.TELEGRAM_REPLY_NO_KEYWORDS]
 
 
 def test_pause_and_resume_keep_the_link(sm):
@@ -298,7 +311,7 @@ def test_command_menu_scopes_admin_commands_to_admin_chats(sm):
     sm.register_telegram_command_menu()
     default, admin = fake.find("POST", "setMyCommands")
     assert "scope" not in default["json"]
-    assert {c["command"] for c in default["json"]["commands"]} >= {"status", "monitors", "pause", "stop"}
+    assert {c["command"] for c in default["json"]["commands"]} >= {"status", "keywords", "pause", "stop"}
     assert "stats" not in {c["command"] for c in default["json"]["commands"]}
     assert admin["json"]["scope"] == {"type": "chat", "chat_id": CHAT_ID}
     assert "pause_all" in {c["command"] for c in admin["json"]["commands"]}
@@ -465,3 +478,20 @@ def test_monitor_keywords_of_inactive_owners_are_skipped(sm):
     rows = sm.load_active_monitor_keywords()
     assert [row["monitor_id"] for row in rows] == ["m-a"]
     assert fake.find("GET", "user_profiles")[0]["params"]["status"] == "neq.active"
+
+
+def test_paused_keywords_and_archived_monitors_are_skipped(sm):
+    def row(keyword, status="active", monitor_status="active"):
+        return {"keyword": keyword, "status": status, "monitor_id": "m",
+                "user_monitors": {"id": "m", "user_id": "a", "status": monitor_status, "notify_telegram": True}}
+    # Before the keywords-only migration rows have no status column.
+    legacy = row("Köhnə")
+    legacy.pop("status")
+    sm.requests = FakeRequests({
+        ("GET", "monitor_keywords"): FakeResponse(200, [
+            row("ABB"), row("Neft", "paused"), row("Qaz", monitor_status="archived"), legacy,
+        ]),
+        ("GET", "user_profiles"): FakeResponse(200, []),
+    })
+    rows = sm.load_active_monitor_keywords()
+    assert [r["keyword"] for r in rows] == ["ABB", "Köhnə"]

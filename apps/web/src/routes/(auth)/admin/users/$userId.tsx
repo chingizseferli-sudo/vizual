@@ -10,6 +10,7 @@ import { ResponsiveTable } from '@/components/ui/responsive-table'
 import {
   formatPlanPrice,
   normalizePlanRow,
+  planKeywordLimit,
   planSocialIntervalMinutes,
   type SubscriptionPlan,
   type UserSubscription,
@@ -43,6 +44,9 @@ type Keyword = {
   monitor_id: string
   keyword: string
   match_type: string | null
+  // Added by migration 20261020000008; read with select('*').
+  status?: string | null
+  created_at: string | null
 }
 
 type Match = {
@@ -112,11 +116,7 @@ function AdminUserDetailsPage() {
   const [subscriptionNotes, setSubscriptionNotes] = useState('')
   const [assigningPlan, setAssigningPlan] = useState(false)
   const [reviewingSignup, setReviewingSignup] = useState(false)
-  const [newMonitorName, setNewMonitorName] = useState('')
-  const [newMonitorDescription, setNewMonitorDescription] = useState('')
-  const [newKeywordByMonitor, setNewKeywordByMonitor] = useState<
-    Record<string, string>
-  >({})
+  const [newKeyword, setNewKeyword] = useState('')
 
   async function loadData() {
     setLoading(true)
@@ -165,9 +165,14 @@ function AdminUserDetailsPage() {
       const [keywordsRes, matchesRes] = await Promise.all([
         supabase
           .from('monitor_keywords')
-          .select('id,monitor_id,keyword,match_type')
-          .in('monitor_id', monitorIds)
-          .order('keyword', { ascending: true }),
+          .select('*')
+          .in(
+            'monitor_id',
+            userMonitors
+              .filter((monitor) => monitor.status !== 'archived')
+              .map((monitor) => monitor.id)
+          )
+          .order('created_at', { ascending: true }),
         supabase
           .from('monitor_matches')
           .select('id,monitor_id,item_id,matched_keyword,created_at')
@@ -250,17 +255,29 @@ function AdminUserDetailsPage() {
     })
   }, [matches, items, sources])
 
+  // Customers have one non-archived monitor holding all keywords; a keyword
+  // is tracked when that monitor is active and the keyword is not paused.
+  const monitorStatus = useMemo(
+    () => new Map(monitors.map((monitor) => [monitor.id, monitor.status])),
+    [monitors]
+  )
+  const isKeywordActive = (keyword: Keyword) =>
+    monitorStatus.get(keyword.monitor_id) === 'active' &&
+    keyword.status !== 'paused'
+  const keywordStatusSupported = keywords.length === 0 || 'status' in keywords[0]
+
   const stats = useMemo(() => {
+    const active = keywords.filter(
+      (keyword) =>
+        monitorStatus.get(keyword.monitor_id) === 'active' &&
+        keyword.status !== 'paused'
+    ).length
     return {
-      activeMonitors: monitors.filter((monitor) => monitor.status === 'active')
-        .length,
-      inactiveMonitors: monitors.filter(
-        (monitor) => monitor.status !== 'active'
-      ).length,
-      keywordCount: keywords.length,
+      activeKeywords: active,
+      pausedKeywords: keywords.length - active,
       resultCount: matches.length,
     }
-  }, [monitors, keywords, matches])
+  }, [monitorStatus, keywords, matches])
 
   const planById = useMemo(
     () => new Map(plans.map((plan) => [plan.id, plan])),
@@ -277,6 +294,10 @@ function AdminUserDetailsPage() {
 
   const planSocialInterval = planSocialIntervalMinutes(
     profile?.plan_id ? planById.get(profile.plan_id) : undefined
+  )
+  const currentKeywordLimit = planKeywordLimit(
+    (profile?.plan_id ? planById.get(profile.plan_id) : undefined) ??
+      plans.find((plan) => plan.code === 'free')
   )
 
   async function assignSubscription() {
@@ -404,7 +425,7 @@ function AdminUserDetailsPage() {
 
   async function disableTelegram() {
     const confirmed = window.confirm(
-      'Bu istifadəçi üçün Telegram bağlantısı deaktiv edilsin? Monitorların Telegram bildirişi də söndürüləcək.'
+      'Bu istifadəçi üçün Telegram bağlantısı deaktiv edilsin? Telegram bildirişləri dayanacaq.'
     )
 
     if (!confirmed) return
@@ -434,105 +455,29 @@ function AdminUserDetailsPage() {
     await loadData()
   }
 
-  async function createMonitor() {
-    const name = newMonitorName.trim()
-    if (!name) return
+  async function addKeyword() {
+    const value = newKeyword.trim()
+    if (!value) return
 
-    const { error } = await supabase.from('user_monitors').insert({
-      user_id: userId,
-      name,
-      description: newMonitorDescription.trim() || null,
-      status: 'active',
-      notify_telegram: true,
-      telegram_chat_id:
-        telegramChatId.trim() || profile?.telegram_chat_id || null,
-    })
-
-    if (error) {
-      setMessage(error.message)
-      return
-    }
-
-    setNewMonitorName('')
-    setNewMonitorDescription('')
-    await loadData()
-  }
-
-  async function toggleMonitor(monitor: Monitor) {
-    const nextStatus = monitor.status === 'active' ? 'inactive' : 'active'
-    const { error } = await supabase
-      .from('user_monitors')
-      .update({ status: nextStatus })
-      .eq('id', monitor.id)
-
-    if (error) {
-      setMessage(error.message)
-      return
-    }
-
-    await loadData()
-  }
-
-  async function deleteMonitor(monitor: Monitor) {
-    const ok = window.confirm(
-      `"${monitor.name}" monitoru silinsin? Bu monitorun açar sözləri və uyğunluq qeydləri də silinəcək.`
-    )
-
-    if (!ok) return
-
-    const monitorMatches = matches.filter(
-      (match) => match.monitor_id === monitor.id
-    )
-    const matchIds = monitorMatches.map((match) => match.id)
-
-    if (matchIds.length > 0) {
-      const { error: alertError } = await supabase
-        .from('notification_logs')
-        .delete()
-        .in('match_id', matchIds)
-
-      if (alertError) {
-        setMessage(alertError.message)
+    let monitorId = monitors.find((monitor) => monitor.status === 'active')?.id
+    if (!monitorId) {
+      const { data, error } = await supabase
+        .from('user_monitors')
+        .insert({
+          user_id: userId,
+          name: 'Açar sözlər',
+          status: 'active',
+          notify_telegram: true,
+          telegram_chat_id: profile?.telegram_chat_id || null,
+        })
+        .select('id')
+        .single()
+      if (error) {
+        setMessage(error.message)
         return
       }
+      monitorId = data.id as string
     }
-
-    const { error: keywordError } = await supabase
-      .from('monitor_keywords')
-      .delete()
-      .eq('monitor_id', monitor.id)
-
-    if (keywordError) {
-      setMessage(keywordError.message)
-      return
-    }
-
-    const { error: matchError } = await supabase
-      .from('monitor_matches')
-      .delete()
-      .eq('monitor_id', monitor.id)
-
-    if (matchError) {
-      setMessage(matchError.message)
-      return
-    }
-
-    const { error: monitorError } = await supabase
-      .from('user_monitors')
-      .delete()
-      .eq('id', monitor.id)
-
-    if (monitorError) {
-      setMessage(monitorError.message)
-      return
-    }
-
-    await loadData()
-  }
-
-  async function addKeyword(monitorId: string) {
-    const value = (newKeywordByMonitor[monitorId] || '').trim()
-    if (!value) return
 
     const { error } = await supabase.from('monitor_keywords').insert({
       monitor_id: monitorId,
@@ -545,7 +490,21 @@ function AdminUserDetailsPage() {
       return
     }
 
-    setNewKeywordByMonitor((current) => ({ ...current, [monitorId]: '' }))
+    setNewKeyword('')
+    await loadData()
+  }
+
+  async function toggleKeyword(keyword: Keyword) {
+    const { error } = await supabase
+      .from('monitor_keywords')
+      .update({ status: isKeywordActive(keyword) ? 'paused' : 'active' })
+      .eq('id', keyword.id)
+
+    if (error) {
+      setMessage(error.message)
+      return
+    }
+
     await loadData()
   }
 
@@ -597,23 +556,20 @@ function AdminUserDetailsPage() {
         </div>
       ) : null}
 
-      <div className='grid gap-4 md:grid-cols-4'>
+      <div className='grid gap-4 md:grid-cols-3'>
         <div className='rounded-lg border border-success/25 bg-success/10 p-4'>
-          <div className='text-sm text-muted-foreground'>Aktiv monitor</div>
+          <div className='text-sm text-muted-foreground'>Aktiv açar söz</div>
           <div className='text-2xl font-bold text-success'>
-            {stats.activeMonitors}
+            {stats.activeKeywords}
+            {currentKeywordLimit !== null ? ` / ${currentKeywordLimit}` : ''}
           </div>
         </div>
         <div className='rounded-lg border border-destructive/25 bg-destructive/10 p-4'>
-          <div className='text-sm text-muted-foreground'>Passiv monitor</div>
-          <div className='text-2xl font-bold text-destructive'>
-            {stats.inactiveMonitors}
+          <div className='text-sm text-muted-foreground'>
+            Dayandırılmış açar söz
           </div>
-        </div>
-        <div className='rounded-lg border border-border bg-muted p-4'>
-          <div className='text-sm text-muted-foreground'>Açar söz</div>
-          <div className='text-2xl font-bold text-foreground'>
-            {stats.keywordCount}
+          <div className='text-2xl font-bold text-destructive'>
+            {stats.pausedKeywords}
           </div>
         </div>
         <div className='rounded-lg border border-border bg-muted p-4'>
@@ -804,7 +760,7 @@ function AdminUserDetailsPage() {
             <summary className='cursor-pointer px-4 py-3 text-sm font-medium'>
               Abunəlik tarixçəsi ({subscriptions.length})
             </summary>
-            <ResponsiveTable label='İstifadəçinin monitorları'>
+            <ResponsiveTable label='Abunəlik tarixçəsi'>
               <table className='w-full min-w-[680px] text-left text-sm'>
                 <thead className='border-b bg-muted/50 text-xs text-muted-foreground'>
                   <tr>
@@ -880,158 +836,60 @@ function AdminUserDetailsPage() {
       </div>
 
       <div className='rounded-lg border bg-card p-4'>
-        <div className='mb-3 font-semibold'>Yeni monitor yarat</div>
-        <div className='grid gap-3 md:grid-cols-[1fr_1fr_auto]'>
+        <div className='mb-3 font-semibold'>Açar sözlər</div>
+        <div className='flex flex-wrap gap-2'>
+          {keywords.map((keyword) => {
+            const active = isKeywordActive(keyword)
+            return (
+              <span
+                key={keyword.id}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm ${
+                  active ? '' : 'text-muted-foreground'
+                }`}
+              >
+                {keyword.keyword}
+                {active ? null : <span className='text-xs'>(dayandırılıb)</span>}
+                {keywordStatusSupported ? (
+                  <button
+                    type='button'
+                    onClick={() => toggleKeyword(keyword)}
+                    className='text-xs text-primary hover:underline'
+                  >
+                    {active ? 'Dayandır' : 'Davam et'}
+                  </button>
+                ) : null}
+                <button
+                  type='button'
+                  onClick={() => deleteKeyword(keyword)}
+                  className='text-xs text-destructive hover:underline'
+                >
+                  Sil
+                </button>
+              </span>
+            )
+          })}
+          {keywords.length === 0 ? (
+            <span className='text-sm text-muted-foreground'>
+              Bu istifadəçinin açar sözü yoxdur.
+            </span>
+          ) : null}
+        </div>
+        <div className='mt-3 grid gap-2 md:grid-cols-[1fr_auto]'>
           <input
-            aria-label='Monitor adı'
-            value={newMonitorName}
-            onChange={(event) => setNewMonitorName(event.target.value)}
-            placeholder='Monitor adı'
-            className='rounded-lg border bg-background px-3 py-2'
-          />
-          <input
-            aria-label='Qısa təsvir'
-            value={newMonitorDescription}
-            onChange={(event) => setNewMonitorDescription(event.target.value)}
-            placeholder='Qısa təsvir'
+            aria-label='Yeni açar söz'
+            value={newKeyword}
+            onChange={(event) => setNewKeyword(event.target.value)}
+            placeholder='Yeni açar söz'
             className='rounded-lg border bg-background px-3 py-2'
           />
           <button
             type='button'
-            onClick={createMonitor}
-            className='rounded-lg border bg-card px-4 py-2 hover:bg-muted'
+            onClick={addKeyword}
+            className='rounded-lg border px-4 py-2 hover:bg-muted'
           >
-            Yarat
+            Əlavə et
           </button>
         </div>
-      </div>
-
-      <div className='grid gap-4'>
-        {monitors.map((monitor) => {
-          const monitorKeywords = keywords.filter(
-            (keyword) => keyword.monitor_id === monitor.id
-          )
-          const monitorMatches = matches.filter(
-            (match) => match.monitor_id === monitor.id
-          )
-
-          return (
-            <div key={monitor.id} className='rounded-lg border bg-card p-4'>
-              <div className='flex flex-wrap items-start justify-between gap-3'>
-                <div>
-                  <div className='text-lg font-semibold'>{monitor.name}</div>
-                  <div className='text-sm text-muted-foreground'>
-                    {monitor.description || 'Təsvir yoxdur'}
-                  </div>
-                </div>
-                <div className='flex flex-wrap gap-2'>
-                  <span
-                    className={`rounded-full border px-3 py-1 text-xs ${
-                      monitor.status === 'active'
-                        ? 'border-success/25 bg-success/10 text-success'
-                        : 'border-destructive/25 bg-destructive/10 text-destructive'
-                    }`}
-                  >
-                    {monitor.status === 'active'
-                      ? 'Aktiv'
-                      : monitor.inactive_reason === 'plan_limit'
-                        ? 'Passiv · plan limiti'
-                        : 'Passiv'}
-                  </span>
-                  <button
-                    type='button'
-                    onClick={() => toggleMonitor(monitor)}
-                    className={`rounded-md px-3 py-1 text-xs font-medium ${
-                      monitor.status === 'active'
-                        ? 'bg-destructive/10 text-destructive hover:bg-destructive/10'
-                        : 'bg-success/10 text-success hover:bg-success/10'
-                    }`}
-                  >
-                    {monitor.status === 'active' ? 'Passiv et' : 'Aktiv et'}
-                  </button>
-                  <button
-                    type='button'
-                    onClick={() => deleteMonitor(monitor)}
-                    className='rounded-md bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive hover:bg-destructive/10'
-                  >
-                    Sil
-                  </button>
-                </div>
-              </div>
-
-              <div className='mt-4 grid gap-3 md:grid-cols-3'>
-                <div className='rounded-lg bg-muted p-3'>
-                  <div className='text-lg font-bold text-foreground'>
-                    {monitorKeywords.length}
-                  </div>
-                  <div className='text-xs text-muted-foreground'>Açar söz</div>
-                </div>
-                <div className='rounded-lg bg-muted p-3'>
-                  <div className='text-lg font-bold text-foreground'>
-                    {monitorMatches.length}
-                  </div>
-                  <div className='text-xs text-muted-foreground'>Nəticə</div>
-                </div>
-                <div className='rounded-lg bg-success/10 p-3'>
-                  <div className='text-lg font-bold text-success'>
-                    {formatDate(monitor.created_at)}
-                  </div>
-                  <div className='text-xs text-muted-foreground'>Yaradılıb</div>
-                </div>
-              </div>
-
-              <div className='mt-4'>
-                <div className='mb-2 text-sm font-medium'>Açar sözlər</div>
-                <div className='flex flex-wrap gap-2'>
-                  {monitorKeywords.map((keyword) => (
-                    <button
-                      key={keyword.id}
-                      type='button'
-                      onClick={() => deleteKeyword(keyword)}
-                      className='rounded-full border px-3 py-1 text-sm hover:bg-destructive/10 hover:text-destructive'
-                      title='Silmək üçün kliklə'
-                    >
-                      {keyword.keyword}
-                    </button>
-                  ))}
-                  {monitorKeywords.length === 0 ? (
-                    <span className='text-sm text-muted-foreground'>
-                      Açar söz yoxdur
-                    </span>
-                  ) : null}
-                </div>
-                <div className='mt-3 grid gap-2 md:grid-cols-[1fr_auto]'>
-                  <input
-                    aria-label='Yeni açar söz'
-                    value={newKeywordByMonitor[monitor.id] || ''}
-                    onChange={(event) =>
-                      setNewKeywordByMonitor((current) => ({
-                        ...current,
-                        [monitor.id]: event.target.value,
-                      }))
-                    }
-                    placeholder='Yeni açar söz'
-                    className='rounded-lg border bg-background px-3 py-2'
-                  />
-                  <button
-                    type='button'
-                    onClick={() => addKeyword(monitor.id)}
-                    className='rounded-lg border px-4 py-2 hover:bg-muted'
-                  >
-                    Əlavə et
-                  </button>
-                </div>
-              </div>
-            </div>
-          )
-        })}
-
-        {monitors.length === 0 ? (
-          <div className='rounded-lg border bg-card p-8 text-center text-muted-foreground'>
-            Bu istifadəçinin monitoru yoxdur. Buradan yeni monitor yarada
-            bilərsən.
-          </div>
-        ) : null}
       </div>
 
       <div className='rounded-lg border bg-card p-4'>

@@ -20,9 +20,6 @@ type NotificationRow = {
   sent_at: string | null
   monitor_matches: {
     matched_keyword: string | null
-    user_monitors: {
-      name: string | null
-    } | null
     monitored_items: {
       title: string | null
       url: string | null
@@ -97,7 +94,7 @@ async function fetchCustomerNotifications(): Promise<NotificationData> {
   const { data, error } = await supabase
     .from('monitor_alerts')
     .select(
-      'id,channel,status,sent_at,monitor_matches!inner(matched_keyword,user_monitors!inner(name),monitored_items(title,url))'
+      'id,channel,status,sent_at,monitor_matches!inner(matched_keyword,user_monitors!inner(user_id),monitored_items(title,url))'
     )
     .eq('monitor_matches.user_monitors.user_id', user.id)
     .order('sent_at', { ascending: false })
@@ -210,8 +207,6 @@ export function CustomerNotifications() {
           ) : (
             alerts.map((alert) => {
               const item = alert.monitor_matches?.monitored_items
-              const monitorName =
-                alert.monitor_matches?.user_monitors?.name || t("Monitor")
               const keyword =
                 alert.monitor_matches?.matched_keyword || t("Açar söz")
               const title = decodeHtml(item?.title || t("Başlıq yoxdur"))
@@ -238,7 +233,7 @@ export function CustomerNotifications() {
                       {title}
                     </span>
                     <span className='mt-1 block truncate text-xs font-bold text-muted-foreground'>
-                      {monitorName} · {keyword}
+                      {keyword}
                     </span>
                     <span className='mt-3 flex flex-wrap items-center gap-2'>
                       <span className='rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-foreground'>

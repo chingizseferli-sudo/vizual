@@ -40,6 +40,7 @@ import { Route as authMonitorStoryIntelligenceRouteImport } from './routes/(auth
 import { Route as authMonitorResultsRouteImport } from './routes/(auth)/monitor/results'
 import { Route as authMonitorProfileRouteImport } from './routes/(auth)/monitor/profile'
 import { Route as authMonitorMonitorsRouteImport } from './routes/(auth)/monitor/monitors'
+import { Route as authMonitorKeywordsRouteImport } from './routes/(auth)/monitor/keywords'
 import { Route as authMonitorAlertsRouteImport } from './routes/(auth)/monitor/alerts'
 import { Route as authAdminTelegramRouteImport } from './routes/(auth)/admin/telegram'
 import { Route as authAdminSubscriptionsRouteImport } from './routes/(auth)/admin/subscriptions'
@@ -229,6 +230,11 @@ const authMonitorProfileRoute = authMonitorProfileRouteImport.update({
 const authMonitorMonitorsRoute = authMonitorMonitorsRouteImport.update({
   id: '/monitors',
   path: '/monitors',
+  getParentRoute: () => authMonitorRouteRoute,
+} as any)
+const authMonitorKeywordsRoute = authMonitorKeywordsRouteImport.update({
+  id: '/keywords',
+  path: '/keywords',
   getParentRoute: () => authMonitorRouteRoute,
 } as any)
 const authMonitorAlertsRoute = authMonitorAlertsRouteImport.update({
@@ -427,6 +433,7 @@ export interface FileRoutesByFullPath {
   '/admin/subscriptions': typeof authAdminSubscriptionsRoute
   '/admin/telegram': typeof authAdminTelegramRoute
   '/monitor/alerts': typeof authMonitorAlertsRoute
+  '/monitor/keywords': typeof authMonitorKeywordsRoute
   '/monitor/monitors': typeof authMonitorMonitorsRoute
   '/monitor/profile': typeof authMonitorProfileRoute
   '/monitor/results': typeof authMonitorResultsRoute
@@ -486,6 +493,7 @@ export interface FileRoutesByTo {
   '/admin/subscriptions': typeof authAdminSubscriptionsRoute
   '/admin/telegram': typeof authAdminTelegramRoute
   '/monitor/alerts': typeof authMonitorAlertsRoute
+  '/monitor/keywords': typeof authMonitorKeywordsRoute
   '/monitor/monitors': typeof authMonitorMonitorsRoute
   '/monitor/profile': typeof authMonitorProfileRoute
   '/monitor/results': typeof authMonitorResultsRoute
@@ -550,6 +558,7 @@ export interface FileRoutesById {
   '/(auth)/admin/subscriptions': typeof authAdminSubscriptionsRoute
   '/(auth)/admin/telegram': typeof authAdminTelegramRoute
   '/(auth)/monitor/alerts': typeof authMonitorAlertsRoute
+  '/(auth)/monitor/keywords': typeof authMonitorKeywordsRoute
   '/(auth)/monitor/monitors': typeof authMonitorMonitorsRoute
   '/(auth)/monitor/profile': typeof authMonitorProfileRoute
   '/(auth)/monitor/results': typeof authMonitorResultsRoute
@@ -616,6 +625,7 @@ export interface FileRouteTypes {
     | '/admin/subscriptions'
     | '/admin/telegram'
     | '/monitor/alerts'
+    | '/monitor/keywords'
     | '/monitor/monitors'
     | '/monitor/profile'
     | '/monitor/results'
@@ -675,6 +685,7 @@ export interface FileRouteTypes {
     | '/admin/subscriptions'
     | '/admin/telegram'
     | '/monitor/alerts'
+    | '/monitor/keywords'
     | '/monitor/monitors'
     | '/monitor/profile'
     | '/monitor/results'
@@ -738,6 +749,7 @@ export interface FileRouteTypes {
     | '/(auth)/admin/subscriptions'
     | '/(auth)/admin/telegram'
     | '/(auth)/monitor/alerts'
+    | '/(auth)/monitor/keywords'
     | '/(auth)/monitor/monitors'
     | '/(auth)/monitor/profile'
     | '/(auth)/monitor/results'
@@ -1014,6 +1026,13 @@ declare module '@tanstack/react-router' {
       path: '/monitors'
       fullPath: '/monitor/monitors'
       preLoaderRoute: typeof authMonitorMonitorsRouteImport
+      parentRoute: typeof authMonitorRouteRoute
+    }
+    '/(auth)/monitor/keywords': {
+      id: '/(auth)/monitor/keywords'
+      path: '/keywords'
+      fullPath: '/monitor/keywords'
+      preLoaderRoute: typeof authMonitorKeywordsRouteImport
       parentRoute: typeof authMonitorRouteRoute
     }
     '/(auth)/monitor/alerts': {
@@ -1356,6 +1375,7 @@ const authAdminRouteRouteWithChildren = authAdminRouteRoute._addFileChildren(
 
 interface authMonitorRouteRouteChildren {
   authMonitorAlertsRoute: typeof authMonitorAlertsRoute
+  authMonitorKeywordsRoute: typeof authMonitorKeywordsRoute
   authMonitorMonitorsRoute: typeof authMonitorMonitorsRoute
   authMonitorProfileRoute: typeof authMonitorProfileRoute
   authMonitorResultsRoute: typeof authMonitorResultsRoute
@@ -1369,6 +1389,7 @@ interface authMonitorRouteRouteChildren {
 
 const authMonitorRouteRouteChildren: authMonitorRouteRouteChildren = {
   authMonitorAlertsRoute: authMonitorAlertsRoute,
+  authMonitorKeywordsRoute: authMonitorKeywordsRoute,
   authMonitorMonitorsRoute: authMonitorMonitorsRoute,
   authMonitorProfileRoute: authMonitorProfileRoute,
   authMonitorResultsRoute: authMonitorResultsRoute,

@@ -4,6 +4,7 @@ import {
   emptyPlanForm,
   formatPlanPrice,
   normalizePlanCode,
+  planKeywordLimit,
 } from './model'
 
 describe('subscription plan model', () => {
@@ -18,7 +19,7 @@ describe('subscription plan model', () => {
       priceAmount: '79.90',
       maxWatches: '100',
       minimumIntervalMinutes: '5',
-      historyDays: '90',
+      historyDays: '30',
       displayOrder: '20',
       features: 'Telegram\nCSV ixrac\nTelegram',
     })
@@ -45,18 +46,18 @@ describe('subscription plan model', () => {
   })
 
   it('keeps other limits and validates the social interval', () => {
-    const base = { max_keywords: 50, social_interval_minutes: 360 }
+    const base = { other: true, social_interval_minutes: 360 }
     const twoHours = buildPlanPayload(
       { ...emptyPlanForm, name: 'Pro', socialIntervalMinutes: '120' },
       base
     )
     expect(twoHours.data?.limits).toEqual({
-      max_keywords: 50,
+      other: true,
       social_interval_minutes: 120,
     })
 
     const standard = buildPlanPayload({ ...emptyPlanForm, name: 'Pro' }, base)
-    expect(standard.data?.limits).toEqual({ max_keywords: 50 })
+    expect(standard.data?.limits).toEqual({ other: true })
 
     const invalid = buildPlanPayload({
       ...emptyPlanForm,
@@ -64,6 +65,23 @@ describe('subscription plan model', () => {
       socialIntervalMinutes: '45',
     })
     expect(invalid.error).toContain('Sosial yoxlama')
+  })
+
+  it('stores the keyword limit and falls back to 20 per web watch', () => {
+    const plan = buildPlanPayload(
+      { ...emptyPlanForm, name: 'Pro', maxKeywords: '50', maxWatches: '3' },
+      { max_keywords: 10 }
+    ).data!
+    expect(plan.limits).toEqual({ max_keywords: 50 })
+    expect(planKeywordLimit(plan)).toBe(50)
+
+    const cleared = buildPlanPayload(
+      { ...emptyPlanForm, name: 'Pro', maxWatches: '3' },
+      { max_keywords: 10 }
+    ).data!
+    expect(cleared.limits).toEqual({})
+    expect(planKeywordLimit(cleared)).toBe(60)
+    expect(planKeywordLimit({ limits: {}, max_watches: null })).toBeNull()
   })
 
   it('formats recurring and custom prices', () => {
