@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import re
@@ -57,6 +58,53 @@ PATTERNS_FILE = "patterns.json"
 BAKU_TZ = ZoneInfo("Asia/Baku")
 USER_TELEGRAM_CACHE = {}
 ARTICLE_TITLE_INFO_CACHE = {}
+
+# Verdicts for articles already judged, so a source that is polled every few minutes
+# does not re-fetch the same ten pages each time. In memory only (reset on restart).
+#   old_news / duplicate_url never change; no_monitor_match depends on the keyword set.
+ARTICLE_VERDICT_CACHE = {}
+ARTICLE_VERDICT_MAX = 20000
+ARTICLE_VERDICT_TTL_SECONDS = {"old_news": 86400, "duplicate_url": 86400, "no_monitor_match": 1800}
+_KEYWORD_SIGNATURE_MEMO = {"id": None, "signature": ""}
+
+
+def keywords_signature(monitor_keywords_cache):
+    """Stable fingerprint of the active keyword set; '' when it is unknown."""
+    if monitor_keywords_cache is None:
+        return ""
+    memo = _KEYWORD_SIGNATURE_MEMO
+    if memo["id"] == id(monitor_keywords_cache):
+        return memo["signature"]
+    parts = sorted(
+        f"{row.get('id')}|{row.get('keyword')}|{row.get('match_type')}|{row.get('monitor_id')}"
+        for row in monitor_keywords_cache
+    )
+    signature = hashlib.sha1("\n".join(parts).encode("utf-8")).hexdigest()
+    memo["id"], memo["signature"] = id(monitor_keywords_cache), signature
+    return signature
+
+
+def cached_article_verdict(link, signature, now=None):
+    entry = ARTICLE_VERDICT_CACHE.get(normalize_link(link))
+    if not entry:
+        return ""
+    now = now if now is not None else time.time()
+    reason = entry["reason"]
+    if now - entry["at"] > ARTICLE_VERDICT_TTL_SECONDS.get(reason, 0):
+        return ""
+    if reason == "no_monitor_match" and (not signature or entry["signature"] != signature):
+        return ""
+    return reason
+
+
+def remember_article_verdict(link, reason, signature="", now=None):
+    if reason == "no_monitor_match" and not signature:
+        return
+    ARTICLE_VERDICT_CACHE[normalize_link(link)] = {
+        "reason": reason,
+        "signature": signature,
+        "at": now if now is not None else time.time(),
+    }
 LAST_MONITOR_CLEANUP = None
 TELEGRAM_LAST_ERROR = ""
 BOT_SETTINGS_CACHE = {"paused": False, "fetched_at": 0.0}
@@ -4658,10 +4706,15 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None)
         update_source_health(site, result)
         return result
 
+    keyword_signature = keywords_signature(monitor_keywords_cache)
     for item in items[:site.get("limit", MAX_LINKS_PER_SITE)]:
         title = item["title"]
         link = item["link"]
         source = item["source"]
+        verdict = cached_article_verdict(link, keyword_signature)
+        if verdict:
+            result["reason"] = verdict
+            continue
         matched_keywords = item.get("matched_keywords", [])
         raw_title = item.get("raw_title") or title
         title_info = choose_best_article_title_info(item.get("clean_title") or title, link, source_domain=source)
@@ -4689,6 +4742,7 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None)
 
         if exists(link, clean_title or title):
             result["reason"] = "duplicate_url"
+            remember_article_verdict(link, "duplicate_url")
             continue
 
         title_time = parse_datetime_to_baku(raw_title)
@@ -4713,6 +4767,8 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None)
 
         if freshness_status != "fresh":
             result["reason"] = freshness_status
+            if freshness_status == "old_news":
+                remember_article_verdict(link, "old_news")
             continue
 
         clean_title = item.get("clean_title") or clean_title_for_message(title)
@@ -4732,6 +4788,7 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None)
         pre_matches = find_matching_user_monitors(clean_title, monitor_keywords_cache)
         if not pre_matches:
             result["reason"] = "no_monitor_match"
+            remember_article_verdict(link, "no_monitor_match", keyword_signature)
             continue
 
         monitor_item_id = save_to_vizual_monitor(site, item, clean_title, published_time)
@@ -4830,6 +4887,8 @@ def check_sites(poll_commands=True):
     # per-article title cache bounded instead of growing for the process lifetime.
     if len(ARTICLE_TITLE_INFO_CACHE) > 20000:
         ARTICLE_TITLE_INFO_CACHE.clear()
+    if len(ARTICLE_VERDICT_CACHE) > ARTICLE_VERDICT_MAX:
+        ARTICLE_VERDICT_CACHE.clear()
     sites = load_sites()
     if SCHEDULER_DRY_RUN:
         scheduler_decisions = [evaluate_source_schedule(site) for site in sites]
