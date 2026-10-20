@@ -1,7 +1,16 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { Loader2, Pause, Play, Plus, Search, Trash2 } from 'lucide-react'
+import {
+  Info,
+  KeyRound,
+  Loader2,
+  Pause,
+  Play,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react'
 import {
   addKeyword,
   type CustomerKeyword,
@@ -11,8 +20,20 @@ import {
   setKeywordStatus,
 } from '@/features/keywords/data'
 import { customerQueryKeys } from '@/lib/query-keys'
+import { cn } from '@/lib/utils'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { t } from '@/lib/i18n'
+
+// The list gets a search box once it is longer than this.
+const SEARCH_THRESHOLD = 6
 
 function parseKeywordInput(value: string) {
   const seen = new Set<string>()
@@ -37,6 +58,7 @@ function KeywordsPage() {
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
   const [message, setMessage] = useState('')
+  const [inputError, setInputError] = useState('')
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [deleteCandidate, setDeleteCandidate] =
@@ -72,7 +94,7 @@ function KeywordsPage() {
       (item) => !existing.has(item.toLocaleLowerCase('az-AZ'))
     )
     if (fresh.length === 0) {
-      setMessage(
+      setInputError(
         draft.trim()
           ? t("Bu açar sözlər artıq əlavə edilib.")
           : t("Açar söz yazılmalıdır.")
@@ -80,6 +102,7 @@ function KeywordsPage() {
       return
     }
 
+    setInputError('')
     setSaving(true)
     let added = 0
     let failure = ''
@@ -145,18 +168,52 @@ function KeywordsPage() {
 
   const maxKeywords = data?.maxKeywords ?? null
   const activeCount = data?.activeCount ?? 0
+  const totalCount = data?.keywords.length ?? 0
   const limitReached = maxKeywords !== null && activeCount >= maxKeywords
+  const usage =
+    maxKeywords && maxKeywords > 0
+      ? Math.min(100, Math.round((activeCount / maxKeywords) * 100))
+      : 0
 
   return (
     <>
-      <div className='grid gap-4 p-4 md:p-6'>
-        <div>
-          <h1 className='text-2xl font-bold tracking-tight'>{t("Açar sözlər")}</h1>
-          <p className='text-muted-foreground'>{t("Sistem xəbər saytlarını və sosial şəbəkələri bu açar sözlər üzrə izləyir və uyğun nəticələri sizə göndərir.")}</p>
+      <div className='mx-auto grid w-full max-w-4xl gap-4 p-4 md:p-6'>
+        <div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
+          <div className='min-w-0'>
+            <h1 className='text-2xl font-bold tracking-tight'>{t("Açar sözlər")}</h1>
+            <p className='mt-1 text-sm text-muted-foreground'>{t("Sistem xəbər saytlarını və sosial şəbəkələri bu açar sözlər üzrə izləyir və uyğun nəticələri sizə göndərir.")}</p>
+          </div>
+          <div className='w-full shrink-0 rounded-xl border bg-card px-3 py-2 shadow-sm sm:w-52'>
+            <div className='flex items-baseline justify-between gap-2 text-sm'>
+              <span className='text-muted-foreground'>{t("Aktiv açar söz")}</span>
+              <span
+                className={cn(
+                  'font-semibold tabular-nums',
+                  limitReached && 'text-amber-700'
+                )}
+              >
+                {activeCount}
+                {maxKeywords !== null ? ` / ${maxKeywords}` : ''}
+              </span>
+            </div>
+            {maxKeywords !== null ? (
+              <div className='mt-2 h-1.5 overflow-hidden rounded-full bg-muted'>
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all',
+                    limitReached ? 'bg-amber-500' : 'bg-primary'
+                  )}
+                  style={{ width: `${usage}%` }}
+                />
+              </div>
+            ) : (
+              <p className='mt-1 text-xs text-muted-foreground'>{t("Limitsiz")}</p>
+            )}
+          </div>
         </div>
 
         {query.error ? (
-          <div className='rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive'>
+          <div className='rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive'>
             {query.error instanceof Error
               ? query.error.message
               : t("Açar sözlər yüklənmədi.")}
@@ -164,122 +221,171 @@ function KeywordsPage() {
         ) : null}
 
         {message ? (
-          <div className='rounded-2xl border border-border bg-card px-4 py-3 text-sm shadow-sm'>
+          <div
+            role='status'
+            className='rounded-xl border bg-card px-4 py-3 text-sm shadow-sm'
+          >
             {message}
           </div>
         ) : null}
 
-        <section className='grid gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm'>
-          <div className='flex flex-wrap items-center justify-between gap-2'>
-            <h2 className='text-base font-semibold'>{t("Yeni açar söz")}</h2>
-            <span
-              className={
-                limitReached
-                  ? 'rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm text-amber-700'
-                  : 'rounded-full border px-3 py-1 text-sm text-muted-foreground'
-              }
-            >
-              {t("Aktiv açar söz")}: {activeCount}
-              {maxKeywords !== null ? ` / ${maxKeywords}` : ''}
-            </span>
-          </div>
-          <div className='grid gap-3 md:grid-cols-[1fr_auto]'>
-            <textarea
+        <section className='grid gap-3 rounded-xl border bg-card p-4 shadow-sm'>
+          <h2 className='text-base font-semibold'>{t("Yeni açar söz")}</h2>
+          <div className='grid gap-2 sm:grid-cols-[1fr_auto] sm:items-start'>
+            <Textarea
               aria-label={t("Yeni açar sözlər")}
+              aria-invalid={inputError ? true : undefined}
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) => {
+                setDraft(event.target.value)
+                if (inputError) setInputError('')
+              }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && event.ctrlKey) void addKeywords()
               }}
               placeholder={t("Açar sözləri vergül və ya yeni sətrlə yaz: təşkilat, brend, şəxs, layihə, dəqiq ifadə")}
-              className='min-h-16 rounded-xl border border-border bg-card px-3 py-2 text-sm'
+              className='min-h-20 resize-y'
             />
-            <button
+            <Button
               type='button'
               onClick={() => void addKeywords()}
               disabled={saving || limitReached}
-              className='inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-60'
+              className='h-10 w-full sm:w-auto'
             >
-              {saving ? (
-                <Loader2 className='h-4 w-4 animate-spin' />
-              ) : (
-                <Plus className='h-4 w-4' />
-              )}
+              {saving ? <Loader2 className='animate-spin' /> : <Plus />}
               {t("Əlavə et")}
-            </button>
+            </Button>
           </div>
-          {limitReached ? (
-            <p className='text-sm text-amber-700'>{t("Planınızda açar söz limiti dolub. Bir açar sözü silin, dayandırın və ya planınızı yüksəldin.")}</p>
+          {inputError ? (
+            <p className='text-sm text-destructive'>{inputError}</p>
           ) : null}
-          <p className='text-xs text-muted-foreground'>{t("Hər açar söz xəbər saytlarında və Facebook, Instagram paylaşımlarında axtarılır. Sosial şəbəkələrin yoxlanma tezliyi Profil səhifəsində göstərilir. Dayandırılmış açar söz limitə daxil deyil.")}</p>
+          {limitReached ? (
+            <p className='rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800'>{t("Planınızda açar söz limiti dolub. Bir açar sözü silin, dayandırın və ya planınızı yüksəldin.")}</p>
+          ) : null}
+          <div className='flex gap-2 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground'>
+            <Info className='mt-0.5 h-3.5 w-3.5 shrink-0' />
+            <p>{t("Hər açar söz xəbər saytlarında və Facebook, Instagram paylaşımlarında axtarılır. Sosial şəbəkələrin yoxlanma tezliyi Profil səhifəsində göstərilir. Dayandırılmış açar söz limitə daxil deyil.")}</p>
+          </div>
         </section>
 
-        <section className='grid gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm'>
-          <div className='relative'>
-            <Search className='pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
-            <input
-              aria-label={t("Açar söz axtar...")}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={t("Açar söz axtar...")}
-              className='w-full rounded-xl border border-border bg-card py-2 pr-3 pl-9'
-            />
+        <section className='grid gap-3 rounded-xl border bg-card p-4 shadow-sm'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
+            <h2 className='text-base font-semibold'>
+              {t("Sizin açar sözləriniz")}
+              {totalCount ? (
+                <span className='ml-2 text-sm font-normal text-muted-foreground'>
+                  {totalCount}
+                </span>
+              ) : null}
+            </h2>
+            {totalCount > SEARCH_THRESHOLD ? (
+              <div className='relative w-full sm:w-64'>
+                <Search className='pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
+                <Input
+                  aria-label={t("Açar söz axtar...")}
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={t("Açar söz axtar...")}
+                  className='pl-9'
+                />
+              </div>
+            ) : null}
           </div>
 
-          {keywords.length === 0 ? (
-            <div className='rounded-2xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground'>
-              {data?.keywords.length
-                ? t("Axtarışa uyğun açar söz tapılmadı.")
-                : t("Hələ açar söz yoxdur. İlk açar sözü əlavə edin; uyğun nəticələr aşkar olunduqca Nəticələr səhifəsində görünəcək.")}
+          {totalCount === 0 ? (
+            <div className='flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-10 text-center'>
+              <div className='flex h-10 w-10 items-center justify-center rounded-full bg-muted'>
+                <KeyRound className='h-5 w-5 text-muted-foreground' />
+              </div>
+              <p className='font-medium'>{t("Açar söz yoxdur")}</p>
+              <p className='max-w-sm text-sm text-muted-foreground'>{t("İlk açar sözü yuxarıda əlavə edin. Uyğun nəticələr tapıldıqca Nəticələr səhifəsində görünəcək.")}</p>
             </div>
+          ) : keywords.length === 0 ? (
+            <p className='rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground'>
+              {t("Axtarışa uyğun açar söz tapılmadı.")}
+            </p>
           ) : (
-            <ul className='grid gap-2'>
-              {keywords.map((item) => (
-                <li
-                  key={item.id}
-                  className='flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2'
-                >
-                  <div className='flex min-w-0 items-center gap-2'>
-                    <span className='truncate font-medium'>{item.keyword}</span>
-                    {item.status === 'paused' ? (
-                      <span className='rounded-full border px-2 py-0.5 text-xs text-muted-foreground'>
-                        {t("Dayandırılıb")}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className='flex items-center gap-1.5'>
-                    {data?.statusSupported ? (
-                      <button
-                        type='button'
-                        onClick={() => void toggleKeyword(item)}
-                        disabled={busyId === item.id}
-                        className='inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-60'
-                      >
-                        {item.status === 'active' ? (
-                          <>
-                            <Pause className='h-4 w-4' />
-                            {t("Dayandır")}
-                          </>
-                        ) : (
-                          <>
-                            <Play className='h-4 w-4' />
-                            {t("Davam et")}
-                          </>
+            <ul className='divide-y rounded-lg border'>
+              {keywords.map((item) => {
+                const paused = item.status === 'paused'
+                const busy = busyId === item.id
+                return (
+                  <li
+                    key={item.id}
+                    className='flex items-center gap-3 px-3 py-2.5'
+                  >
+                    <div className='flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2'>
+                      <span
+                        className={cn(
+                          'font-medium break-words',
+                          paused && 'text-muted-foreground'
                         )}
-                      </button>
-                    ) : null}
-                    <button
-                      type='button'
-                      onClick={() => setDeleteCandidate(item)}
-                      disabled={busyId === item.id}
-                      className='inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-2.5 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-60'
-                    >
-                      <Trash2 className='h-4 w-4' />
-                      {t("Sil")}
-                    </button>
-                  </div>
-                </li>
-              ))}
+                      >
+                        {item.keyword}
+                      </span>
+                      <span
+                        className={cn(
+                          'inline-flex w-fit items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium',
+                          paused
+                            ? 'bg-muted text-muted-foreground'
+                            : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'h-1.5 w-1.5 rounded-full',
+                            paused ? 'bg-muted-foreground/60' : 'bg-emerald-500'
+                          )}
+                        />
+                        {paused ? t("Dayandırılıb") : t("Aktiv")}
+                      </span>
+                    </div>
+                    <div className='flex shrink-0 items-center gap-1'>
+                      {data?.statusSupported ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='icon'
+                              aria-label={paused ? t("Davam et") : t("Dayandır")}
+                              onClick={() => void toggleKeyword(item)}
+                              disabled={busy}
+                            >
+                              {busy ? (
+                                <Loader2 className='animate-spin' />
+                              ) : paused ? (
+                                <Play />
+                              ) : (
+                                <Pause />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {paused ? t("Davam et") : t("Dayandır")}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : null}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type='button'
+                            variant='ghost'
+                            size='icon'
+                            aria-label={t("Sil")}
+                            onClick={() => setDeleteCandidate(item)}
+                            disabled={busy}
+                            className='text-destructive hover:bg-destructive/10 hover:text-destructive'
+                          >
+                            <Trash2 />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t("Sil")}</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </section>

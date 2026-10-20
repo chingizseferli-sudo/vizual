@@ -774,7 +774,6 @@
   "Hər açar söz xəbər saytlarında və Facebook, Instagram paylaşımlarında axtarılır. Sosial şəbəkələrin yoxlanma tezliyi Profil səhifəsində göstərilir. Dayandırılmış açar söz limitə daxil deyil.": "Каждое ключевое слово ищется на новостных сайтах и в публикациях Facebook и Instagram. Частота проверки соцсетей указана на странице профиля. Приостановленные ключевые слова не входят в лимит.",
   "Açar söz axtar...": "Поиск ключевого слова...",
   "Axtarışa uyğun açar söz tapılmadı.": "Ключевые слова по запросу не найдены.",
-  "Hələ açar söz yoxdur. İlk açar sözü əlavə edin; uyğun nəticələr aşkar olunduqca Nəticələr səhifəsində görünəcək.": "Ключевых слов пока нет. Добавьте первое; подходящие результаты появятся на странице «Результаты».",
   "Dayandır": "Приостановить",
   "Davam et": "Возобновить",
   "Açar sözü sil": "Удалить ключевое слово",
@@ -796,5 +795,7 @@
   "Açar söz limiti": "Лимит ключевых слов",
   "Limitsiz": "Без ограничений",
   "Açar söz limitinə çatmısınız. Yeni açar söz üçün birini silin, dayandırın və ya planı genişləndirin.": "Вы достигли лимита ключевых слов. Чтобы добавить новое, удалите или приостановите одно из них либо расширьте тариф.",
-  "Limitə çatmadığınız müddətdə yeni açar sözlər əlavə edə bilərsiniz. Dayandırılmış açar sözlər limitə daxil deyil.": "Пока лимит не исчерпан, вы можете добавлять новые ключевые слова. Приостановленные ключевые слова не входят в лимит."
+  "Limitə çatmadığınız müddətdə yeni açar sözlər əlavə edə bilərsiniz. Dayandırılmış açar sözlər limitə daxil deyil.": "Пока лимит не исчерпан, вы можете добавлять новые ключевые слова. Приостановленные ключевые слова не входят в лимит.",
+  "Sizin açar sözləriniz": "Ваши ключевые слова",
+  "İlk açar sözü yuxarıda əlavə edin. Uyğun nəticələr tapıldıqca Nəticələr səhifəsində görünəcək.": "Добавьте первое ключевое слово выше. Подходящие результаты будут появляться на странице «Результаты»."
 }
