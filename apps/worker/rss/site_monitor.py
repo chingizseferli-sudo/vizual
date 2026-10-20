@@ -45,7 +45,7 @@ DISABLE_TELEGRAM_SEND = os.getenv("DISABLE_TELEGRAM_SEND", "false").strip().lowe
 TELEGRAM_ALLOW_LEGACY_UUID_LINK = os.getenv("TELEGRAM_ALLOW_LEGACY_UUID_LINK", "false").strip().lower() in {"1", "true", "yes"}
 BOT_SETTINGS_CACHE_SECONDS = 60
 VERIFY_RELEASE_REPAIR_ONLY = os.getenv("VERIFY_RELEASE_REPAIR_ONLY", "false").strip().lower() in {"1", "true", "yes"}
-SOURCE_DEFAULT_INTERVAL_MINUTES = max(1, int(os.getenv("SOURCE_DEFAULT_INTERVAL_MINUTES", "60")))
+SOURCE_DEFAULT_INTERVAL_MINUTES = max(1, int(os.getenv("SOURCE_DEFAULT_INTERVAL_MINUTES", "15")))
 SOURCE_SITEMAP_SCAN_LIMIT = max(5, int(os.getenv("SOURCE_SITEMAP_SCAN_LIMIT", "50")))
 DOMAIN_REQUEST_JITTER_SECONDS = max(0.0, float(os.getenv("DOMAIN_REQUEST_JITTER_SECONDS", "0.35")))
 CRAWLER_USER_AGENT = os.getenv(
@@ -352,22 +352,31 @@ def normalize_scheduler_method(method):
 
 def get_scheduler_base_interval_minutes(site):
     method = normalize_scheduler_method(site.get("monitor_method", ""))
+    # News is only worth sending while it is fresh (NEWS_TIME_LIMIT_HOURS), so
+    # sources are polled every few minutes. Failing sources back off separately.
     method_intervals = {
-        "rss": 10,
-        "rss_discovered": 10,
-        "google_news_fallback": 15,
-        "latest_page": 15,
-        "selector": 20,
-        "xpath_pattern": 20,
-        "homepage": 30,
-        "sitemap": 45,
-        "recoverable": 45,
-        "default": 30,
+        "rss": 5,
+        "rss_discovered": 5,
+        "google_news_fallback": 10,
+        "latest_page": 8,
+        "selector": 8,
+        "xpath_pattern": 8,
+        "homepage": 15,
+        "sitemap": 20,
+        "recoverable": 30,
+        "default": 15,
     }
     return method_intervals.get(method, method_intervals["default"])
 
 
+# The page was read but news is dropped (unreadable date, rejected title). This is
+# a parsing problem, not a tired site, so it must not slow polling down.
+LOSS_REASONS = {"no_date", "date_parse_failed", "bad_title"}
+
+
 def get_scheduler_fail_count(site):
+    if parse_crawl_state(site.get("notes")).get("last_result") in LOSS_REASONS:
+        return 0
     try:
         return int(site.get("consecutive_fail_count") or 0)
     except Exception:
@@ -638,11 +647,12 @@ def source_backoff_interval(reason, fail_count=0):
     if reason.startswith("http_5") or reason in {"site_error"}:
         return timedelta(hours=2 if fail_count < 3 else 6)
     if reason in {"rss_empty", "sitemap_empty", "latest_page_empty", "homepage_empty", "fallback_empty", "no_article"}:
-        return timedelta(minutes=45)
-    if reason in {"old_news", "no_date", "date_parse_failed", "future_date"}:
-        return timedelta(minutes=30)
-    if reason in {"no_monitor_match", "duplicate_url", "duplicate", "no_keyword_match"}:
-        return timedelta(minutes=10)
+        return timedelta(minutes=20)
+    if reason in LOSS_REASONS:
+        return timedelta(minutes=15)
+    if reason in {"old_news", "future_date", "no_monitor_match", "duplicate_url", "duplicate", "no_keyword_match", "sent"}:
+        # A healthy read: the per-method poll interval (5-20 min) alone decides the next check.
+        return timedelta(0)
     return timedelta(minutes=SOURCE_DEFAULT_INTERVAL_MINUTES)
 
 
@@ -893,11 +903,9 @@ def build_source_health_payload(site, result, now):
 
     # The page was read but real news is being dropped (unreadable date, rejected
     # title). One such cycle is noise; a streak means the source is losing news.
-    loss_reasons = {"no_date", "date_parse_failed", "bad_title"}
-
     if reason in hard_fail_reasons:
         payload["last_error"] = reason
-    elif reason in loss_reasons and sent == 0:
+    elif reason in LOSS_REASONS and sent == 0:
         loss_count = int(site.get("consecutive_fail_count") or 0) + 1
         payload["consecutive_fail_count"] = loss_count
         payload["last_success_at"] = now

@@ -137,6 +137,22 @@ class SourceHealthPayloadTests(unittest.TestCase):
         self.assertEqual(payload["consecutive_fail_count"], 0)
         self.assertIsNone(payload["last_error"])
 
+    def test_healthy_reads_are_polled_again_after_the_method_interval_only(self):
+        from datetime import timedelta
+        for reason in ("old_news", "no_monitor_match", "sent", "duplicate"):
+            self.assertEqual(site_monitor.source_backoff_interval(reason), timedelta(0), reason)
+        self.assertEqual(site_monitor.get_scheduler_base_interval_minutes({"monitor_method": "rss"}), 5)
+        self.assertEqual(site_monitor.get_scheduler_base_interval_minutes({"monitor_method": "latest_page"}), 8)
+        # Blocks and dead sites still back off for hours.
+        self.assertGreaterEqual(site_monitor.source_backoff_interval("http_403"), timedelta(hours=24))
+
+    def test_loss_streak_does_not_slow_polling(self):
+        notes = site_monitor.merge_crawl_state_notes("", {"last_result": "bad_title"})
+        site = {"monitor_method": "rss", "consecutive_fail_count": 4, "notes": notes}
+        self.assertEqual(site_monitor.get_scheduler_fail_count(site), 0)
+        site["notes"] = site_monitor.merge_crawl_state_notes("", {"last_result": "selector_empty"})
+        self.assertEqual(site_monitor.get_scheduler_fail_count(site), 4)
+
     def test_hard_failure_sets_last_error(self):
         payload, reason, hard_fail_reasons = site_monitor.build_source_health_payload(
             {"_read_failure_reason": "http_403"},
