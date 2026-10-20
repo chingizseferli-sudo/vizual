@@ -891,8 +891,18 @@ def build_source_health_payload(site, result, now):
         "homepage_empty", "fallback_empty",
     }
 
+    # The page was read but real news is being dropped (unreadable date, rejected
+    # title). One such cycle is noise; a streak means the source is losing news.
+    loss_reasons = {"no_date", "date_parse_failed", "bad_title"}
+
     if reason in hard_fail_reasons:
         payload["last_error"] = reason
+    elif reason in loss_reasons and sent == 0:
+        loss_count = int(site.get("consecutive_fail_count") or 0) + 1
+        payload["consecutive_fail_count"] = loss_count
+        payload["last_success_at"] = now
+        if loss_count >= EMPTY_READ_FAIL_THRESHOLD:
+            payload["last_error"] = reason
     elif candidates == 0 and reason in empty_read_reasons:
         empty_count = int(site.get("consecutive_fail_count") or 0) + 1
         payload["consecutive_fail_count"] = empty_count

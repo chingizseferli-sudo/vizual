@@ -109,6 +109,34 @@ class SourceHealthPayloadTests(unittest.TestCase):
         self.assertEqual(payload["last_error"], "selector_empty")
         self.assertNotIn("last_success_at", payload)
 
+    def test_loss_streak_becomes_error_and_resets_on_normal_read(self):
+        site = {"_read_failure_reason": "bad_title", "consecutive_fail_count": 1}
+        payload, _, _ = site_monitor.build_source_health_payload(
+            site,
+            {"reason": "bad_title", "candidates": 3, "sent": 0},
+            "2026-06-25T20:00:00+04:00",
+        )
+        self.assertEqual(payload["consecutive_fail_count"], 2)
+        self.assertNotIn("last_error", payload)
+
+        site["consecutive_fail_count"] = 2
+        payload, _, _ = site_monitor.build_source_health_payload(
+            site,
+            {"reason": "no_date", "candidates": 3, "sent": 0},
+            "2026-06-25T20:30:00+04:00",
+        )
+        self.assertEqual(payload["consecutive_fail_count"], 3)
+        self.assertEqual(payload["last_error"], "no_date")
+
+        site["consecutive_fail_count"] = 3
+        payload, _, _ = site_monitor.build_source_health_payload(
+            site,
+            {"reason": "old_news", "candidates": 3, "sent": 0},
+            "2026-06-25T21:00:00+04:00",
+        )
+        self.assertEqual(payload["consecutive_fail_count"], 0)
+        self.assertIsNone(payload["last_error"])
+
     def test_hard_failure_sets_last_error(self):
         payload, reason, hard_fail_reasons = site_monitor.build_source_health_payload(
             {"_read_failure_reason": "http_403"},
