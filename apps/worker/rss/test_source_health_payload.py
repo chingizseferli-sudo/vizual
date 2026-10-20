@@ -200,5 +200,42 @@ class SourceHealthPayloadTests(unittest.TestCase):
         self.assertIn("bot_sent=1", payload["notes"])
 
 
+class ArticleVerdictCacheTests(unittest.TestCase):
+    def setUp(self):
+        site_monitor.ARTICLE_VERDICT_CACHE.clear()
+        self.keywords = [{"id": 1, "keyword": "neft", "match_type": "contains", "monitor_id": 7}]
+        self.signature = site_monitor.keywords_signature(self.keywords)
+
+    def test_old_news_and_duplicate_are_remembered(self):
+        for reason in ("old_news", "duplicate_url"):
+            link = f"https://example.az/{reason}-xeber"
+            site_monitor.remember_article_verdict(link, reason)
+            self.assertEqual(site_monitor.cached_article_verdict(link, self.signature), reason)
+
+    def test_verdict_expires(self):
+        link = "https://example.az/kohne-xeber"
+        site_monitor.remember_article_verdict(link, "old_news", now=1000)
+        self.assertEqual(site_monitor.cached_article_verdict(link, self.signature, now=1000 + 86000), "old_news")
+        self.assertEqual(site_monitor.cached_article_verdict(link, self.signature, now=1000 + 90000), "")
+
+    def test_no_monitor_match_is_dropped_when_keywords_change(self):
+        link = "https://example.az/xeber-bir"
+        site_monitor.remember_article_verdict(link, "no_monitor_match", self.signature, now=1000)
+        self.assertEqual(site_monitor.cached_article_verdict(link, self.signature, now=1100), "no_monitor_match")
+        changed = site_monitor.keywords_signature(
+            self.keywords + [{"id": 2, "keyword": "qaz", "match_type": "contains", "monitor_id": 7}]
+        )
+        self.assertEqual(site_monitor.cached_article_verdict(link, changed, now=1100), "")
+        self.assertEqual(site_monitor.cached_article_verdict(link, self.signature, now=1000 + 2000), "")
+
+    def test_no_monitor_match_without_signature_is_not_cached(self):
+        link = "https://example.az/xeber-iki"
+        site_monitor.remember_article_verdict(link, "no_monitor_match", "")
+        self.assertEqual(site_monitor.cached_article_verdict(link, ""), "")
+
+    def test_unknown_link_has_no_verdict(self):
+        self.assertEqual(site_monitor.cached_article_verdict("https://example.az/yeni", self.signature), "")
+
+
 if __name__ == "__main__":
     unittest.main()
