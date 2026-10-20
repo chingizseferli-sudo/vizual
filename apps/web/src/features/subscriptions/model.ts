@@ -201,6 +201,9 @@ export function buildPlanPayload(
     integer: true,
   })
   if (historyDays.error) return { error: historyDays.error }
+  if (historyDays.value !== null && (historyDays.value < 1 || historyDays.value > 30)) {
+    return { error: 'Tarixçə günü 1-30 arası olmalıdır: nəticələr 30 gün saxlanır.' }
+  }
 
   const socialInterval = values.socialIntervalMinutes
     ? Number(values.socialIntervalMinutes)

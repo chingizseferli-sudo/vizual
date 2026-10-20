@@ -29,7 +29,7 @@ describe('subscription plan model', () => {
       price_amount: 79.9,
       max_watches: 100,
       minimum_interval_minutes: 5,
-      history_days: 90,
+      history_days: 30,
       features: ['Telegram', 'CSV ixrac'],
     })
   })
