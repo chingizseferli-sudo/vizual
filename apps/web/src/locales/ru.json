@@ -727,5 +727,15 @@
   "Reputasiya izləmə": "Мониторинг репутации",
   "Təşkilat adı, rəhbər şəxs, layihə və kampaniya mövzuları ardıcıl izlənir.": "Последовательно отслеживаются название организации, руководитель, проекты и темы кампаний.",
   "Veb dəyişiklik izləmə": "Отслеживание изменений на сайтах",
-  "Seçilmiş səhifə sahələri dəyişdikdə tarixçə və bildiriş yaranır.": "При изменении выбранных частей страницы создаются история и уведомление."
+  "Seçilmiş səhifə sahələri dəyişdikdə tarixçə və bildiriş yaranır.": "При изменении выбранных частей страницы создаются история и уведомление.",
+  "Mənbə növü": "Тип источника",
+  "Vebsaytlar": "Веб-сайты",
+  "Sosial şəbəkələr": "Социальные сети",
+  "Sosial şəbəkə": "Социальная сеть",
+  "Bütün şəbəkələr": "Все сети",
+  "Bütün saytlar": "Все сайты",
+  "sayt": "сайтов",
+  "Sayt axtar": "Поиск сайта",
+  "Seçimi təmizlə": "Сбросить выбор",
+  "Sayt tapılmadı": "Сайт не найден"
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import {
+  ChevronDown,
   Download,
   ExternalLink,
   FileCode2,
@@ -10,6 +11,13 @@ import {
   Loader2,
   Search,
 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
 import { dateLocale, t } from '@/lib/i18n'
@@ -42,6 +50,36 @@ type FilterOption = {
 }
 
 type ExportRange = '1' | '7' | '30' | 'all'
+
+type SourceCategory = 'web' | 'social'
+type SocialNetwork = 'facebook' | 'instagram'
+
+type ResultsSearch = {
+  cat?: SourceCategory
+  sites?: string
+  net?: SocialNetwork
+}
+
+const socialNetworkLabels: Record<SocialNetwork, string> = {
+  facebook: 'Facebook',
+  instagram: 'Instagram',
+}
+
+// A plain validator keeps zod out of the entry bundle.
+function validateResultsSearch(search: Record<string, unknown>): ResultsSearch {
+  const next: ResultsSearch = {}
+  if (search.cat === 'web' || search.cat === 'social') next.cat = search.cat
+  if (next.cat === 'web' && typeof search.sites === 'string' && search.sites) {
+    next.sites = search.sites
+  }
+  if (
+    next.cat === 'social' &&
+    (search.net === 'facebook' || search.net === 'instagram')
+  ) {
+    next.net = search.net
+  }
+  return next
+}
 
 const exportRangeLabels: Record<ExportRange, string> = {
   '1': t("Son 1 gün"),
@@ -82,6 +120,28 @@ function getHost(url: string | undefined) {
   } catch {
     return url
   }
+}
+
+// Classified by link host, so it works for every row, including ones saved
+// before sources had a source_type.
+function getSocialNetwork(host: string): SocialNetwork | null {
+  if (/(^|\.)(facebook\.com|fb\.com|fb\.watch)$/.test(host)) return 'facebook'
+  if (/(^|\.)instagram\.com$/.test(host)) return 'instagram'
+  return null
+}
+
+function matchesSourceFilter(
+  host: string,
+  category: SourceCategory | undefined,
+  sites: string[],
+  network: SocialNetwork | undefined
+) {
+  if (!category) return true
+  const rowNetwork = getSocialNetwork(host)
+  if (category === 'social') {
+    return rowNetwork !== null && (!network || rowNetwork === network)
+  }
+  return rowNetwork === null && (sites.length === 0 || sites.includes(host))
 }
 
 function getRowDate(row: ResultRow) {
@@ -290,7 +350,15 @@ function ResultsPage() {
   const [search, setSearch] = useState('')
   const [monitorFilter, setMonitorFilter] = useState(ALL)
   const [keywordFilter, setKeywordFilter] = useState(ALL)
-  const [sourceFilter, setSourceFilter] = useState(ALL)
+  const sourceSearch = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const sourceCategory = sourceSearch.cat
+  const selectedSites = useMemo(
+    () => (sourceSearch.sites ? sourceSearch.sites.split(',') : []),
+    [sourceSearch.sites]
+  )
+  const socialNetwork = sourceSearch.net
+  const [siteQuery, setSiteQuery] = useState('')
   const [dateFilter, setDateFilter] = useState('')
   const [exportRange, setExportRange] = useState<ExportRange>('1')
   const [page, setPage] = useState(1)
@@ -301,7 +369,9 @@ function ResultsPage() {
     search,
     monitorFilter,
     keywordFilter,
-    sourceFilter,
+    sourceCategory,
+    selectedSites,
+    socialNetwork,
     dateFilter,
     exportRange,
   ])
@@ -335,18 +405,41 @@ function ResultsPage() {
       .map((value) => ({ value, label: value }))
   }, [periodRows])
 
-  const sourceOptions = useMemo<FilterOption[]>(() => {
-    const values = Array.from(
-      new Set(
-        periodRows
-          .map((row) => getHost(row.monitored_items?.url))
-          .filter((value) => value !== '-')
-      )
+  const siteOptions = useMemo<string[]>(() => {
+    const values = new Set(
+      periodRows
+        .map((row) => getHost(row.monitored_items?.url))
+        .filter((value) => value !== '-' && !getSocialNetwork(value))
     )
-    return values
-      .sort((a, b) => a.localeCompare(b, 'az'))
-      .map((value) => ({ value, label: value }))
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'az'))
   }, [periodRows])
+
+  const networkOptions = useMemo<SocialNetwork[]>(() => {
+    const values = new Set(
+      periodRows
+        .map((row) => getSocialNetwork(getHost(row.monitored_items?.url)))
+        .filter((value): value is SocialNetwork => value !== null)
+    )
+    return (['facebook', 'instagram'] as SocialNetwork[]).filter((value) =>
+      values.has(value)
+    )
+  }, [periodRows])
+
+  const visibleSiteOptions = useMemo(() => {
+    const q = siteQuery.toLocaleLowerCase('az-AZ').trim()
+    return q ? siteOptions.filter((site) => site.includes(q)) : siteOptions
+  }, [siteOptions, siteQuery])
+
+  function setSourceSearch(next: ResultsSearch) {
+    void navigate({ search: next, replace: true })
+  }
+
+  function toggleSite(site: string) {
+    const next = selectedSites.includes(site)
+      ? selectedSites.filter((value) => value !== site)
+      : [...selectedSites, site]
+    setSourceSearch({ cat: 'web', sites: next.join(',') || undefined })
+  }
 
   const filteredRows = useMemo(() => {
     const q = search.toLocaleLowerCase('az-AZ').trim()
@@ -367,7 +460,7 @@ function ResultsPage() {
         matchesSearch &&
         (monitorFilter === ALL || row.monitor_id === monitorFilter) &&
         (keywordFilter === ALL || row.matched_keyword === keywordFilter) &&
-        (sourceFilter === ALL || host === sourceFilter) &&
+        matchesSourceFilter(host, sourceCategory, selectedSites, socialNetwork) &&
         (!dateFilter || foundDate === dateFilter)
       )
     })
@@ -376,7 +469,9 @@ function ResultsPage() {
     search,
     monitorFilter,
     keywordFilter,
-    sourceFilter,
+    sourceCategory,
+    selectedSites,
+    socialNetwork,
     dateFilter,
   ])
 
@@ -404,7 +499,7 @@ function ResultsPage() {
     setSearch('')
     setMonitorFilter(ALL)
     setKeywordFilter(ALL)
-    setSourceFilter(ALL)
+    setSourceSearch({})
     setDateFilter('')
   }
 
@@ -672,7 +767,7 @@ function ResultsPage() {
               {exportRows.length}{' '}{t("nəticə")}</button>
             <button
               type='button'
-              onClick={() => setSourceFilter(ALL)}
+              onClick={() => setSourceSearch({})}
               className='rounded-xl bg-muted/50 px-3 py-2 font-semibold text-muted-foreground transition hover:bg-muted'
             >
               {uniqueMedia} media
@@ -777,19 +872,110 @@ function ResultsPage() {
             ))}
           </select>
 
-          <select
-            aria-label={t("Mənbə")}
-            value={sourceFilter}
-            onChange={(event) => setSourceFilter(event.target.value)}
-            className='h-10 rounded-xl border border-border bg-card px-3 text-sm'
-          >
-            <option value={ALL}>{t("Bütün mənbələr")}</option>
-            {sourceOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div className='grid grid-cols-2 gap-2'>
+            <select
+              aria-label={t("Mənbə növü")}
+              value={sourceCategory ?? ALL}
+              onChange={(event) => {
+                const value = event.target.value
+                setSourceSearch(
+                  value === 'web' || value === 'social' ? { cat: value } : {}
+                )
+              }}
+              className='h-10 min-w-0 rounded-xl border border-border bg-card px-3 text-sm'
+            >
+              <option value={ALL}>{t("Bütün mənbələr")}</option>
+              <option value='web'>{t("Vebsaytlar")}</option>
+              <option value='social'>{t("Sosial şəbəkələr")}</option>
+            </select>
+
+            {sourceCategory === 'social' ? (
+              <select
+                aria-label={t("Sosial şəbəkə")}
+                value={socialNetwork ?? ALL}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setSourceSearch({
+                    cat: 'social',
+                    net:
+                      value === 'facebook' || value === 'instagram'
+                        ? value
+                        : undefined,
+                  })
+                }}
+                className='h-10 min-w-0 rounded-xl border border-border bg-card px-3 text-sm'
+              >
+                <option value={ALL}>{t("Bütün şəbəkələr")}</option>
+                {networkOptions.map((network) => (
+                  <option key={network} value={network}>
+                    {socialNetworkLabels[network]}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <DropdownMenu onOpenChange={(open) => !open && setSiteQuery('')}>
+                <DropdownMenuTrigger
+                  disabled={sourceCategory !== 'web'}
+                  className='inline-flex h-10 min-w-0 items-center justify-between gap-1 rounded-xl border border-border bg-card px-3 text-left text-sm disabled:cursor-not-allowed disabled:opacity-50'
+                >
+                  <span className='truncate'>
+                    {selectedSites.length === 0
+                      ? t("Bütün saytlar")
+                      : selectedSites.length === 1
+                        ? selectedSites[0]
+                        : `${selectedSites.length} ${t("sayt")}`}
+                  </span>
+                  <ChevronDown className='h-4 w-4 shrink-0 text-muted-foreground' />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align='end'
+                  className='w-[min(18rem,calc(100vw-2rem))]'
+                >
+                  <div className='p-1'>
+                    <input
+                      autoFocus
+                      aria-label={t("Sayt axtar")}
+                      value={siteQuery}
+                      onChange={(event) => setSiteQuery(event.target.value)}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      placeholder={t("Sayt axtar")}
+                      className='h-9 w-full rounded-lg border border-border bg-card px-2 text-sm'
+                    />
+                  </div>
+                  {selectedSites.length > 0 ? (
+                    <>
+                      <button
+                        type='button'
+                        onClick={() => setSourceSearch({ cat: 'web' })}
+                        className='w-full rounded-sm px-2 py-1.5 text-left text-sm font-semibold text-primary hover:bg-muted'
+                      >
+                        {t("Seçimi təmizlə")}
+                      </button>
+                      <DropdownMenuSeparator />
+                    </>
+                  ) : null}
+                  <div className='max-h-64 overflow-y-auto'>
+                    {visibleSiteOptions.map((site) => (
+                      <DropdownMenuCheckboxItem
+                        key={site}
+                        checked={selectedSites.includes(site)}
+                        onCheckedChange={() => toggleSite(site)}
+                        onSelect={(event) => event.preventDefault()}
+                        className='break-all'
+                      >
+                        {site}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                    {visibleSiteOptions.length === 0 ? (
+                      <div className='px-2 py-1.5 text-sm text-muted-foreground'>
+                        {t("Sayt tapılmadı")}
+                      </div>
+                    ) : null}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
 
           <input
             type='date'
@@ -896,4 +1082,5 @@ function ResultsPage() {
 }
 export const Route = createFileRoute('/(auth)/monitor/results')({
   component: ResultsPage,
+  validateSearch: validateResultsSearch,
 })
