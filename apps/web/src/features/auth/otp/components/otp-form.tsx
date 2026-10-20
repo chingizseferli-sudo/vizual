@@ -20,12 +20,13 @@ import {
   InputOTPSlot,
   InputOTPSeparator,
 } from '@/components/ui/input-otp'
+import { t } from '@/lib/i18n'
 
 const formSchema = z.object({
   otp: z
     .string()
-    .min(6, '6 rəqəmli kodu daxil edin.')
-    .max(6, '6 rəqəmli kodu daxil edin.'),
+    .min(6, t("6 rəqəmli kodu daxil edin."))
+    .max(6, t("6 rəqəmli kodu daxil edin.")),
 })
 
 type OtpFormProps = React.HTMLAttributes<HTMLFormElement>
@@ -63,7 +64,7 @@ export function OtpForm({ className, ...props }: OtpFormProps) {
           name='otp'
           render={({ field }) => (
             <FormItem>
-              <FormLabel className='sr-only'>Birdəfəlik təsdiq kodu</FormLabel>
+              <FormLabel className='sr-only'>{t("Birdəfəlik təsdiq kodu")}</FormLabel>
               <FormControl>
                 <InputOTP
                   maxLength={6}
@@ -90,9 +91,7 @@ export function OtpForm({ className, ...props }: OtpFormProps) {
             </FormItem>
           )}
         />
-        <Button className='mt-2' disabled={otp.length < 6 || isLoading}>
-          Təsdiqlə
-        </Button>
+        <Button className='mt-2' disabled={otp.length < 6 || isLoading}>{t("Təsdiqlə")}</Button>
       </form>
     </Form>
   )

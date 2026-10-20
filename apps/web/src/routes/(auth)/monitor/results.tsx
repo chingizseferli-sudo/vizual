@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
+import { dateLocale, t } from '@/lib/i18n'
 
 const PAGE_SIZE = 12
 const RESULT_FETCH_BATCH_SIZE = 1000
@@ -43,10 +44,10 @@ type FilterOption = {
 type ExportRange = '1' | '7' | '30' | 'all'
 
 const exportRangeLabels: Record<ExportRange, string> = {
-  '1': 'Son 1 gün',
-  '7': 'Son 7 gün',
-  '30': 'Son 30 gün',
-  all: 'Bütün nəticələr',
+  '1': t("Son 1 gün"),
+  '7': t("Son 7 gün"),
+  '30': t("Son 30 gün"),
+  all: t("Bütün nəticələr"),
 }
 
 function decodeHtml(text: string) {
@@ -58,7 +59,7 @@ function decodeHtml(text: string) {
 function formatDate(value: string | null) {
   if (!value) return '-'
 
-  return new Date(value).toLocaleString('az-AZ', {
+  return new Date(value).toLocaleString(dateLocale(), {
     timeZone: 'Asia/Baku',
     day: '2-digit',
     month: '2-digit',
@@ -139,9 +140,9 @@ function escapeHtml(value: string | null | undefined) {
 function mapExportRow(row: ResultRow) {
   const item = row.monitored_items
   return {
-    monitor: row.user_monitors?.name || 'Monitor',
+    monitor: row.user_monitors?.name || t("Monitor"),
     keyword: row.matched_keyword || '-',
-    title: item?.title ? decodeHtml(item.title) : 'Xəbər tapılmadı',
+    title: item?.title ? decodeHtml(item.title) : t("Xəbər tapılmadı"),
     source: getHost(item?.url),
     url: item?.url || '',
     published_at: formatDate(item?.published_at || null),
@@ -172,9 +173,7 @@ function Pagination({
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={page <= 1}
           className='rounded-lg border border-border bg-card px-3 py-2 text-sm font-bold hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50'
-        >
-          Əvvəlki
-        </button>
+        >{t("Əvvəlki")}</button>
         <span className='text-sm font-semibold text-foreground'>
           {page} / {totalPages}
         </span>
@@ -183,9 +182,7 @@ function Pagination({
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           disabled={page >= totalPages}
           className='rounded-lg border border-border bg-card px-3 py-2 text-sm font-bold hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50'
-        >
-          Növbəti
-        </button>
+        >{t("Növbəti")}</button>
       </div>
     )
   }
@@ -193,7 +190,7 @@ function Pagination({
   return (
     <div className='flex flex-col gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between'>
       <div className='text-sm text-muted-foreground'>
-        {totalItems} nəticə | səhifə {page} / {totalPages}
+        {totalItems}{' '}{t("nəticə | səhifə")}{' '}{page} / {totalPages}
       </div>
 
       <div className='flex gap-2'>
@@ -202,17 +199,13 @@ function Pagination({
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={page <= 1}
           className='rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50'
-        >
-          Əvvəlki
-        </button>
+        >{t("Əvvəlki")}</button>
         <button
           type='button'
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           disabled={page >= totalPages}
           className='rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50'
-        >
-          Növbəti
-        </button>
+        >{t("Növbəti")}</button>
       </div>
     </div>
   )
@@ -232,7 +225,7 @@ async function fetchResultsData(): Promise<ResultsData> {
   if (userError || !user) {
     return {
       rows: [],
-      errorMessage: 'Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun.',
+      errorMessage: t("Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun."),
     }
   }
 
@@ -245,7 +238,7 @@ async function fetchResultsData(): Promise<ResultsData> {
     console.error('User monitor load error:', monitorsError)
     return {
       rows: [],
-      errorMessage: 'Monitorlar yüklənmədi. Bir az sonra yenidən yoxlayın.',
+      errorMessage: t("Monitorlar yüklənmədi. Bir az sonra yenidən yoxlayın."),
     }
   }
 
@@ -272,7 +265,7 @@ async function fetchResultsData(): Promise<ResultsData> {
 
     if (error) {
       console.error('User results error:', error)
-      return { rows: [], errorMessage: 'Nəticələri yükləmək mümkün olmadı.' }
+      return { rows: [], errorMessage: t("Nəticələri yükləmək mümkün olmadı.") }
     }
 
     const batch = (data || []) as unknown as ResultRow[]
@@ -326,7 +319,7 @@ function ResultsPage() {
   const monitorOptions = useMemo<FilterOption[]>(() => {
     const map = new Map<string, string>()
     periodRows.forEach((row) =>
-      map.set(row.monitor_id, row.user_monitors?.name || 'Monitor')
+      map.set(row.monitor_id, row.user_monitors?.name || t("Monitor"))
     )
     return Array.from(map, ([value, label]) => ({ value, label })).sort(
       (a, b) => a.label.localeCompare(b.label, 'az')
@@ -421,13 +414,13 @@ function ResultsPage() {
     if (format === 'csv') {
       downloadCsv('tapilan-xeberler.csv', [
         [
-          'Monitor',
-          'Açar söz',
-          'Başlıq',
-          'Mənbə',
-          'Link',
-          'Dərc tarixi',
-          'Tapılma vaxtı',
+          t("Monitor"),
+          t("Açar söz"),
+          t("Başlıq"),
+          t("Mənbə"),
+          t("Link"),
+          t("Dərc tarixi"),
+          t("Tapılma vaxtı"),
         ],
         ...mappedRows.map((row) => [
           row.monitor,
@@ -637,7 +630,7 @@ function ResultsPage() {
     return (
       <div className='flex min-h-[360px] items-center justify-center p-6'>
         <Loader2 className='mr-2 h-5 w-5 animate-spin' />
-        <span>Nəticələr yüklənir...</span>
+        <span>{t("Nəticələr yüklənir...")}</span>
       </div>
     )
   }
@@ -646,12 +639,8 @@ function ResultsPage() {
     <div className='grid gap-3 p-3 md:p-4'>
       <div className='flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between'>
         <div className='min-w-0'>
-          <h1 className='text-2xl font-semibold tracking-tight text-foreground md:text-3xl'>
-            Tapılan xəbərlər
-          </h1>
-          <p className='mt-1 text-sm text-muted-foreground'>
-            Açar sözlərinizə uyğun gələn son media nəticələri.
-          </p>
+          <h1 className='text-2xl font-semibold tracking-tight text-foreground md:text-3xl'>{t("Tapılan xəbərlər")}</h1>
+          <p className='mt-1 text-sm text-muted-foreground'>{t("Açar sözlərinizə uyğun gələn son media nəticələri.")}</p>
         </div>
         <Pagination
           page={safePage}
@@ -680,8 +669,7 @@ function ResultsPage() {
               onClick={clearResultFilters}
               className='rounded-xl bg-muted/50 px-3 py-2 font-semibold text-muted-foreground transition hover:bg-muted'
             >
-              {exportRows.length} nəticə
-            </button>
+              {exportRows.length}{' '}{t("nəticə")}</button>
             <button
               type='button'
               onClick={() => setSourceFilter(ALL)}
@@ -701,13 +689,12 @@ function ResultsPage() {
               onClick={() => setKeywordFilter(ALL)}
               className='rounded-xl bg-muted/50 px-3 py-2 font-semibold text-muted-foreground transition hover:bg-muted'
             >
-              {uniqueKeywords} açar söz
-            </button>
+              {uniqueKeywords}{' '}{t("açar söz")}</button>
           </div>
 
           <div className='flex flex-wrap gap-2'>
             <select
-              aria-label='İxrac dövrü'
+              aria-label={t("İxrac dövrü")}
               value={exportRange}
               onChange={(event) =>
                 setExportRange(event.target.value as ExportRange)
@@ -754,21 +741,21 @@ function ResultsPage() {
           <div className='relative'>
             <Search className='pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
             <input
-              aria-label='Başlıq, monitor, link və ya açar söz üzrə axtar...'
+              aria-label={t("Başlıq, monitor, link və ya açar söz üzrə axtar...")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder='Başlıq, monitor, link və ya açar söz üzrə axtar...'
+              placeholder={t("Başlıq, monitor, link və ya açar söz üzrə axtar...")}
               className='h-10 w-full rounded-xl border border-border bg-card pr-3 pl-9 text-sm'
             />
           </div>
 
           <select
-            aria-label='Monitor'
+            aria-label={t("Monitor")}
             value={monitorFilter}
             onChange={(event) => setMonitorFilter(event.target.value)}
             className='h-10 rounded-xl border border-border bg-card px-3 text-sm'
           >
-            <option value={ALL}>Bütün monitorlar</option>
+            <option value={ALL}>{t("Bütün monitorlar")}</option>
             {monitorOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -777,12 +764,12 @@ function ResultsPage() {
           </select>
 
           <select
-            aria-label='Açar söz'
+            aria-label={t("Açar söz")}
             value={keywordFilter}
             onChange={(event) => setKeywordFilter(event.target.value)}
             className='h-10 rounded-xl border border-border bg-card px-3 text-sm'
           >
-            <option value={ALL}>Bütün açar sözlər</option>
+            <option value={ALL}>{t("Bütün açar sözlər")}</option>
             {keywordOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -791,12 +778,12 @@ function ResultsPage() {
           </select>
 
           <select
-            aria-label='Mənbə'
+            aria-label={t("Mənbə")}
             value={sourceFilter}
             onChange={(event) => setSourceFilter(event.target.value)}
             className='h-10 rounded-xl border border-border bg-card px-3 text-sm'
           >
-            <option value={ALL}>Bütün mənbələr</option>
+            <option value={ALL}>{t("Bütün mənbələr")}</option>
             {sourceOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -812,16 +799,13 @@ function ResultsPage() {
           />
         </div>
 
-        <p className='mt-2 text-xs text-muted-foreground'>
-          Sistem mənbələri mütəmadi yoxlayır; uyğun yeni material tapıldıqda bu
-          siyahıya əlavə olunur.
-        </p>
+        <p className='mt-2 text-xs text-muted-foreground'>{t("Sistem mənbələri mütəmadi yoxlayır; uyğun yeni material tapıldıqda bu siyahıya əlavə olunur.")}</p>
       </section>
 
       <div className='overflow-hidden rounded-2xl border border-border bg-card shadow-sm'>
         <div className='flex items-center justify-between border-b border-border px-3 py-2 text-sm text-muted-foreground'>
           <span>
-            {filteredRows.length} nəticə | səhifə {safePage} / {totalPages}
+            {filteredRows.length}{' '}{t("nəticə | səhifə")}{' '}{safePage} / {totalPages}
           </span>
           <Pagination
             page={safePage}
@@ -835,7 +819,7 @@ function ResultsPage() {
         <div className='divide-y divide-slate-100'>
           {paginatedRows.map((row) => {
             const item = row.monitored_items
-            const title = item ? decodeHtml(item.title) : 'Xəbər tapılmadı'
+            const title = item ? decodeHtml(item.title) : t("Xəbər tapılmadı")
             const detectedAt = item?.detected_at || row.created_at
 
             return (
@@ -847,10 +831,10 @@ function ResultsPage() {
                   <div className='min-w-0 flex-1'>
                     <div className='flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-muted-foreground'>
                       <span className='rounded-full bg-muted px-2 py-0.5'>
-                        {row.user_monitors?.name || 'Monitor'}
+                        {row.user_monitors?.name || t("Monitor")}
                       </span>
                       <span className='rounded-full bg-primary/10 px-2 py-0.5 text-primary'>
-                        {row.matched_keyword || 'Açar söz yoxdur'}
+                        {row.matched_keyword || t("Açar söz yoxdur")}
                       </span>
                       <span className='rounded-full bg-muted px-2 py-0.5'>
                         {getHost(item?.url)}
@@ -873,10 +857,9 @@ function ResultsPage() {
                     )}
 
                     <div className='mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground'>
-                      <span>
-                        Dərc: {formatDate(item?.published_at || null)}
+                      <span>{t("Dərc:")}{' '}{formatDate(item?.published_at || null)}
                       </span>
-                      <span>Tapıldı: {formatDate(detectedAt)}</span>
+                      <span>{t("Tapıldı:")}{' '}{formatDate(detectedAt)}</span>
                     </div>
                   </div>
 
@@ -886,9 +869,7 @@ function ResultsPage() {
                       target='_blank'
                       rel='noreferrer'
                       className='inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-border px-2.5 text-xs font-bold hover:bg-muted/50'
-                    >
-                      Aç
-                      <ExternalLink className='h-3.5 w-3.5' />
+                    >{t("Aç")}<ExternalLink className='h-3.5 w-3.5' />
                     </a>
                   ) : null}
                 </div>
@@ -898,12 +879,8 @@ function ResultsPage() {
 
           {paginatedRows.length === 0 && !errorMessage && (
             <div className='p-6 text-center'>
-              <div className='font-medium'>Hələ nəticə yoxdur</div>
-              <p className='mx-auto mt-1 max-w-md text-sm text-muted-foreground'>
-                Sistem mənbələri yoxladıqca uyğun media materialları burada
-                görünəcək. Uzun müddət nəticə yaranmırsa, açar sözləri daha
-                konkret yazmağı yoxlayın.
-              </p>
+              <div className='font-medium'>{t("Hələ nəticə yoxdur")}</div>
+              <p className='mx-auto mt-1 max-w-md text-sm text-muted-foreground'>{t("Sistem mənbələri yoxladıqca uyğun media materialları burada görünəcək. Uzun müddət nəticə yaranmırsa, açar sözləri daha konkret yazmağı yoxlayın.")}</p>
               <Link
                 to='/monitor/monitors'
                 className='mt-3 inline-flex rounded-lg border px-3 py-2 text-sm hover:bg-muted'

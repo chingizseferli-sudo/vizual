@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { dateLocale, t } from '@/lib/i18n'
 
 type NotificationRow = {
   id: string
@@ -63,7 +64,7 @@ function decodeHtml(value: string) {
 function formatTime(value: string | null) {
   if (!value) return '-'
 
-  return new Date(value).toLocaleString('az-AZ', {
+  return new Date(value).toLocaleString(dateLocale(), {
     timeZone: 'Asia/Baku',
     month: '2-digit',
     day: '2-digit',
@@ -73,7 +74,7 @@ function formatTime(value: string | null) {
 }
 
 function getHost(url: string | null | undefined) {
-  if (!url) return 'Mənbə yoxdur'
+  if (!url) return t("Mənbə yoxdur")
 
   try {
     return new URL(url).hostname.replace(/^www\./, '')
@@ -162,7 +163,7 @@ export function CustomerNotifications() {
       <DialogTrigger asChild>
         <button
           type='button'
-          aria-label='Bildirişlər'
+          aria-label={t("Bildirişlər")}
           className='relative inline-flex size-11 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-sm transition hover:border-primary/20 hover:bg-primary/10 hover:text-primary'
         >
           <Bell className='size-5' />
@@ -176,12 +177,9 @@ export function CustomerNotifications() {
       <DialogContent className='gap-0 overflow-hidden p-0 sm:max-w-md sm:p-0'>
         <div className='flex items-start justify-between gap-3 border-b border-border px-4 py-4 pr-14'>
           <div>
-            <DialogTitle className='text-base font-semibold text-foreground'>
-              Bildirişlər
-            </DialogTitle>
+            <DialogTitle className='text-base font-semibold text-foreground'>{t("Bildirişlər")}</DialogTitle>
             <DialogDescription className='mt-1 text-sm text-muted-foreground'>
-              {unreadCount} yeni bildiriş
-            </DialogDescription>
+              {unreadCount}{' '}{t("yeni bildiriş")}</DialogDescription>
           </div>
           <button
             type='button'
@@ -197,34 +195,26 @@ export function CustomerNotifications() {
         <div className='max-h-[min(28rem,65dvh)] overflow-y-auto'>
           {isLoading ? (
             <div className='flex items-center gap-2 px-4 py-8 text-sm font-semibold text-muted-foreground'>
-              <Loader2 className='size-4 animate-spin' />
-              Bildirişlər yüklənir...
-            </div>
+              <Loader2 className='size-4 animate-spin' />{t("Bildirişlər yüklənir...")}</div>
           ) : isError ? (
             <div className='space-y-3 px-4 py-6'>
-              <p className='text-sm font-semibold text-muted-foreground'>
-                Bildirişləri yükləmək mümkün olmadı.
-              </p>
+              <p className='text-sm font-semibold text-muted-foreground'>{t("Bildirişləri yükləmək mümkün olmadı.")}</p>
               <button
                 type='button'
                 className='rounded-lg border border-border px-3 py-2 text-sm font-bold text-foreground hover:bg-muted/50'
                 onClick={() => refetch()}
-              >
-                Yenidən yoxla
-              </button>
+              >{t("Yenidən yoxla")}</button>
             </div>
           ) : alerts.length === 0 ? (
-            <div className='px-4 py-8 text-sm font-semibold text-muted-foreground'>
-              Yeni bildiriş yoxdur.
-            </div>
+            <div className='px-4 py-8 text-sm font-semibold text-muted-foreground'>{t("Yeni bildiriş yoxdur.")}</div>
           ) : (
             alerts.map((alert) => {
               const item = alert.monitor_matches?.monitored_items
               const monitorName =
-                alert.monitor_matches?.user_monitors?.name || 'Monitor'
+                alert.monitor_matches?.user_monitors?.name || t("Monitor")
               const keyword =
-                alert.monitor_matches?.matched_keyword || 'Açar söz'
-              const title = decodeHtml(item?.title || 'Başlıq yoxdur')
+                alert.monitor_matches?.matched_keyword || t("Açar söz")
+              const title = decodeHtml(item?.title || t("Başlıq yoxdur"))
               const isUnread = !readSet.has(alert.id)
 
               return (

@@ -22,6 +22,7 @@ import { customerQueryKeys } from '@/lib/query-keys'
 import { getStatusBadgeClass, getStatusLabel } from '@/lib/status-ui'
 import { supabase } from '@/lib/supabase'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { dateLocale, t } from '@/lib/i18n'
 
 type Monitor = {
   id: string
@@ -74,7 +75,7 @@ type MonitorsData = {
 function formatDate(value: string | null) {
   if (!value) return '-'
 
-  return new Date(value).toLocaleString('az-AZ', {
+  return new Date(value).toLocaleString(dateLocale(), {
     timeZone: 'Asia/Baku',
     day: '2-digit',
     month: '2-digit',
@@ -110,7 +111,7 @@ async function loadMonitorPlanLimits(userId: string): Promise<PlanLimitState> {
     available: false,
     name: null,
     maxWatches: null,
-    warning: 'Plan məlumatı hələ aktiv deyil.',
+    warning: t("Plan məlumatı hələ aktiv deyil."),
   }
 
   const profilePlan = await supabase
@@ -176,7 +177,7 @@ async function fetchMonitorsData(): Promise<MonitorsData> {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) throw new Error('İstifadəçi sessiyası tapılmadı.')
+  if (!user) throw new Error(t("İstifadəçi sessiyası tapılmadı."))
 
   const [profileRes, monitorRes, planRes] = await Promise.all([
     supabase
@@ -204,7 +205,7 @@ async function fetchMonitorsData(): Promise<MonitorsData> {
 
   if (monitorRes.error) {
     console.error('Monitor oxuma xətası:', monitorRes.error)
-    throw new Error(`Monitorlar oxunmadı: ${monitorRes.error.message}`)
+    throw new Error(t("Monitorlar oxunmadı: {0}", [monitorRes.error.message]))
   }
 
   const monitors = (monitorRes.data || []) as Monitor[]
@@ -240,7 +241,7 @@ async function fetchMonitorsData(): Promise<MonitorsData> {
 
   if (keywordsRes.error) {
     console.error('Keyword oxuma xətası:', keywordsRes.error)
-    message = `Açar sözlər oxunmadı: ${keywordsRes.error.message}`
+    message = t("Açar sözlər oxunmadı: {0}", [keywordsRes.error.message])
   }
 
   if (matchesRes.error) {
@@ -266,7 +267,7 @@ function MonitorsPage() {
     available: false,
     name: null,
     maxWatches: null,
-    warning: 'Plan məlumatı hələ aktiv deyil.',
+    warning: t("Plan məlumatı hələ aktiv deyil."),
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -309,7 +310,7 @@ function MonitorsPage() {
       setMessage(
         monitorsQuery.error instanceof Error
           ? monitorsQuery.error.message
-          : 'Monitorlar yüklənmədi.'
+          : t("Monitorlar yüklənmədi.")
       )
     }
 
@@ -367,7 +368,7 @@ function MonitorsPage() {
     const incoming = uniqueKeywords(parseKeywordInput(value))
 
     if (incoming.length === 0) {
-      setMessage('Açar söz yazılmalıdır.')
+      setMessage(t("Açar söz yazılmalıdır."))
       return false
     }
 
@@ -382,7 +383,7 @@ function MonitorsPage() {
     )
 
     if (fresh.length === 0) {
-      setMessage('Bu açar sözlər artıq əlavə edilib.')
+      setMessage(t("Bu açar sözlər artıq əlavə edilib."))
       return false
     }
 
@@ -399,13 +400,13 @@ function MonitorsPage() {
 
     if (error) {
       console.error('Açar söz əlavə xətası:', error)
-      setMessage(`Açar söz əlavə olunmadı: ${error.message}`)
+      setMessage(t("Açar söz əlavə olunmadı: {0}", [error.message]))
       return false
     }
 
     setKeywords((prev) => [...((data || []) as Keyword[]), ...prev])
     setMessage(
-      `${fresh.length} açar söz əlavə olundu. Sistem mənbələri mütəmadi yoxlayacaq.`
+      t("{0} açar söz əlavə olundu. Sistem mənbələri mütəmadi yoxlayacaq.", [fresh.length])
     )
     return true
   }
@@ -414,7 +415,7 @@ function MonitorsPage() {
     const name = newMonitorName.trim()
 
     if (!name) {
-      setMessage('Monitor adı yazılmalıdır.')
+      setMessage(t("Monitor adı yazılmalıdır."))
       return
     }
 
@@ -426,7 +427,7 @@ function MonitorsPage() {
 
     if (!user) {
       setSaving(false)
-      setMessage('İstifadəçi sessiyası tapılmadı.')
+      setMessage(t("İstifadəçi sessiyası tapılmadı."))
       return
     }
 
@@ -438,17 +439,15 @@ function MonitorsPage() {
       setSaving(false)
       setMessage(
         planLimits.name
-          ? planLimits.name +
-              ' planı üzrə monitor limiti dolub: ' +
-              monitors.length +
-              '/' +
-              planLimits.maxWatches +
-              '.'
-          : 'Monitor limiti dolub: ' +
-              monitors.length +
-              '/' +
-              planLimits.maxWatches +
-              '.'
+          ? t('{0} planı üzrə monitor limiti dolub: {1}/{2}.', [
+              planLimits.name,
+              monitors.length,
+              planLimits.maxWatches,
+            ])
+          : t('Monitor limiti dolub: {0}/{1}.', [
+              monitors.length,
+              planLimits.maxWatches,
+            ])
       )
       return
     }
@@ -470,8 +469,8 @@ function MonitorsPage() {
       const isLimitError = error?.message?.includes('PLAN_WATCH_LIMIT_REACHED')
       setMessage(
         isLimitError
-          ? 'Plan limitiniz dolub. Yeni monitor yaratmaq üçün mövcud monitorlardan birini silin və ya planınızı yüksəldin.'
-          : `Monitor yaradılmadı: ${error?.message || 'Naməlum xəta'}`
+          ? t("Plan limitiniz dolub. Yeni monitor yaratmaq üçün mövcud monitorlardan birini silin və ya planınızı yüksəldin.")
+          : t("Monitor yaradılmadı: {0}", [error?.message || t("Naməlum xəta")])
       )
       return
     }
@@ -482,10 +481,10 @@ function MonitorsPage() {
     if (newMonitorKeywords.trim()) {
       await addKeywordsToMonitor(created.id, newMonitorKeywords)
       setMessage(
-        'Monitor yaradıldı və açar sözlər əlavə olundu. Sistem mənbələri mütəmadi yoxlayacaq.'
+        t("Monitor yaradıldı və açar sözlər əlavə olundu. Sistem mənbələri mütəmadi yoxlayacaq.")
       )
     } else {
-      setMessage('Monitor yaradıldı. Növbəti addım: Açar söz əlavə edin.')
+      setMessage(t("Monitor yaradıldı. Növbəti addım: Açar söz əlavə edin."))
     }
 
     setNewMonitorName('')
@@ -507,7 +506,7 @@ function MonitorsPage() {
   }
 
   async function deleteKeyword(keywordId: string, keyword: string) {
-    const confirmed = window.confirm(`"${keyword}" açar sözü silinsin?`)
+    const confirmed = window.confirm(t("\"{0}\" açar sözü silinsin?", [keyword]))
 
     if (!confirmed) return
 
@@ -518,13 +517,13 @@ function MonitorsPage() {
 
     if (error) {
       console.error('Açar söz silmə xətası:', error)
-      setMessage(`Açar söz silinmədi: ${error.message}`)
+      setMessage(t("Açar söz silinmədi: {0}", [error.message]))
       return
     }
 
     setKeywords((prev) => prev.filter((item) => item.id !== keywordId))
     invalidateCustomerMonitorCaches()
-    setMessage(`Açar söz silindi: ${keyword}`)
+    setMessage(t("Açar söz silindi: {0}", [keyword]))
   }
 
   function startEditMonitor(monitor: Monitor) {
@@ -544,7 +543,7 @@ function MonitorsPage() {
     const name = editMonitorName.trim()
 
     if (!name) {
-      setMessage('Monitor adı yazılmalıdır.')
+      setMessage(t("Monitor adı yazılmalıdır."))
       return
     }
 
@@ -556,7 +555,7 @@ function MonitorsPage() {
 
     if (!user) {
       setActionMonitorId(null)
-      setMessage('İstifadəçi sessiyası tapılmadı.')
+      setMessage(t("İstifadəçi sessiyası tapılmadı."))
       return
     }
 
@@ -577,7 +576,7 @@ function MonitorsPage() {
 
     if (error || !data) {
       console.error('Monitor yeniləmə xətası:', error)
-      setMessage(`Monitor yenilənmədi: ${error?.message || 'İcazə verilmədi'}`)
+      setMessage(t("Monitor yenilənmədi: {0}", [error?.message || t("İcazə verilmədi")]))
       return
     }
 
@@ -586,7 +585,7 @@ function MonitorsPage() {
     )
     invalidateCustomerMonitorCaches()
     cancelEditMonitor()
-    setMessage('Monitor yeniləndi.')
+    setMessage(t("Monitor yeniləndi."))
   }
 
   async function deleteMonitor(monitor: Monitor) {
@@ -598,7 +597,7 @@ function MonitorsPage() {
 
     if (!user) {
       setActionMonitorId(null)
-      setMessage('İstifadəçi sessiyası tapılmadı.')
+      setMessage(t("İstifadəçi sessiyası tapılmadı."))
       return
     }
 
@@ -612,7 +611,7 @@ function MonitorsPage() {
 
     if (error) {
       console.error('Monitor silmə xətası:', error)
-      setMessage(`Monitor silinmədi: ${error.message}`)
+      setMessage(t("Monitor silinmədi: {0}", [error.message]))
       return
     }
 
@@ -621,7 +620,7 @@ function MonitorsPage() {
     setMatches((prev) => prev.filter((item) => item.monitor_id !== monitor.id))
     invalidateCustomerMonitorCaches()
     setDeleteCandidate(null)
-    setMessage('Monitor silindi.')
+    setMessage(t("Monitor silindi."))
   }
 
   async function toggleMonitorStatus(monitor: Monitor) {
@@ -634,7 +633,7 @@ function MonitorsPage() {
 
     if (!user) {
       setActionMonitorId(null)
-      setMessage('İstifadəçi sessiyası tapılmadı.')
+      setMessage(t("İstifadəçi sessiyası tapılmadı."))
       return
     }
 
@@ -650,8 +649,8 @@ function MonitorsPage() {
       console.error('Monitor status xətası:', error)
       setMessage(
         error.message.includes('PLAN_WATCH_LIMIT_REACHED')
-          ? 'Planınızda aktiv monitor limiti dolub. Əvvəlcə başqa monitoru passiv edin və ya planı genişləndirin.'
-          : `Monitor statusu dəyişmədi: ${error.message}`
+          ? t("Planınızda aktiv monitor limiti dolub. Əvvəlcə başqa monitoru passiv edin və ya planı genişləndirin.")
+          : t("Monitor statusu dəyişmədi: {0}", [error.message])
       )
       return
     }
@@ -671,8 +670,8 @@ function MonitorsPage() {
     invalidateCustomerMonitorCaches()
     setMessage(
       nextStatus === 'active'
-        ? 'Monitor aktiv edildi.'
-        : 'Monitor passiv edildi.'
+        ? t("Monitor aktiv edildi.")
+        : t("Monitor passiv edildi.")
     )
   }
 
@@ -680,7 +679,7 @@ function MonitorsPage() {
     return (
       <div className='flex min-h-[360px] items-center justify-center p-6'>
         <Loader2 className='mr-2 h-5 w-5 animate-spin' />
-        <span>Monitorlar yüklənir...</span>
+        <span>{t("Monitorlar yüklənir...")}</span>
       </div>
     )
   }
@@ -697,10 +696,7 @@ function MonitorsPage() {
       <div className='grid gap-4 p-4 md:p-6'>
         <div>
           <h1 className='text-2xl font-bold tracking-tight'>Monitorlar</h1>
-          <p className='text-muted-foreground'>
-            Monitorlar sistemin izlədiyi mövzu, təşkilat, şəxs və ya brend üzrə
-            açar söz qaydalarıdır.
-          </p>
+          <p className='text-muted-foreground'>{t("Monitorlar sistemin izlədiyi mövzu, təşkilat, şəxs və ya brend üzrə açar söz qaydalarıdır.")}</p>
         </div>
 
         {message ? (
@@ -710,31 +706,25 @@ function MonitorsPage() {
         ) : null}
 
         <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-          <StatBox label='Monitor' value={stats.monitors} icon={Activity} />
-          <StatBox label='Aktiv' value={stats.active} icon={CheckCircle2} />
-          <StatBox label='Açar söz' value={stats.keywords} icon={Hash} />
-          <StatBox label='Nəticə' value={stats.matches} icon={Bell} />
+          <StatBox label={t("Monitor")} value={stats.monitors} icon={Activity} />
+          <StatBox label={t("Aktiv")} value={stats.active} icon={CheckCircle2} />
+          <StatBox label={t("Açar söz")} value={stats.keywords} icon={Hash} />
+          <StatBox label={t("Nəticə")} value={stats.matches} icon={Bell} />
         </div>
 
         <div className='grid gap-3 lg:grid-cols-[0.85fr_1.15fr]'>
           <section className='rounded-2xl border border-border bg-card p-3 shadow-sm'>
             <div className='mb-3'>
-              <h2 className='text-base font-semibold'>Yeni monitor</h2>
-              <p className='text-sm text-muted-foreground'>
-                Monitor yaradın, açar sözləri əlavə edin və sistem uyğun media
-                materiallarını tapdıqca nəticələri izləyin.
-              </p>
+              <h2 className='text-base font-semibold'>{t("Yeni monitor")}</h2>
+              <p className='text-sm text-muted-foreground'>{t("Monitor yaradın, açar sözləri əlavə edin və sistem uyğun media materiallarını tapdıqca nəticələri izləyin.")}</p>
             </div>
 
             <div className='mb-4 rounded-2xl border border-border bg-muted/40 p-3 text-sm text-muted-foreground'>
-              <div className='font-medium text-foreground'>Necə işləyir?</div>
+              <div className='font-medium text-foreground'>{t("Necə işləyir?")}</div>
               <ol className='mt-2 grid gap-1'>
-                <li>1. Monitor üçün aydın ad yazın.</li>
-                <li>2. Bir və ya bir neçə açar söz əlavə edin.</li>
-                <li>
-                  3. Sistem mənbələri mütəmadi yoxlayacaq və uyğun nəticələri
-                  burada göstərəcək.
-                </li>
+                <li>{t("1. Monitor üçün aydın ad yazın.")}</li>
+                <li>{t("2. Bir və ya bir neçə açar söz əlavə edin.")}</li>
+                <li>{t("3. Sistem mənbələri mütəmadi yoxlayacaq və uyğun nəticələri burada göstərəcək.")}</li>
               </ol>
             </div>
 
@@ -745,56 +735,49 @@ function MonitorsPage() {
                   : 'mb-4 rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground'
               }
             >
-              <div className='font-medium text-foreground'>Plan istifadəsi</div>
-              <div className='mt-1'>
-                Cari monitor sayı: {monitors.length}
+              <div className='font-medium text-foreground'>{t("Plan istifadəsi")}</div>
+              <div className='mt-1'>{t("Cari monitor sayı:")}{' '}{monitors.length}
                 {planLimits.maxWatches !== null
                   ? ' / ' + planLimits.maxWatches
                   : ''}
               </div>
               <div className='mt-1'>
                 {planLimits.available
-                  ? 'Plan: ' + (planLimits.name || '-')
-                  : planLimits.warning || 'Plan limiti aktiv deyil.'}
+                  ? t('Plan: {0}', [planLimits.name || '-'])
+                  : planLimits.warning || t("Plan limiti aktiv deyil.")}
               </div>
               {monitorLimitReached ? (
-                <div className='mt-1 font-medium'>
-                  Yeni monitor yaratmaq üçün limit boşalmalıdır.
-                </div>
+                <div className='mt-1 font-medium'>{t("Yeni monitor yaratmaq üçün limit boşalmalıdır.")}</div>
               ) : null}
             </div>
 
             <div className='grid gap-3'>
               <input
-                aria-label='Monitor adı'
+                aria-label={t("Monitor adı")}
                 value={newMonitorName}
                 onChange={(event) => setNewMonitorName(event.target.value)}
-                placeholder='Monitor adı, məsələn: ADA Universiteti'
+                placeholder={t("Monitor adı, məsələn: ADA Universiteti")}
                 className='rounded-xl border border-border bg-card px-3 py-2'
               />
 
               <input
-                aria-label='Qısa təsvir'
+                aria-label={t("Qısa təsvir")}
                 value={newMonitorDescription}
                 onChange={(event) =>
                   setNewMonitorDescription(event.target.value)
                 }
-                placeholder='Qısa təsvir, məsələn: universitetlə bağlı media izləmə'
+                placeholder={t("Qısa təsvir, məsələn: universitetlə bağlı media izləmə")}
                 className='rounded-xl border border-border bg-card px-3 py-2'
               />
 
               <textarea
-                aria-label='Monitorun açar sözləri'
+                aria-label={t("Monitorun açar sözləri")}
                 value={newMonitorKeywords}
                 onChange={(event) => setNewMonitorKeywords(event.target.value)}
-                placeholder='Açar sözləri vergül və ya yeni sətrlə yaz: universitet adı, şirkət, brend, şəxs, layihə, dəqiq ifadə'
+                placeholder={t("Açar sözləri vergül və ya yeni sətrlə yaz: universitet adı, şirkət, brend, şəxs, layihə, dəqiq ifadə")}
                 className='min-h-20 rounded-xl border border-border bg-card px-3 py-2 text-sm'
               />
-              <div className='rounded-xl border border-border bg-card p-3 text-xs text-muted-foreground'>
-                Nümunələr: “Bakı Dövlət Universiteti”, “Mərkəzi Bank”,
-                “Azercell”, “rektor adı”, “yeni layihə”, “dəqiq sitat”. Bir neçə
-                açar sözü vergül və ya ayrı sətirlə əlavə edə bilərsiniz.
-              </div>
+              <div className='rounded-xl border border-border bg-card p-3 text-xs text-muted-foreground'>{t("Nümunələr: “Bakı Dövlət Universiteti”, “Mərkəzi Bank”, “Azercell”, “rektor adı”, “yeni layihə”, “dəqiq sitat”. Bir neçə açar sözü vergül və ya ayrı sətirlə əlavə edə bilərsiniz.")}</div>
 
               <button
                 type='button'
@@ -806,21 +789,15 @@ function MonitorsPage() {
                   <Loader2 className='h-4 w-4 animate-spin' />
                 ) : (
                   <Plus className='h-4 w-4' />
-                )}
-                Monitor yarat
-              </button>
+                )}{t("Monitor yarat")}</button>
             </div>
           </section>
 
           <section className='rounded-2xl border border-border bg-card p-3 shadow-sm'>
             <div className='mb-4 flex items-center justify-between gap-3'>
               <div>
-                <h2 className='text-base font-semibold'>
-                  Telegram bildirişləri
-                </h2>
-                <p className='text-sm text-muted-foreground'>
-                  Qoşulma və bildiriş kanalları Profil səhifəsində idarə olunur.
-                </p>
+                <h2 className='text-base font-semibold'>{t("Telegram bildirişləri")}</h2>
+                <p className='text-sm text-muted-foreground'>{t("Qoşulma və bildiriş kanalları Profil səhifəsində idarə olunur.")}</p>
               </div>
 
               <span
@@ -830,22 +807,16 @@ function MonitorsPage() {
                     : 'rounded-full border px-3 py-1 text-sm text-muted-foreground'
                 }
               >
-                {telegramConnected ? 'Aktiv' : 'Aktiv deyil'}
+                {telegramConnected ? t("Aktiv") : t("Aktiv deyil")}
               </span>
             </div>
 
             <div className='grid gap-3'>
               <div className='rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground'>
                 {telegramConnected ? (
-                  <p>
-                    Telegram bildirişləri aktivdir. Bot yeni uyğun nəticələr
-                    tapıldıqda sizi xəbərdar edə bilər.
-                  </p>
+                  <p>{t("Telegram bildirişləri aktivdir. Bot yeni uyğun nəticələr tapıldıqda sizi xəbərdar edə bilər.")}</p>
                 ) : (
-                  <p>
-                    Telegram bildirişlərini aktivləşdirmək üçün Profil
-                    səhifəsində Telegram kanalını qoşun.
-                  </p>
+                  <p>{t("Telegram bildirişlərini aktivləşdirmək üçün Profil səhifəsində Telegram kanalını qoşun.")}</p>
                 )}
               </div>
 
@@ -853,13 +824,9 @@ function MonitorsPage() {
                 <a
                   href='/monitor/profile'
                   className='inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted'
-                >
-                  Profilə keç
-                </a>
+                >{t("Profilə keç")}</a>
               ) : (
-                <div className='rounded-lg border p-3 text-sm text-muted-foreground'>
-                  Telegram botu hələ konfiqurasiya edilməyib.
-                </div>
+                <div className='rounded-lg border p-3 text-sm text-muted-foreground'>{t("Telegram botu hələ konfiqurasiya edilməyib.")}</div>
               )}
             </div>
           </section>
@@ -869,10 +836,10 @@ function MonitorsPage() {
           <div className='relative'>
             <Search className='pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
             <input
-              aria-label='Monitor adı, təsvir və ya status üzrə axtar...'
+              aria-label={t("Monitor adı, təsvir və ya status üzrə axtar...")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder='Monitor adı, təsvir və ya status üzrə axtar...'
+              placeholder={t("Monitor adı, təsvir və ya status üzrə axtar...")}
               className='w-full rounded-xl border border-border bg-card py-2 pr-3 pl-9'
             />
           </div>
@@ -889,22 +856,22 @@ function MonitorsPage() {
                   {editingMonitorId === monitor.id ? (
                     <div className='grid gap-2'>
                       <input
-                        aria-label='Monitor adı'
+                        aria-label={t("Monitor adı")}
                         value={editMonitorName}
                         onChange={(event) =>
                           setEditMonitorName(event.target.value)
                         }
                         className='rounded-xl border border-border bg-card px-3 py-2 text-sm'
-                        placeholder='Monitor adı'
+                        placeholder={t("Monitor adı")}
                       />
                       <input
-                        aria-label='Qısa təsvir'
+                        aria-label={t("Qısa təsvir")}
                         value={editMonitorDescription}
                         onChange={(event) =>
                           setEditMonitorDescription(event.target.value)
                         }
                         className='rounded-xl border border-border bg-card px-3 py-2 text-sm'
-                        placeholder='Qısa təsvir'
+                        placeholder={t("Qısa təsvir")}
                       />
                     </div>
                   ) : (
@@ -913,14 +880,14 @@ function MonitorsPage() {
                         {monitor.name}
                       </h2>
                       <p className='text-sm text-muted-foreground'>
-                        {monitor.description || 'Təsvir yoxdur'}
+                        {monitor.description || t("Təsvir yoxdur")}
                       </p>
                     </>
                   )}
                 </div>
 
                 <div>
-                  <div className='text-xs text-muted-foreground'>Status</div>
+                  <div className='text-xs text-muted-foreground'>{t("Status")}</div>
                   <span
                     className={`mt-1 inline-flex rounded-full border px-2 py-1 text-xs ${getStatusBadgeClass(monitor.status)}`}
                   >
@@ -928,14 +895,12 @@ function MonitorsPage() {
                   </span>
                   {monitor.status !== 'active' &&
                   monitor.inactive_reason === 'plan_limit' ? (
-                    <p className='mt-1 text-xs text-muted-foreground'>
-                      Plan limitini aşdığı üçün deaktiv edilib.
-                    </p>
+                    <p className='mt-1 text-xs text-muted-foreground'>{t("Plan limitini aşdığı üçün deaktiv edilib.")}</p>
                   ) : null}
                 </div>
 
                 <div>
-                  <div className='text-xs text-muted-foreground'>Nəticə</div>
+                  <div className='text-xs text-muted-foreground'>{t("Nəticə")}</div>
                   <div className='mt-1 text-lg font-semibold'>
                     {monitor.resultCount}
                   </div>
@@ -943,9 +908,7 @@ function MonitorsPage() {
 
                 <div>
                   <div className='flex items-center gap-1 text-xs text-muted-foreground'>
-                    <Clock3 className='h-3.5 w-3.5' />
-                    Son uyğunluq
-                  </div>
+                    <Clock3 className='h-3.5 w-3.5' />{t("Son uyğunluq")}</div>
                   <div className='mt-1 text-sm'>
                     {formatDate(monitor.lastMatch)}
                   </div>
@@ -959,17 +922,13 @@ function MonitorsPage() {
                         onClick={() => updateMonitor(monitor)}
                         disabled={actionMonitorId === monitor.id}
                         className='rounded-lg bg-primary px-2.5 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-60'
-                      >
-                        Yadda saxla
-                      </button>
+                      >{t("Yadda saxla")}</button>
                       <button
                         type='button'
                         onClick={cancelEditMonitor}
                         disabled={actionMonitorId === monitor.id}
                         className='rounded-lg border px-2.5 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-60'
-                      >
-                        Ləğv et
-                      </button>
+                      >{t("Ləğv et")}</button>
                     </>
                   ) : (
                     <>
@@ -978,25 +937,21 @@ function MonitorsPage() {
                         onClick={() => startEditMonitor(monitor)}
                         className='inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm font-medium hover:bg-muted'
                       >
-                        <Pencil className='h-4 w-4' />
-                        Redaktə et
-                      </button>
+                        <Pencil className='h-4 w-4' />{t("Redaktə et")}</button>
                       <button
                         type='button'
                         onClick={() => toggleMonitorStatus(monitor)}
                         disabled={actionMonitorId === monitor.id}
                         className='rounded-lg border px-2.5 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-60'
                       >
-                        {monitor.status === 'active' ? 'Passiv et' : 'Aktiv et'}
+                        {monitor.status === 'active' ? t("Passiv et") : t("Aktiv et")}
                       </button>
                       <button
                         type='button'
                         onClick={() => setDeleteCandidate(monitor)}
                         disabled={actionMonitorId === monitor.id}
                         className='rounded-lg border border-destructive/40 px-2.5 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-60'
-                      >
-                        Sil
-                      </button>
+                      >{t("Sil")}</button>
                     </>
                   )}
                 </div>
@@ -1005,7 +960,7 @@ function MonitorsPage() {
               <div className='grid gap-3 p-3'>
                 <div className='grid gap-3 md:grid-cols-[1fr_auto]'>
                   <textarea
-                    aria-label='Yeni açar sözlər'
+                    aria-label={t("Yeni açar sözlər")}
                     value={keywordDrafts[monitor.id] || ''}
                     onChange={(event) =>
                       setKeywordDrafts((prev) => ({
@@ -1013,7 +968,7 @@ function MonitorsPage() {
                         [monitor.id]: event.target.value,
                       }))
                     }
-                    placeholder='Yeni açar sözlər: təşkilat, brend, şəxs, layihə və ya dəqiq ifadə'
+                    placeholder={t("Yeni açar sözlər: təşkilat, brend, şəxs, layihə və ya dəqiq ifadə")}
                     className='min-h-14 rounded-xl border border-border bg-card px-3 py-2 text-sm'
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' && event.ctrlKey)
@@ -1026,25 +981,14 @@ function MonitorsPage() {
                     onClick={() => addKeyword(monitor.id)}
                     className='inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted'
                   >
-                    <Plus className='h-4 w-4' />
-                    Əlavə et
-                  </button>
+                    <Plus className='h-4 w-4' />{t("Əlavə et")}</button>
                 </div>
 
                 {monitor.keywords.length === 0 ? (
                   <div className='rounded-2xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground'>
-                    <div className='font-medium text-foreground'>
-                      Bu monitorda hələ açar söz yoxdur.
-                    </div>
-                    <p className='mt-1'>
-                      Nəticələrin gəlməsi üçün ən azı bir açar söz əlavə edin.
-                      Sistem mənbələri mütəmadi yoxlayır; uyğun nəticələr aşkar
-                      olunduqca burada görünəcək.
-                    </p>
-                    <p className='mt-2 text-xs'>
-                      Nümunə: universitet adı, şirkət adı, brend, şəxs, layihə
-                      və ya dəqiq ifadə.
-                    </p>
+                    <div className='font-medium text-foreground'>{t("Bu monitorda hələ açar söz yoxdur.")}</div>
+                    <p className='mt-1'>{t("Nəticələrin gəlməsi üçün ən azı bir açar söz əlavə edin. Sistem mənbələri mütəmadi yoxlayır; uyğun nəticələr aşkar olunduqca burada görünəcək.")}</p>
+                    <p className='mt-2 text-xs'>{t("Nümunə: universitet adı, şirkət adı, brend, şəxs, layihə və ya dəqiq ifadə.")}</p>
                   </div>
                 ) : (
                   <div className='flex flex-wrap gap-2'>
@@ -1058,7 +1002,7 @@ function MonitorsPage() {
                           type='button'
                           onClick={() => deleteKeyword(item.id, item.keyword)}
                           className='rounded-full p-0.5 text-muted-foreground hover:text-destructive'
-                          title='Sil'
+                          title={t("Sil")}
                         >
                           <Trash2 className='h-3.5 w-3.5' />
                         </button>
@@ -1072,14 +1016,8 @@ function MonitorsPage() {
 
           {rows.length === 0 && (
             <div className='rounded-2xl border border-border bg-card p-8 text-center shadow-sm'>
-              <div className='font-medium'>
-                Seçilmiş axtarışa uyğun monitor tapılmadı
-              </div>
-              <p className='mx-auto mt-1 max-w-md text-sm text-muted-foreground'>
-                İlk monitorunuzu yaradın, açar sözləri əlavə edin və nəticələri
-                bu paneldən izləyin. Sistem mənbələri mütəmadi yoxladığı üçün
-                nəticələr bir qədər sonra görünə bilər.
-              </p>
+              <div className='font-medium'>{t("Seçilmiş axtarışa uyğun monitor tapılmadı")}</div>
+              <p className='mx-auto mt-1 max-w-md text-sm text-muted-foreground'>{t("İlk monitorunuzu yaradın, açar sözləri əlavə edin və nəticələri bu paneldən izləyin. Sistem mənbələri mütəmadi yoxladığı üçün nəticələr bir qədər sonra görünə bilər.")}</p>
             </div>
           )}
         </div>
@@ -1093,13 +1031,13 @@ function MonitorsPage() {
         title='Monitoru sil'
         desc={
           deleteCandidate
-            ? '"' +
-              deleteCandidate.name +
-              '" monitoru silinsin? Bu əməliyyat geri qaytarılmır.'
-            : 'Monitor silinsin?'
+            ? t('"{0}" monitoru silinsin? Bu əməliyyat geri qaytarılmır.', [
+                deleteCandidate.name,
+              ])
+            : t("Monitor silinsin?")
         }
-        cancelBtnText='Ləğv et'
-        confirmText='Sil'
+        cancelBtnText={t("Ləğv et")}
+        confirmText={t("Sil")}
         destructive
         isLoading={
           deleteCandidate ? actionMonitorId === deleteCandidate.id : false

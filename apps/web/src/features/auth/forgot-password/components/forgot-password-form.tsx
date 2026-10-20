@@ -17,11 +17,12 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { getAuthErrorMessage } from '../../auth-messages'
+import { t } from '@/lib/i18n'
 
 const formSchema = z.object({
   email: z.email({
     error: (iss) =>
-      iss.input === '' ? 'Email ünvanınızı daxil edin.' : undefined,
+      iss.input === '' ? t("Email ünvanınızı daxil edin.") : undefined,
   }),
 })
 
@@ -51,7 +52,7 @@ export function ForgotPasswordForm({
     }
 
     form.reset()
-    toast.success('Şifrə bərpası üçün link email ünvanınıza göndərildi.')
+    toast.success(t("Şifrə bərpası üçün link email ünvanınıza göndərildi."))
   }
 
   return (
@@ -66,7 +67,7 @@ export function ForgotPasswordForm({
           name='email'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>{t("Email")}</FormLabel>
               <FormControl>
                 <Input placeholder='name@example.com' {...field} />
               </FormControl>
@@ -75,7 +76,7 @@ export function ForgotPasswordForm({
           )}
         />
         <Button className='mt-2' disabled={isLoading}>
-          {isLoading ? 'Email göndərilir...' : 'Bərpa linki göndər'}
+          {isLoading ? t("Email göndərilir...") : t("Bərpa linki göndər")}
           {isLoading ? <Loader2 className='animate-spin' /> : <ArrowRight />}
         </Button>
       </form>

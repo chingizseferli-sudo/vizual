@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Loader2, RefreshCw, Share2 } from 'lucide-react'
@@ -328,27 +329,46 @@ function SocialAdminPage() {
                   <th className='py-2 pr-4 font-medium'>Açar söz</th>
                   <th className='py-2 pr-4 font-medium'>Son yoxlama</th>
                   <th className='py-2 pr-4 font-medium'>Nəticə</th>
-                  <th className='py-2 font-medium'>Xəta</th>
+                  <th className='hidden py-2 font-medium lg:table-cell'>
+                    Xəta
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {data.keywords.map((row) => (
-                  <tr
-                    key={`${row.platform}:${row.keyword_fold}`}
-                    className='border-b last:border-0'
-                  >
-                    <td className='py-2 pr-4 capitalize'>{row.platform}</td>
-                    <td className='py-2 pr-4'>{row.keyword_fold}</td>
-                    <td className='py-2 pr-4 whitespace-nowrap'>
-                      {formatDate(row.last_checked_at)}
-                    </td>
-                    <td className='py-2 pr-4'>
-                      {row.last_result_count ?? '—'}
-                    </td>
-                    <td className='py-2 font-mono text-xs text-destructive'>
-                      {row.last_error || ''}
-                    </td>
-                  </tr>
+                  <Fragment key={`${row.platform}:${row.keyword_fold}`}>
+                    <tr
+                      className={
+                        row.last_error
+                          ? 'border-b last:border-0 max-lg:border-b-0'
+                          : 'border-b last:border-0'
+                      }
+                    >
+                      <td className='py-2 pr-4 capitalize'>{row.platform}</td>
+                      <td className='py-2 pr-4 wrap-anywhere'>
+                        {row.keyword_fold}
+                      </td>
+                      <td className='py-2 pr-4 whitespace-nowrap'>
+                        {formatDate(row.last_checked_at)}
+                      </td>
+                      <td className='py-2 pr-4'>
+                        {row.last_result_count ?? '—'}
+                      </td>
+                      <td className='hidden py-2 font-mono text-xs wrap-anywhere text-destructive lg:table-cell'>
+                        {row.last_error || ''}
+                      </td>
+                    </tr>
+                    {row.last_error ? (
+                      <tr className='border-b last:border-0 lg:hidden'>
+                        <td
+                          colSpan={4}
+                          className='pb-2 font-mono text-xs wrap-anywhere text-destructive'
+                        >
+                          {row.last_error}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

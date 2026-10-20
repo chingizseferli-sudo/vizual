@@ -18,6 +18,7 @@ import {
   PublicPageShell,
   SectionHeading,
 } from '@/components/public-site/public-site-shell'
+import { t } from '@/lib/i18n'
 
 const serviceIcons: Record<PublicService['icon'], typeof Newspaper> = {
   file: FileText,
@@ -55,9 +56,7 @@ function SolutionsPage() {
           <Link
             to='/demo'
             className='inline-flex h-11 items-center rounded-lg bg-[#1463ff] px-5 text-sm font-bold text-white transition hover:bg-blue-700'
-          >
-            15 gün pulsuz sına
-          </Link>
+          >{t("15 gün pulsuz sına")}</Link>
         </PublicPageHero>
 
         <section className='mx-auto max-w-7xl px-5 pb-20 md:px-8'>
@@ -87,35 +86,21 @@ function SolutionsPage() {
 
         <section className='mx-auto max-w-7xl px-5 py-20 md:px-8'>
           <SectionHeading
-            eyebrow='İstifadə ssenariləri'
-            title='Hər modul konkret iş problemini həll edir'
+            eyebrow={t("İstifadə ssenariləri")}
+            title={t("Hər modul konkret iş problemini həll edir")}
           />
           <div className='grid gap-5 md:grid-cols-3'>
             <PublicCard>
-              <h3 className='font-extrabold text-slate-950'>
-                Gündəlik media xülasəsi
-              </h3>
-              <p className='mt-3 text-sm leading-6 text-slate-600'>
-                Komanda səhər ilk olaraq yeni media materiallarını və vacib
-                bildirişləri görür.
-              </p>
+              <h3 className='font-extrabold text-slate-950'>{t("Gündəlik media xülasəsi")}</h3>
+              <p className='mt-3 text-sm leading-6 text-slate-600'>{t("Komanda səhər ilk olaraq yeni media materiallarını və vacib bildirişləri görür.")}</p>
             </PublicCard>
             <PublicCard>
-              <h3 className='font-extrabold text-slate-950'>
-                Reputasiya izləmə
-              </h3>
-              <p className='mt-3 text-sm leading-6 text-slate-600'>
-                Təşkilat adı, rəhbər şəxs, layihə və kampaniya mövzuları ardıcıl
-                izlənir.
-              </p>
+              <h3 className='font-extrabold text-slate-950'>{t("Reputasiya izləmə")}</h3>
+              <p className='mt-3 text-sm leading-6 text-slate-600'>{t("Təşkilat adı, rəhbər şəxs, layihə və kampaniya mövzuları ardıcıl izlənir.")}</p>
             </PublicCard>
             <PublicCard>
-              <h3 className='font-extrabold text-slate-950'>
-                Veb dəyişiklik izləmə
-              </h3>
-              <p className='mt-3 text-sm leading-6 text-slate-600'>
-                Seçilmiş səhifə sahələri dəyişdikdə tarixçə və bildiriş yaranır.
-              </p>
+              <h3 className='font-extrabold text-slate-950'>{t("Veb dəyişiklik izləmə")}</h3>
+              <p className='mt-3 text-sm leading-6 text-slate-600'>{t("Seçilmiş səhifə sahələri dəyişdikdə tarixçə və bildiriş yaranır.")}</p>
             </PublicCard>
           </div>
         </section>

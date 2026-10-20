@@ -12,6 +12,7 @@ import '@fontsource-variable/manrope/wght.css'
 import { toast } from 'sonner'
 import { getErrorStatus } from '@/lib/errors'
 import { handleServerError } from '@/lib/handle-server-error'
+import { initI18n, t } from '@/lib/i18n'
 import { loadSupabase } from '@/lib/supabase-lazy'
 import { ConfigurationError } from '@/components/configuration-error'
 import { DirectionProvider } from './context/direction-provider'
@@ -40,7 +41,7 @@ const queryClient = new QueryClient({
         handleServerError(error)
 
         if (getErrorStatus(error) === 304) {
-          toast.error('Məzmun dəyişməyib.')
+          toast.error(t('Məzmun dəyişməyib.'))
         }
       },
     },
@@ -50,7 +51,7 @@ const queryClient = new QueryClient({
       const status = getErrorStatus(error)
 
       if (status === 401) {
-        toast.error('Sessiya bitdi. Yenidən daxil olun.')
+        toast.error(t('Sessiya bitdi. Yenidən daxil olun.'))
         void loadSupabase().then((supabase) =>
           supabase.auth.signOut({ scope: 'local' })
         )
@@ -83,9 +84,10 @@ declare module '@tanstack/react-router' {
   }
 }
 
-// Render the app
-const rootElement = document.getElementById('root')!
-if (!rootElement.innerHTML) {
+// Render the app once the UI language (and, for Russian, its dictionary) is ready.
+function renderApp() {
+  const rootElement = document.getElementById('root')!
+  if (rootElement.innerHTML) return
   const root = ReactDOM.createRoot(rootElement)
 
   if (!clientEnv.isConfigured) {
@@ -106,3 +108,5 @@ if (!rootElement.innerHTML) {
     )
   }
 }
+
+void initI18n().then(renderApp)

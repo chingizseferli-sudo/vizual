@@ -28,6 +28,7 @@ import {
   PublicHeader,
   SectionHeading,
 } from '@/components/public-site/public-site-shell'
+import { t } from '@/lib/i18n'
 
 const serviceIcons: Record<PublicService['icon'], typeof Newspaper> = {
   file: FileText,
@@ -104,32 +105,22 @@ function IndexPage() {
             <div className='grid gap-4 rounded-2xl border border-white/15 bg-white/90 p-5'>
               <div className='flex items-center justify-between gap-4 border-b border-slate-200 pb-4'>
                 <div>
-                  <p className='text-sm font-bold text-slate-500'>
-                    İş masası nümunəsi
-                  </p>
-                  <p className='text-xl font-extrabold text-slate-950'>
-                    Bu gün təşkilatınız haqqında nə baş verir?
-                  </p>
+                  <p className='text-sm font-bold text-slate-500'>{t("İş masası nümunəsi")}</p>
+                  <p className='text-xl font-extrabold text-slate-950'>{t("Bu gün təşkilatınız haqqında nə baş verir?")}</p>
                 </div>
-                <span className='rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700'>
-                  Aktiv
-                </span>
+                <span className='rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700'>{t("Aktiv")}</span>
               </div>
               <div className='grid gap-3 sm:grid-cols-3'>
                 <div className='rounded-xl bg-slate-50 p-3'>
-                  <p className='text-xs font-bold text-slate-500'>
-                    Yeni material
-                  </p>
+                  <p className='text-xs font-bold text-slate-500'>{t("Yeni material")}</p>
                   <p className='mt-1 text-2xl font-black'>14</p>
                 </div>
                 <div className='rounded-xl bg-slate-50 p-3'>
-                  <p className='text-xs font-bold text-slate-500'>Bildiriş</p>
+                  <p className='text-xs font-bold text-slate-500'>{t("Bildiriş")}</p>
                   <p className='mt-1 text-2xl font-black'>2</p>
                 </div>
                 <div className='rounded-xl bg-slate-50 p-3'>
-                  <p className='text-xs font-bold text-slate-500'>
-                    Aktiv monitor
-                  </p>
+                  <p className='text-xs font-bold text-slate-500'>{t("Aktiv monitor")}</p>
                   <p className='mt-1 text-2xl font-black'>3</p>
                 </div>
               </div>

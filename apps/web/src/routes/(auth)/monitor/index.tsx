@@ -11,6 +11,7 @@ import {
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
 import { PortalLoading, PortalError } from '@/components/layout/portal-state'
+import { dateLocale, t } from '@/lib/i18n'
 
 type MatchRow = {
   id: string
@@ -51,7 +52,7 @@ function decodeHtml(text: string) {
 function formatDate(value: string | null) {
   if (!value) return '-'
 
-  return new Date(value).toLocaleString('az-AZ', {
+  return new Date(value).toLocaleString(dateLocale(), {
     timeZone: 'Asia/Baku',
     day: '2-digit',
     month: '2-digit',
@@ -160,9 +161,9 @@ function MetricCard({
 
 function FirstRunGuide() {
   const steps = [
-    'Monitor yaradın',
-    'Açar söz əlavə edin',
-    'Nəticələri və bildirişləri izləyin',
+    t("Monitor yaradın"),
+    t("Açar söz əlavə edin"),
+    t("Nəticələri və bildirişləri izləyin"),
   ]
 
   return (
@@ -170,30 +171,16 @@ function FirstRunGuide() {
       <div className='grid gap-5 lg:grid-cols-[1.2fr_1fr] lg:items-center'>
         <div className='space-y-3'>
           <div>
-            <p className='text-sm font-semibold tracking-wide text-primary uppercase'>
-              İlk addım
-            </p>
-            <h2 className='mt-2 text-2xl font-semibold tracking-tight text-foreground'>
-              Vizual.Az-a xoş gəlmisiniz
-            </h2>
-            <p className='mt-2 text-sm leading-6 text-muted-foreground'>
-              Vizual.Az seçdiyiniz açar sözləri media mənbələrində izləyir.
-              Uyğun material tapıldıqda nəticələr paneldə görünür və bildiriş
-              tarixçəsi yaranır.
-            </p>
+            <p className='text-sm font-semibold tracking-wide text-primary uppercase'>{t("İlk addım")}</p>
+            <h2 className='mt-2 text-2xl font-semibold tracking-tight text-foreground'>{t("Vizual.Az-a xoş gəlmisiniz")}</h2>
+            <p className='mt-2 text-sm leading-6 text-muted-foreground'>{t("Vizual.Az seçdiyiniz açar sözləri media mənbələrində izləyir. Uyğun material tapıldıqda nəticələr paneldə görünür və bildiriş tarixçəsi yaranır.")}</p>
           </div>
-          <p className='text-sm leading-6 text-muted-foreground'>
-            Başlamaq üçün ilk monitorunuzu yaradın, sonra izlənəcək açar sözləri
-            əlavə edin. Sistem mənbələri yoxladıqca uyğun xəbərlər burada
-            görünəcək.
-          </p>
+          <p className='text-sm leading-6 text-muted-foreground'>{t("Başlamaq üçün ilk monitorunuzu yaradın, sonra izlənəcək açar sözləri əlavə edin. Sistem mənbələri yoxladıqca uyğun xəbərlər burada görünəcək.")}</p>
           <Link
             to='/monitor/monitors'
             className='inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90'
           >
-            <Send className='h-4 w-4' />
-            İlk monitoru yarat
-          </Link>
+            <Send className='h-4 w-4' />{t("İlk monitoru yarat")}</Link>
         </div>
 
         <div className='grid gap-2'>
@@ -232,11 +219,11 @@ function UserMonitorDashboard() {
     data
   const hasNoMonitors = monitorCount === 0
 
-  if (isLoading) return <PortalLoading label='Monitorinq paneli yüklənir...' />
+  if (isLoading) return <PortalLoading label={t("Monitorinq paneli yüklənir...")} />
   if (isError)
     return (
       <PortalError
-        message='Paneli yükləmək mümkün olmadı.'
+        message={t("Paneli yükləmək mümkün olmadı.")}
         onRetry={() => void refetch()}
       />
     )
@@ -245,74 +232,61 @@ function UserMonitorDashboard() {
     <div className='portal-page grid gap-5'>
       <div className='flex flex-col gap-3 rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6 lg:flex-row lg:items-end lg:justify-between'>
         <div>
-          <p className='text-sm font-semibold tracking-wide text-primary uppercase'>
-            İş masası
-          </p>
+          <p className='text-sm font-semibold tracking-wide text-primary uppercase'>{t("İş masası")}</p>
           <h1 className='mt-2 text-3xl font-semibold tracking-tight text-foreground'>
             Monitorinq panelim
           </h1>
-          <p className='mt-2 max-w-2xl text-sm leading-6 text-muted-foreground'>
-            Cari vəziyyəti görün, növbəti addımı seçin və monitorinq
-            nəticələrinə tez keçin.
-          </p>
+          <p className='mt-2 max-w-2xl text-sm leading-6 text-muted-foreground'>{t("Cari vəziyyəti görün, növbəti addımı seçin və monitorinq nəticələrinə tez keçin.")}</p>
         </div>
 
         <Link
           to='/monitor/monitors'
           className='inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90'
         >
-          <Send className='h-4 w-4' />
-          Monitorları idarə et
-        </Link>
+          <Send className='h-4 w-4' />{t("Monitorları idarə et")}</Link>
       </div>
 
-      <nav aria-label='Tez keçidlər' className='flex flex-wrap gap-2'>
+      <nav aria-label={t("Tez keçidlər")} className='flex flex-wrap gap-2'>
         <Link
           to='/monitor/results'
           className='rounded-lg border bg-card px-3 py-2 text-sm font-medium hover:bg-muted'
-        >
-          Nəticələrə bax
-        </Link>
+        >{t("Nəticələrə bax")}</Link>
         <Link
           to='/monitor/profile'
           className='rounded-lg border bg-card px-3 py-2 text-sm font-medium hover:bg-muted'
-        >
-          Bildiriş və abunə məlumatları
-        </Link>
+        >{t("Bildiriş və abunə məlumatları")}</Link>
         <Link
           to='/monitor/story-intelligence'
           className='rounded-lg border bg-card px-3 py-2 text-sm font-medium hover:bg-muted'
-        >
-          Xəbər xəritəsi
-        </Link>
+        >{t("Xəbər xəritəsi")}</Link>
       </nav>
       {hasNoMonitors ? <FirstRunGuide /> : null}
 
       <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
         <MetricCard
           label='Monitorlar'
-          description='İzlənən mövzular'
+          description={t("İzlənən mövzular")}
           value={monitorCount}
           to='/monitor/monitors'
           icon={Radio}
         />
         <MetricCard
-          label='Açar sözlər'
-          description='İzlənən ifadələr'
+          label={t("Açar sözlər")}
+          description={t("İzlənən ifadələr")}
           value={keywordCount}
           to='/monitor/monitors'
           icon={Hash}
         />
         <MetricCard
-          label='Tapılan media materialı'
-          description='Ən yeni 10 nəticə daxilində'
+          label={t("Tapılan media materialı")}
+          description={t("Ən yeni 10 nəticə daxilində")}
           value={resultCount}
           to='/monitor/results'
           icon={Bell}
         />
         <MetricCard
-          label='Göndərilmiş bildiriş'
-          description='Son nəticələr üzrə bildirişlər'
+          label={t("Göndərilmiş bildiriş")}
+          description={t("Son nəticələr üzrə bildirişlər")}
           value={alertCount}
           to='/monitor/alerts'
           icon={Send}
@@ -323,22 +297,13 @@ function UserMonitorDashboard() {
         <section className='rounded-2xl border border-border bg-card p-4 shadow-sm'>
           <div className='flex flex-col gap-2 md:flex-row md:items-center md:justify-between'>
             <div>
-              <h2 className='text-base font-bold text-foreground'>
-                Monitorinq necə işləyir?
-              </h2>
-              <p className='text-sm leading-6 text-muted-foreground'>
-                Sistem açar sözlərinizi media mənbələrində yoxlayır. Uyğun
-                material tapıldıqda nəticələr və bildirişlər bölməsində görünür.
-              </p>
+              <h2 className='text-base font-bold text-foreground'>{t("Monitorinq necə işləyir?")}</h2>
+              <p className='text-sm leading-6 text-muted-foreground'>{t("Sistem açar sözlərinizi media mənbələrində yoxlayır. Uyğun material tapıldıqda nəticələr və bildirişlər bölməsində görünür.")}</p>
             </div>
             <div className='flex flex-wrap gap-2 text-sm'>
               <span className='inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700'>
-                <CheckCircle2 className='h-4 w-4' />
-                Monitor aktivdir
-              </span>
-              <span className='rounded-full border border-border px-2 py-1 text-muted-foreground'>
-                Nəticələr avtomatik yenilənir
-              </span>
+                <CheckCircle2 className='h-4 w-4' />{t("Monitor aktivdir")}</span>
+              <span className='rounded-full border border-border px-2 py-1 text-muted-foreground'>{t("Nəticələr avtomatik yenilənir")}</span>
             </div>
           </div>
         </section>
@@ -347,39 +312,33 @@ function UserMonitorDashboard() {
       <section className='overflow-hidden rounded-2xl border border-border bg-card shadow-sm'>
         <div className='flex flex-col items-start justify-between gap-3 border-b border-border p-4 sm:flex-row sm:items-center'>
           <div>
-            <h2 className='text-lg font-bold text-foreground'>
-              Son uyğunluqlar
-            </h2>
-            <p className='text-sm text-muted-foreground'>
-              Ən yeni monitor nəticələri
-            </p>
+            <h2 className='text-lg font-bold text-foreground'>{t("Son uyğunluqlar")}</h2>
+            <p className='text-sm text-muted-foreground'>{t("Ən yeni monitor nəticələri")}</p>
           </div>
 
           <Link
             to='/monitor/results'
             className='rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-muted/50'
-          >
-            Hamısı
-          </Link>
+          >{t("Hamısı")}</Link>
         </div>
 
         {recentMatches.length === 0 ? (
           <div className='grid gap-2 p-8 text-center'>
             <div className='font-semibold text-foreground'>
               {hasNoMonitors
-                ? 'Başlamaq üçün monitor yaradın'
-                : 'Hələ nəticə yoxdur'}
+                ? t("Başlamaq üçün monitor yaradın")
+                : t("Hələ nəticə yoxdur")}
             </div>
             <p className='mx-auto max-w-md text-sm leading-6 text-muted-foreground'>
               {hasNoMonitors
-                ? 'İlk monitoru yaratdıqdan və açar söz əlavə etdikdən sonra sistem uyğun media materiallarını izləməyə başlayacaq.'
-                : 'Monitorlarınız yeni uyğun media materialı tapdıqda son nəticələr burada görünəcək.'}
+                ? t("İlk monitoru yaratdıqdan və açar söz əlavə etdikdən sonra sistem uyğun media materiallarını izləməyə başlayacaq.")
+                : t("Monitorlarınız yeni uyğun media materialı tapdıqda son nəticələr burada görünəcək.")}
             </p>
             <Link
               to='/monitor/monitors'
               className='mx-auto mt-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-muted/50'
             >
-              {hasNoMonitors ? 'İlk monitoru yarat' : 'Monitorları yoxla'}
+              {hasNoMonitors ? t("İlk monitoru yarat") : t("Monitorları yoxla")}
             </Link>
           </div>
         ) : (
@@ -396,7 +355,7 @@ function UserMonitorDashboard() {
                     <div className='min-w-0'>
                       <div className='mb-2 flex flex-wrap items-center gap-2'>
                         <span className='rounded-full border border-border px-2 py-1 text-xs text-muted-foreground'>
-                          {match.user_monitors?.name || 'Monitor'}
+                          {match.user_monitors?.name || t("Monitor")}
                         </span>
                         <span className='rounded-full border border-border px-2 py-1 text-xs text-muted-foreground'>
                           {match.matched_keyword || '-'}
@@ -416,9 +375,7 @@ function UserMonitorDashboard() {
                           {decodeHtml(item.title)}
                         </a>
                       ) : (
-                        <div className='font-semibold text-muted-foreground'>
-                          Xəbər tapılmadı
-                        </div>
+                        <div className='font-semibold text-muted-foreground'>{t("Xəbər tapılmadı")}</div>
                       )}
                     </div>
 
@@ -428,9 +385,7 @@ function UserMonitorDashboard() {
                         target='_blank'
                         rel='noreferrer'
                         className='inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold hover:bg-muted/50'
-                      >
-                        Aç
-                        <ExternalLink className='h-4 w-4' />
+                      >{t("Aç")}<ExternalLink className='h-4 w-4' />
                       </a>
                     ) : null}
                   </div>

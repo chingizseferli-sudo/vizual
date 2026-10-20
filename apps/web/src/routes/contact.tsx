@@ -10,6 +10,7 @@ import {
   PublicPageHero,
   PublicPageShell,
 } from '@/components/public-site/public-site-shell'
+import { t } from '@/lib/i18n'
 
 function ContactPage() {
   const [content, setContent] = useState(defaultPublicSiteContent)
@@ -19,15 +20,15 @@ function ContactPage() {
   }, [])
 
   const contactItems = [
-    { title: 'Email', value: content.contact.email, icon: Mail },
+    { title: t("Email"), value: content.contact.email, icon: Mail },
     {
       title: 'Demo',
       value: content.contact.cardDescription,
       icon: MessageCircle,
     },
     {
-      title: 'Əməkdaşlıq',
-      value: 'Fərdi ehtiyaclar üçün danışaq',
+      title: t("Əməkdaşlıq"),
+      value: t("Fərdi ehtiyaclar üçün danışaq"),
       icon: Phone,
     },
   ]
