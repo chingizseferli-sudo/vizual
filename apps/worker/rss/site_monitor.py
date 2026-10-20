@@ -1787,7 +1787,7 @@ def title_is_probably_corrupt(title):
         return False
     if "<" in value and ">" in value:
         return True
-    if re.search(r"\.\.\.|…|â€¦", value):
+    if "â€¦" in value:  # mojibake of "…"; a real ellipsis is a legitimate headline ending
         return True
     if mojibake_score(value) >= max(8, len(value) // 7):
         return True
@@ -1950,10 +1950,19 @@ def meaningful_slug_words(article_url):
         "az", "xeber", "xeberler", "xəbər", "xəbərlər", "news", "post",
         "article", "video", "foto", "fotolar", "cemiyyet", "cəmiyyət",
         "siyaset", "siyasət", "iqtisadiyyat", "tehsil", "təhsil",
+        "view", "views", "detail", "details", "item", "read", "page", "index",
+        "kheberler", "xeberler", "haberler", "articles", "blog",
     }
     words = re.findall(r"[a-zA-Z0-9əöğüçıƏÖĞÜÇŞşİı]{4,}", slug_title)
     words = [re.sub(r"(?<=[a-z])\d+$", "", word) for word in words]  # 'azerbaycandir1' -> 'azerbaycandir'
-    return [word for word in words if len(word) >= 4 and word not in stop_words]
+    words = [
+        word for word in words
+        if len(word) >= 4 and word not in stop_words
+        and not re.search(r"\d", word)  # dates / ids (2021, y7hdrc) say nothing about the title
+        and re.search(r"[aeiouəıöü]", word)  # random consonant ids (thslnnksff)
+    ]
+    # Fewer than 3 real words is a route or category, not a headline slug.
+    return words if len(words) >= 3 else []
 
 
 def title_matches_url_slug(title, article_url):

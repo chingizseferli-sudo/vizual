@@ -26,7 +26,10 @@ def test_summary_h2_does_not_beat_og_title():
 
 def test_wrong_related_post_title_is_not_used():
     html = '<html><head><meta property="og:title" content="Rus sektoru ilə bağlı yenilik – Bundan sonra…"></head><body><div class="post-title">Laos Prezidenti BDU-nun tələbələri ilə görüşüb</div></body></html>'
-    assert extract(html, "https://news365.az/rus-sektoru-ile-bagli-yenilik/147723", "news365.az")["title"] == ""
+    result = extract(html, "https://news365.az/rus-sektoru-ile-bagli-yenilik/147723", "news365.az")
+    # The page's own (shortened) headline is used; the related post's title never is.
+    assert result["title"] == "Rus sektoru ilə bağlı yenilik – Bundan sonra…"
+    assert "Laos" not in result["title"]
 
 
 def test_site_name_meta_does_not_block_real_h1():
@@ -73,3 +76,26 @@ def test_category_and_id_slug_does_not_reject_title():
         assert m.title_rejection_reason(title, url) == "", url
     # a real slug is still checked
     assert m.title_rejection_reason("Tamam başqa mövzuda uzun xəbər başlığı burada", "https://x.az/prezident-energetikleri-teltif-etdi-154177") == "slug_mismatch"
+
+
+def test_ellipsis_in_real_headlines_is_not_corrupt():
+    cases = [
+        ("https://senzor.az/reyler/62150-adnan-ehmedzadenin-13-ayliq-hebsi-basa-catdi.html", "Adnan Əhmədzadənin 13 aylıq həbsi başa çatdı..."),
+        ("https://kulis.az/xeber/media/soz-adli-dunyanin-isiginda-mecid-resadetoglu-70126", "Söz adlı dünyanın işığında... - Məcid Rəşadətoğlu"),
+        ("https://hit.az/az/olke/308151/siqarete-en-cox-pul-hansi-blgede-xerclenir-ndash-baki-deyilmis/", "Siqaretə ən çox pul hansı bölgədə xərclənir? – Bakı deyilmiş..."),
+        ("https://milletinsesi.az/bakida-parklar-yenil%c9%99n%c9%99c%c9%99k-61-milyonluq-muqavil%c9%99/", "Bakıda parklar yenilənəcək: 61 milyonluq müqavilə…"),
+    ]
+    for url, title in cases:
+        assert m.title_rejection_reason(title, url) == "", (url, title)
+    assert m.title_is_probably_corrupt("Bakıda xÉ™bÉ™r â€¦")
+
+
+def test_route_and_id_slugs_do_not_reject_titles():
+    cases = [
+        ("http://isim.az/az/news-view/1642", "İsİm-in Də Təşkilatçılar Sırasında Olduğu I Bakı Beynəlxalq İnklüziv Konfransı Keçirilib"),
+        ("https://tif.edu.az/xeberler/thslnnksff-24/", "Təhsilin İnkişafı Fondu son 3 ayda 86 nəfərin IELTS imtahanında iştirakına dəstək göstərib"),
+        ("https://saglamolun.az/index.php/saglam-xeber/31929-2021-11-27-14-10-36.html", "Koronavirusa yoluxmuş qadın körpəyə süd verə bilərmi?"),
+        ("https://e-saglam.az/article/news-1747578897-y7hdrc", "Meteohəssas insanların NƏZƏRİNƏ: Güclü geomaqnit qasırğası proqnozlaşdırılır"),
+    ]
+    for url, title in cases:
+        assert m.title_rejection_reason(title, url) == "", (url, title)
