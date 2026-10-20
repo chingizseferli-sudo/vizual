@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { SOCIAL_INTERVAL_OPTIONS } from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
 import { ResponsiveTable } from '@/components/ui/responsive-table'
 import {
@@ -14,6 +15,7 @@ type UserProfile = {
   email: string | null
   telegram_chat_id: string | null
   plan_id: string | null
+  social_interval_minutes: number | null
   created_at?: string | null
   updated_at?: string | null
 }
@@ -94,6 +96,7 @@ function AdminUserDetailsPage() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([])
   const [subscriptions, setSubscriptions] = useState<UserSubscription[]>([])
   const [telegramChatId, setTelegramChatId] = useState('')
+  const [socialInterval, setSocialInterval] = useState('')
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [subscriptionStatus, setSubscriptionStatus] = useState<
     'active' | 'trialing'
@@ -116,7 +119,7 @@ function AdminUserDetailsPage() {
         supabase
           .from('user_profiles')
           .select(
-            'user_id,email,telegram_chat_id,plan_id,created_at,updated_at'
+            'user_id,email,telegram_chat_id,plan_id,social_interval_minutes,created_at,updated_at'
           )
           .eq('user_id', userId)
           .maybeSingle(),
@@ -215,6 +218,7 @@ function AdminUserDetailsPage() {
     ).map((plan) => normalizePlanRow(plan))
     setProfile(profileData)
     setTelegramChatId(profileData?.telegram_chat_id || '')
+    setSocialInterval(String(profileData?.social_interval_minutes ?? ''))
     setPlans(planData)
     setSubscriptions(
       (subscriptionsRes.data || []) as unknown as UserSubscription[]
@@ -312,6 +316,22 @@ function AdminUserDetailsPage() {
     setSubscriptionEnd('')
     await loadData()
     setMessage('Plan uğurla təyin edildi.')
+  }
+
+  async function saveSocialInterval(value: string) {
+    setSocialInterval(value)
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ social_interval_minutes: value ? Number(value) : null })
+      .eq('user_id', userId)
+
+    if (error) {
+      setMessage(error.message)
+      return
+    }
+
+    await loadData()
+    setMessage('Sosial yoxlama tezliyi saxlanıldı.')
   }
 
   async function saveTelegram() {
@@ -670,6 +690,27 @@ function AdminUserDetailsPage() {
             {assigningPlan ? 'Təyin edilir...' : 'Planı təyin et'}
           </button>
         </div>
+
+        <label className='mt-4 grid max-w-sm gap-1.5 text-sm font-medium'>
+          Sosial şəbəkə yoxlama tezliyi
+          <select
+            value={socialInterval}
+            onChange={(event) => void saveSocialInterval(event.target.value)}
+            disabled={!profile}
+            className='rounded-lg border bg-background px-3 py-2 font-normal'
+          >
+            <option value=''>Plan üzrə</option>
+            {SOCIAL_INTERVAL_OPTIONS.map((option) => (
+              <option key={option.minutes} value={option.minutes}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <span className='text-xs font-normal text-muted-foreground'>
+            Facebook və Instagram axtarışı bu müştərinin açar sözləri üçün bu
+            tezliklə aparılır.
+          </span>
+        </label>
 
         {subscriptions.length > 0 ? (
           <details className='mt-4 rounded-lg border'>

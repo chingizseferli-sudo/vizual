@@ -324,6 +324,7 @@ function SourcesPage() {
     const { data, error } = await supabase
       .from('sources')
       .select(SOURCE_COLUMNS)
+      .or('status.is.null,status.neq.social')
       .order('name', { ascending: true })
 
     if (error) {

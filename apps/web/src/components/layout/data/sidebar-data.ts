@@ -5,6 +5,7 @@
   LayoutDashboard,
   Send,
   Settings,
+  Share2,
   ShieldCheck,
   Users,
 } from 'lucide-react'
@@ -58,6 +59,11 @@ export const sidebarData: SidebarData = {
           title: 'Telegram bot',
           url: '/admin/telegram',
           icon: Send,
+        },
+        {
+          title: 'Sosial monitorinq',
+          url: '/admin/social',
+          icon: Share2,
         },
         {
           title: 'Tənzimləmələr',
