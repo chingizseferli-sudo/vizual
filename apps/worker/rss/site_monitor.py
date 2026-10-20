@@ -658,6 +658,50 @@ def get_domain_lock(domain):
         return DOMAIN_LOCKS[domain]
 
 
+# Last resort for sites that answer 403 to our server address: read the page through a
+# free reader service. Only used after a direct 403, and remembered per domain for a while.
+READER_FALLBACK_ENABLED = os.getenv("READER_FALLBACK_ENABLED", "1") != "0"
+READER_FALLBACK_URL = "https://r.jina.ai/"
+READER_BLOCKED_TTL_SECONDS = 6 * 3600
+READER_BLOCKED_DOMAINS = {}
+
+
+def fetch_via_reader(url, timeout):
+    try:
+        response = requests.get(
+            READER_FALLBACK_URL + url,
+            headers={"X-Return-Format": "html", "Accept": "text/html"},
+            timeout=max(timeout or 0, 30),
+            allow_redirects=True,
+        )
+    except Exception as exc:
+        print(f"Reader fallback xətası: {url} | {exc}", flush=True)
+        return None
+    text = getattr(response, "text", "") or ""
+    if response.status_code != 200 or len(text) < 200 or "Target URL returned error" in text[:400]:
+        return None
+    response.url = url
+    return response
+
+
+def get_with_reader_fallback(url, domain, kwargs):
+    if not READER_FALLBACK_ENABLED or url.startswith(READER_FALLBACK_URL):
+        return requests.get(url, **kwargs)
+    blocked_at = READER_BLOCKED_DOMAINS.get(domain)
+    if blocked_at and time.time() - blocked_at < READER_BLOCKED_TTL_SECONDS:
+        via_reader = fetch_via_reader(url, kwargs.get("timeout"))
+        if via_reader is not None:
+            return via_reader
+    response = requests.get(url, **kwargs)
+    if response.status_code == 403 and not is_local_only_url(url):
+        via_reader = fetch_via_reader(url, kwargs.get("timeout"))
+        if via_reader is not None:
+            READER_BLOCKED_DOMAINS[domain] = time.time()
+            print(f"Reader fallback ilə oxundu: {url}", flush=True)
+            return via_reader
+    return response
+
+
 def safe_request(url, *, site=None, method="", **kwargs):
     kwargs.setdefault("timeout", REQUEST_TIMEOUT)
     domain = get_domain(url)
@@ -676,7 +720,7 @@ def safe_request(url, *, site=None, method="", **kwargs):
             site["_request_count"] = int(site.get("_request_count") or 0) + 1
             if method:
                 site["_last_request_method"] = method
-        return requests.get(url, **kwargs)
+        return get_with_reader_fallback(url, domain, kwargs)
 
 
 def source_backoff_interval(reason, fail_count=0):

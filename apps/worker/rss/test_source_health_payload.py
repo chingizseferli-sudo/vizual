@@ -237,5 +237,45 @@ class ArticleVerdictCacheTests(unittest.TestCase):
         self.assertEqual(site_monitor.cached_article_verdict("https://example.az/yeni", self.signature), "")
 
 
+class ReaderFallbackTests(unittest.TestCase):
+    class Resp:
+        def __init__(self, status, text="", url=""):
+            self.status_code, self.text, self.url = status, text, url
+
+    def setUp(self):
+        self.calls = []
+        self.original_get = site_monitor.requests.get
+        site_monitor.READER_BLOCKED_DOMAINS.clear()
+
+        def fake_get(url, **kwargs):
+            self.calls.append(url)
+            if url.startswith(site_monitor.READER_FALLBACK_URL):
+                return self.Resp(200, "<html>" + "x" * 300 + "</html>", url)
+            return self.Resp(403 if "blocked.az" in url else 200, "ok", url)
+
+        site_monitor.requests.get = fake_get
+
+    def tearDown(self):
+        site_monitor.requests.get = self.original_get
+
+    def test_403_is_read_through_reader_and_remembered(self):
+        response = site_monitor.get_with_reader_fallback("https://blocked.az/", "blocked.az", {"timeout": 5})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.url, "https://blocked.az/")
+        self.calls.clear()
+        site_monitor.get_with_reader_fallback("https://blocked.az/news/1", "blocked.az", {"timeout": 5})
+        self.assertEqual(self.calls, [site_monitor.READER_FALLBACK_URL + "https://blocked.az/news/1"])
+
+    def test_normal_site_never_uses_reader(self):
+        response = site_monitor.get_with_reader_fallback("https://fine.az/", "fine.az", {"timeout": 5})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.calls, ["https://fine.az/"])
+
+    def test_reader_failure_keeps_original_403(self):
+        site_monitor.requests.get = lambda url, **k: self.Resp(403 if "blocked.az" in url and not url.startswith(site_monitor.READER_FALLBACK_URL) else 502, "", url)
+        response = site_monitor.get_with_reader_fallback("https://blocked.az/", "blocked.az", {"timeout": 5})
+        self.assertEqual(response.status_code, 403)
+
+
 if __name__ == "__main__":
     unittest.main()
