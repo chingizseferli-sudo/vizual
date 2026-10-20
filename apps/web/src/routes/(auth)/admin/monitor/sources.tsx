@@ -186,6 +186,16 @@ function isValidHost(host: string) {
   return /^[a-z0-9.-]+$/.test(host)
 }
 
+function trialNotes(notes: string | null, extra = '') {
+  const base = (notes || '').replace(TRIAL_TAG_WITH_SPACE, '').trim()
+  const tag = `[trial passes=0 fails=0 since=${new Date().toISOString()}]`
+  return [base, extra, tag].filter(Boolean).join(' ')
+}
+
+function shortReason(reason: string) {
+  return reason.split(/[;\n]/)[0].trim().slice(0, 140)
+}
+
 function sourceTitle(source: Source) {
   return (
     getHostname(source.base_url) ||
@@ -391,11 +401,38 @@ function SourcesPage() {
       )
       return
     }
+    if (data.ok) {
+      setMessage(
+        `${sourceTitle(source)} oxuna bilir: ${formatMethod(data.method)}, ${data.candidateCount} link tapıldı. Heç nə dəyişdirilmədi.`
+      )
+      return
+    }
+
+    // The check runs from Supabase Edge, which many sites block. That says
+    // nothing about the Railway bot, so the bot gets the final word.
+    const reason = shortReason(data.reason)
+    if (source.status === 'active' || TRIAL_TAG.test(source.notes || '')) {
+      setMessage(
+        `${sourceTitle(source)}: Edge oxuya bilmədi (${reason}). Bu, botun oxuya bilmədiyi demək deyil; sayt aktivdirsə və xəbər gəlirsə, problem yoxdur.`
+      )
+      return
+    }
+
+    const { error: trialError } = await supabase
+      .from('sources')
+      .update({
+        status: 'inactive',
+        discovery_status: 'accepted',
+        consecutive_fail_count: 0,
+        notes: trialNotes(source.notes),
+      })
+      .eq('id', source.id)
     setMessage(
-      data.ok
-        ? `${sourceTitle(source)} oxuna bilir: ${formatMethod(data.method)}, ${data.candidateCount} link tapıldı. Heç nə dəyişdirilmədi.`
-        : `${sourceTitle(source)} oxunmadı: ${data.reason}`
+      trialError
+        ? `${sourceTitle(source)}: sınağa qoyulmadı (${trialError.message})`
+        : `${sourceTitle(source)}: Edge oxuya bilmədi (${reason}). Sınağa qoyuldu, Railway botu gizli yoxlayıb özü qərar verəcək.`
     )
+    await loadSources()
   }
 
   async function deleteSource(source: Source) {
@@ -458,13 +495,18 @@ function SourcesPage() {
       article_pattern: null,
     }
 
-    const { data: repair, error } =
-      await supabase.functions.invoke<RepairResponse>('source-repair', {
-        body: { source: { id: `new-${host}`, ...draft } },
-      })
+    const { data, error } = await supabase.functions.invoke<RepairResponse>(
+      'source-repair',
+      { body: { source: { id: `new-${host}`, ...draft } } }
+    )
 
-    if (error || !repair) {
-      return `${host}: analiz alınmadı (${error?.message || 'boş cavab'})`
+    // No site is dropped because the Edge check failed; the bot decides.
+    const repair: RepairResponse = data ?? {
+      ok: false,
+      method: 'latest_page',
+      reason: error?.message || 'boş cavab',
+      candidateCount: 0,
+      update: {},
     }
 
     const update = repair.update || {}
@@ -483,22 +525,25 @@ function SourcesPage() {
         typeof update.article_pattern === 'string'
           ? update.article_pattern
           : null,
-      discovery_status: repair.ok ? 'accepted' : 'needs_review',
+      discovery_status: 'accepted',
       last_checked_at: stamp,
-      last_error: repair.ok ? null : repair.reason,
-      last_result: repair.ok ? 'source_added' : 'source_review_required',
-      consecutive_fail_count: repair.ok ? 0 : 1,
+      last_error: null,
+      last_result: 'source_added',
+      consecutive_fail_count: 0,
       last_discovered_at: stamp,
-      notes: repair.ok
-        ? `[manual_add] ${repair.method}, ${repair.candidateCount} link. [trial passes=0 fails=0 since=${stamp}]`
-        : `[manual_add] oxuma üsulu tapılmadı: ${repair.reason}`,
+      notes: trialNotes(
+        null,
+        repair.ok
+          ? `[manual_add] ${repair.method}, ${repair.candidateCount} link.`
+          : `[manual_add] Edge oxuya bilmədi: ${shortReason(repair.reason)}`
+      ),
     })
 
     if (insertError) return `${host}: yazılmadı (${insertError.message})`
     known.add(host)
     return repair.ok
       ? `${host}: sınaqa qoyuldu (${formatMethod(repair.method)}). Bot gizli oxuyub avtomatik aktivləşdirəcək.`
-      : `${host}: oxuma üsulu tapılmadı, "Yoxlanmalıdır" siyahısına düşdü.`
+      : `${host}: Edge oxuya bilmədi (${shortReason(repair.reason)}). Yenə də sınaqa qoyuldu, Railway botu yoxlayacaq.`
   }
 
   async function addSources() {
