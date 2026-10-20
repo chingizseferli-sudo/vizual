@@ -1,6 +1,6 @@
 # One image for every Vizual background worker. Choose the process with WORKER
 # (see start.sh). On Railway create one service per worker from this directory
-# (root directory: apps/worker) and set WORKER=rss / WORKER=page_change.
+# (root directory: apps/worker) and set WORKER=rss / WORKER=page_change / WORKER=social.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -21,12 +21,13 @@ RUN pip install -r requirements.txt
 COPY start.sh ./start.sh
 COPY rss ./rss
 COPY page_change ./page_change
+COPY social ./social
 
 # Workers write small state files (site_health.json, telegram_offset.json) next
 # to their code, so the app user needs write access to its own directories.
 RUN useradd --create-home --uid 10001 worker \
     && chmod +x /app/start.sh \
-    && chown -R worker:worker /app/rss /app/page_change
+    && chown -R worker:worker /app/rss /app/page_change /app/social
 USER worker
 
 CMD ["/app/start.sh"]

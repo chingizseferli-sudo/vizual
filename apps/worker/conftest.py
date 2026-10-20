@@ -11,7 +11,7 @@ import feedparser  # noqa: F401,E402
 import requests  # noqa: F401,E402
 
 WORKER_ROOT = os.path.dirname(os.path.abspath(__file__))
-for _sub in ("rss", "page_change"):
+for _sub in ("rss", "page_change", "social"):
     _path = os.path.join(WORKER_ROOT, _sub)
     if _path not in sys.path:
         sys.path.insert(0, _path)
