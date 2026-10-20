@@ -1,8 +1,7 @@
-import { useState, type JSX } from 'react'
+import { type JSX } from 'react'
 import { useLocation, useNavigate, Link } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
   SelectContent,
@@ -22,20 +21,22 @@ type SidebarNavProps = React.HTMLAttributes<HTMLElement> & {
 export function SidebarNav({ className, items, ...props }: SidebarNavProps) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const [val, setVal] = useState(pathname ?? '/settings')
+  // Routes are reached both as /admin/settings and /admin/settings/.
+  const trim = (path: string) => path.replace(/\/+$/, '')
+  const activeHref =
+    items.find((item) => trim(item.href) === trim(pathname))?.href ?? ''
 
-  const handleSelect = (e: string) => {
-    setVal(e)
-    navigate({ to: e })
+  const handleSelect = (href: string) => {
+    navigate({ to: href })
   }
 
   return (
     <>
       <div className='p-1 md:hidden'>
-        <Select value={val} onValueChange={handleSelect}>
+        <Select value={activeHref} onValueChange={handleSelect}>
           <SelectTrigger
             aria-label='Tənzimləmə bölməsi'
-            className='h-12 sm:w-48'
+            className='h-12 w-full sm:w-64'
           >
             <SelectValue placeholder='Bölmə seçin' />
           </SelectTrigger>
@@ -52,14 +53,10 @@ export function SidebarNav({ className, items, ...props }: SidebarNavProps) {
         </Select>
       </div>
 
-      <ScrollArea
-        orientation='horizontal'
-        type='always'
-        className='hidden w-full min-w-40 bg-background px-1 py-2 md:block'
-      >
+      <div className='hidden w-full bg-background px-1 py-2 md:block'>
         <nav
           className={cn(
-            'flex space-x-2 py-1 lg:flex-col lg:space-y-1 lg:space-x-0',
+            'flex flex-wrap gap-1 py-1 lg:flex-col lg:flex-nowrap',
             className
           )}
           {...props}
@@ -70,7 +67,7 @@ export function SidebarNav({ className, items, ...props }: SidebarNavProps) {
               to={item.href}
               className={cn(
                 buttonVariants({ variant: 'ghost' }),
-                pathname === item.href
+                item.href === activeHref
                   ? 'bg-muted hover:bg-accent'
                   : 'hover:bg-accent hover:underline',
                 'justify-start'
@@ -81,7 +78,7 @@ export function SidebarNav({ className, items, ...props }: SidebarNavProps) {
             </Link>
           ))}
         </nav>
-      </ScrollArea>
+      </div>
     </>
   )
 }

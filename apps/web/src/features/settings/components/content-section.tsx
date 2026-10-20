@@ -14,7 +14,7 @@ export function ContentSection({ title, desc, children }: ContentSectionProps) {
         <p className='text-sm text-muted-foreground'>{desc}</p>
       </div>
       <Separator className='my-4 flex-none' />
-      <div className='w-full min-w-0 scroll-smooth pb-8 md:overflow-y-auto md:pe-4'>
+      <div className='w-full min-w-0 pb-8'>
         <div className='-mx-1 px-1.5 lg:max-w-xl'>{children}</div>
       </div>
     </div>

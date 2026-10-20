@@ -56,7 +56,7 @@ export function Settings() {
         <ProfileDropdown />
       </div>
 
-      <Main fixed>
+      <Main>
         <div className='space-y-0.5'>
           <h1 className='text-xl font-semibold tracking-tight'>
             {'T\u0259nziml\u0259m\u0259l\u0259r'}
@@ -68,8 +68,8 @@ export function Settings() {
           </p>
         </div>
         <Separator className='my-4 lg:my-6' />
-        <div className='flex flex-1 flex-col space-y-2 md:space-y-2 lg:flex-row lg:space-y-0 lg:space-x-12'>
-          <aside className='top-0 lg:sticky lg:w-1/5'>
+        <div className='flex flex-1 flex-col space-y-2 lg:flex-row lg:space-y-0 lg:space-x-12'>
+          <aside className='top-0 min-w-0 lg:sticky lg:w-1/5'>
             <SidebarNav items={sidebarNavItems} />
           </aside>
           <div className='flex w-full min-w-0 p-1'>

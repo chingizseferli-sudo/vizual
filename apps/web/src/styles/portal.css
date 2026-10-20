@@ -21,7 +21,9 @@
   min-width: 0;
   max-width: 100rem;
   margin-inline: auto;
-  overflow-wrap: anywhere;
+  /* break-word, not anywhere: anywhere also shrinks min-content, so table
+     columns and grid cards squeezed words letter by letter. */
+  overflow-wrap: break-word;
 }
 
 .portal-page {
@@ -64,6 +66,12 @@
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   border-radius: inherit;
+}
+
+/* Status pills in table cells stay on one line. */
+.portal-shell td span.rounded-full {
+  display: inline-block;
+  white-space: nowrap;
 }
 
 .responsive-table[data-mobile-layout='scroll'] table {

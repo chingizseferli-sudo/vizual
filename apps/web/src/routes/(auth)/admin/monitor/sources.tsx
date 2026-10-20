@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import { Pencil, Power, RefreshCw, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { ResponsiveTable } from '@/components/ui/responsive-table'
 
@@ -118,6 +119,8 @@ const STATE_FILTERS: Array<{ key: StateFilter; label: string }> = [
   { key: 'off', label: 'Söndürülüb' },
 ]
 
+const ACTION_BUTTON =
+  'inline-flex size-8 shrink-0 items-center justify-center rounded-md border hover:bg-muted disabled:opacity-50'
 function formatMethod(value: string | null) {
   if (!value) return '—'
   return METHOD_LABELS[value] || value
@@ -651,7 +654,7 @@ function SourcesPage() {
       </section>
 
       {message ? (
-        <div className='whitespace-pre-line rounded-lg border bg-muted/50 p-3 text-sm'>
+        <div className='rounded-lg border bg-muted/50 p-3 text-sm whitespace-pre-line'>
           {message}
         </div>
       ) : null}
@@ -687,13 +690,15 @@ function SourcesPage() {
 
       <ResponsiveTable label='Mənbələr'>
         <table className='w-full min-w-[860px] table-fixed text-sm'>
-          <thead className='bg-muted/50'>
+          <thead className='bg-muted'>
             <tr>
               <th className='w-[28%] p-3 text-left'>Mənbə</th>
               <th className='w-[32%] p-3 text-left'>Vəziyyət</th>
               <th className='w-36 p-3 text-left'>Üsul</th>
               <th className='w-36 p-3 text-left'>Son xəbər</th>
-              <th className='w-44 p-3 text-right'>İş</th>
+              <th className='w-52 bg-muted p-3 text-right md:sticky md:right-0'>
+                İş
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -723,7 +728,7 @@ function SourcesPage() {
                       href={source.latest_url || source.base_url}
                       target='_blank'
                       rel='noreferrer'
-                      className='break-all font-medium hover:underline'
+                      className='font-medium break-all hover:underline'
                     >
                       {sourceTitle(source)}
                     </a>
@@ -744,37 +749,49 @@ function SourcesPage() {
                   <td className='p-3'>
                     {formatDate(source.last_article_found_at)}
                   </td>
-                  <td className='p-3 text-right'>
-                    <div className='flex flex-wrap justify-end gap-1'>
+                  <td className='bg-card p-3 text-right md:sticky md:right-0 md:shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.15)]'>
+                    <div className='flex justify-end gap-1'>
                       <button
                         type='button'
+                        title='Yoxla'
+                        aria-label='Yoxla'
                         disabled={busyId === source.id}
                         onClick={() => void checkNow(source)}
-                        className='rounded-md border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50'
+                        className={ACTION_BUTTON}
                       >
-                        Yoxla
+                        <RefreshCw className='size-4' />
                       </button>
                       <button
                         type='button'
+                        title={
+                          source.status === 'active' ? 'Söndür' : 'Aktiv et'
+                        }
+                        aria-label={
+                          source.status === 'active' ? 'Söndür' : 'Aktiv et'
+                        }
                         disabled={busyId === source.id}
                         onClick={() => void toggleSource(source)}
-                        className='rounded-md border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50'
+                        className={`${ACTION_BUTTON} ${source.status === 'active' ? '' : 'text-success'}`}
                       >
-                        {source.status === 'active' ? 'Söndür' : 'Aktiv et'}
+                        <Power className='size-4' />
                       </button>
                       <button
                         type='button'
+                        title='Redaktə'
+                        aria-label='Redaktə'
                         onClick={() => setEditing(source)}
-                        className='rounded-md border px-2 py-1 text-xs hover:bg-muted'
+                        className={ACTION_BUTTON}
                       >
-                        Redaktə
+                        <Pencil className='size-4' />
                       </button>
                       <button
                         type='button'
+                        title='Sil'
+                        aria-label='Sil'
                         onClick={() => void deleteSource(source)}
-                        className='rounded-md border border-destructive/25 px-2 py-1 text-xs text-destructive hover:bg-destructive/10'
+                        className={`${ACTION_BUTTON} border-destructive/25 text-destructive hover:bg-destructive/10`}
                       >
-                        Sil
+                        <Trash2 className='size-4' />
                       </button>
                     </div>
                   </td>

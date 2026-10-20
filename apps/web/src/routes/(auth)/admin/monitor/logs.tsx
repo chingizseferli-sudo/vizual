@@ -396,7 +396,7 @@ function LogsPage() {
         </div>
       ) : null}
 
-      <div className='grid gap-4 md:grid-cols-5'>
+      <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5'>
         <button
           type='button'
           onClick={() => {
@@ -513,26 +513,28 @@ function LogsPage() {
           <option value='other'>Digər</option>
         </select>
 
-        <button
-          type='button'
-          onClick={() => {
-            setTab('checks')
-            resetFilteredView()
-          }}
-          className={`rounded-lg border px-4 py-2 ${tab === 'checks' ? 'bg-primary text-primary-foreground' : ''}`}
-        >
-          Mənbə yoxlamaları
-        </button>
-        <button
-          type='button'
-          onClick={() => {
-            setTab(tab === 'discovery' ? 'rejected' : 'discovery')
-            resetFilteredView()
-          }}
-          className={`rounded-lg border px-4 py-2 ${tab !== 'checks' ? 'bg-primary text-primary-foreground' : ''}`}
-        >
-          {tab === 'rejected' ? 'Rədd edilənlər' : 'Aşkarlama'}
-        </button>
+        <div className='flex gap-2 xl:col-span-2'>
+          <button
+            type='button'
+            onClick={() => {
+              setTab('checks')
+              resetFilteredView()
+            }}
+            className={`flex-1 rounded-lg border px-3 py-2 text-center ${tab === 'checks' ? 'bg-primary text-primary-foreground' : ''}`}
+          >
+            Mənbə yoxlamaları
+          </button>
+          <button
+            type='button'
+            onClick={() => {
+              setTab(tab === 'discovery' ? 'rejected' : 'discovery')
+              resetFilteredView()
+            }}
+            className={`flex-1 rounded-lg border px-3 py-2 text-center ${tab !== 'checks' ? 'bg-primary text-primary-foreground' : ''}`}
+          >
+            {tab === 'rejected' ? 'Rədd edilənlər' : 'Aşkarlama'}
+          </button>
+        </div>
       </div>
 
       {tab === 'checks' ? (
