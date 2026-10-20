@@ -63,3 +63,13 @@ def test_in_word_hyphen_is_not_cut_as_site_suffix():
     for title in ['"Sabah" bu gün Dortmund "Borussiya"sı ilə üz-üzə gələcək', "Bakıda küləyin sürəti 27 m/s-yə çatır"]:
         assert m.clean_title_for_message(title + suffix) == title
     assert m.clean_title_for_message("Xəbər başlığı - Son xəbərlər, Azərbaycanda") == "Xəbər başlığı"
+
+
+def test_category_and_id_slug_does_not_reject_title():
+    for url, title in [
+        ("https://www.yeniazerbaycan.az/Dunya_e154160_az.html", "Avstraliyada deputat avtomobillə vurulub, vəziyyəti ağırdır"),
+        ("https://www.yeniazerbaycan.az/Sosial_e154177_az.html", "Xocavəndin iki kəndinə qaz xətti çəkilir"),
+    ]:
+        assert m.title_rejection_reason(title, url) == "", url
+    # a real slug is still checked
+    assert m.title_rejection_reason("Tamam başqa mövzuda uzun xəbər başlığı burada", "https://x.az/prezident-energetikleri-teltif-etdi-154177") == "slug_mismatch"
