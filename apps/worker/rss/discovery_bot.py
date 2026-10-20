@@ -316,19 +316,19 @@ def source_trust_level(score: int) -> str:
 
 def discovery_status_for_site(site: dict) -> str:
     status = site.get("status")
-    if status == "approved":
+    # Approved and review candidates both go to the trial; the trial's own reads decide.
+    if status in ("approved", "review"):
         return "accepted"
-    if status == "review":
-        return "manual_needed"
     return "rejected"
 
 
 def is_hard_rejected(site: dict) -> bool:
+    """Final rejection. Low Google News activity alone is not final: Google may simply not
+    index the site, so such a site goes to the trial where its real articles decide."""
     reason = str(site.get("reason") or "").lower()
     source_type = str(site.get("source_type") or "").lower()
     hard_markers = (
         "commercial_site_not_news",
-        "insufficient_news_activity",
         "subdomain_rejected",
         "bad_url_or_gov_blocked",
         "rejected_commercial",
@@ -364,6 +364,59 @@ def build_source_payload(site: dict) -> dict:
         since = datetime.now(timezone.utc).isoformat()
         payload["notes"] = f"{payload['notes'] or ''} [trial passes=0 fails=0 since={since}]".strip()
     return payload
+
+
+TRIAL_CAPACITY = int(os.getenv("DISCOVERY_TRIAL_CAPACITY", "30"))
+REJECT_COOLDOWN_DAYS = int(os.getenv("DISCOVERY_REJECT_COOLDOWN_DAYS", "7"))
+
+
+def site_reachable(session, url: str) -> bool:
+    """A dead or non-existent domain is not worth a trial slot."""
+    try:
+        return session.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True).status_code < 500
+    except requests.RequestException:
+        return False
+
+
+def count_trial_sources() -> int:
+    if not supabase_ready():
+        return 0
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/sources",
+            headers=supabase_headers({"Prefer": "count=exact"}),
+            params={
+                "select": "id",
+                "status": "eq.inactive",
+                "discovery_status": "eq.accepted",
+                "notes": "ilike.*[trial passes=*",
+                "limit": "1",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        return int(response.headers.get("Content-Range", "*/0").split("/")[-1] or 0)
+    except Exception as exc:
+        print(f"Sınaq sayı oxunmadı: {exc}", flush=True)
+        return 0
+
+
+def recently_rejected_domains() -> set[str]:
+    if not supabase_ready():
+        return set()
+    since = (datetime.now(timezone.utc) - timedelta(days=REJECT_COOLDOWN_DAYS)).isoformat()
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/discovery_logs",
+            headers=supabase_headers(),
+            params={"select": "domain", "status": "eq.rejected", "created_at": f"gte.{since}", "limit": "5000"},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code != 200:
+            return set()
+        return {clean_domain(row.get("domain", "")) or row.get("domain", "") for row in response.json()}
+    except Exception as exc:
+        print(f"Son rədd edilənlər oxunmadı: {exc}", flush=True)
+        return set()
 
 
 def save_discovery_log(domain: str, url: str, status: str, reason: str = "", method: str = "", score: int = 0, sample_links=None):
@@ -503,21 +556,25 @@ def sync_discovery_results_to_supabase(approved_sites: list[dict], review_sites:
     manual = 0
     rejected = 0
 
-    for site in approved_sites:
-        domain = clean_domain(site.get("url", ""))
-        method = source_monitor_method(site)
-        score = int(site.get("score", 0) or 0)
-        if upsert_source_to_supabase(site):
-            accepted += 1
-        save_discovery_log(domain, site.get("url", ""), "accepted", "approved", method, score)
+    # Everything that passed goes to the trial, best score first, up to the trial capacity.
+    # Candidates beyond the capacity are not written, so they are found again next run.
+    room = max(0, TRIAL_CAPACITY - count_trial_sources())
+    candidates = [(site, "accepted", "approved") for site in approved_sites]
+    candidates += [(site, "manual_needed", "review") for site in review_sites]
+    candidates.sort(key=lambda item: int(item[0].get("score", 0) or 0), reverse=True)
 
-    for site in review_sites:
+    for site, log_status, log_reason in candidates:
         domain = clean_domain(site.get("url", ""))
-        method = source_monitor_method(site)
-        score = int(site.get("score", 0) or 0)
+        if room <= 0:
+            print(f"Sınaq yeri yoxdur, növbəti dövrə qaldı: {domain}", flush=True)
+            continue
         if upsert_source_to_supabase(site):
-            manual += 1
-        save_discovery_log(domain, site.get("url", ""), "manual_needed", "review", method, score)
+            room -= 1
+            if log_status == "accepted":
+                accepted += 1
+            else:
+                manual += 1
+        save_discovery_log(domain, site.get("url", ""), log_status, log_reason, source_monitor_method(site), int(site.get("score", 0) or 0))
 
     for site in rejected_sites:
         domain = clean_domain(site.get("url", ""))
@@ -1587,7 +1644,8 @@ def discover_sites(mode: str = "fast", add_to_config: bool = False):
     print(f"Discovery siqnal sayı: {len(DEFAULT_KEYWORDS)}", flush=True)
 
     known_domains = collect_existing_domains()
-    processed_domains = set()
+    processed_domains = recently_rejected_domains()
+    print(f"Son {REJECT_COOLDOWN_DAYS} gündə rədd edilən domen: {len(processed_domains)}", flush=True)
     queries = build_search_queries(mode)[:settings["max_queries"]]
     print(f"Axtarış sorğusu sayı: {len(queries)}", flush=True)
 
@@ -1661,7 +1719,7 @@ def discover_sites(mode: str = "fast", add_to_config: bool = False):
 
                 score = int(analyzed.get("score", 0) or 0)
 
-                if is_hard_rejected(analyzed):
+                if is_hard_rejected(analyzed) or not site_reachable(session, source_url):
                     rejected_sites.append(analyzed)
                     print(
                         f"🔴 HARD REJECT {analyzed.get('score')}: {analyzed.get('name')} | {source_url} | {analyzed.get('reason')}",
