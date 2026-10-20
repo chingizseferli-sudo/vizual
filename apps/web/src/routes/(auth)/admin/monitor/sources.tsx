@@ -192,6 +192,31 @@ function trialNotes(notes: string | null, extra = '') {
   return [base, extra, tag].filter(Boolean).join(' ')
 }
 
+const REASON_LABELS: Record<string, string> = {
+  no_date: 'xəbərin tarixi oxunmur',
+  date_parse_failed: 'tarix oxuna bilmir',
+  bad_title: 'başlıq rədd edilir',
+  rss_empty: 'RSS boşdur',
+  selector_empty: 'selector link tapmır',
+  xpath_empty: 'XPath link tapmır',
+  sitemap_empty: 'sitemap boşdur',
+  latest_page_empty: 'xəbər siyahısı boşdur',
+  homepage_empty: 'ana səhifədə link tapılmadı',
+  fallback_empty: 'heç bir üsulla link tapılmadı',
+  invalid_xml: 'RSS səhv formatdadır',
+  http_403: 'sayt botu bloklayır (403)',
+  http_404: 'ünvan tapılmadı (404)',
+  http_429: 'çox sorğu limiti (429)',
+  timeout: 'sayt cavab vermir',
+  dns_failure: 'domen açılmır',
+  ssl_failure: 'SSL xətası',
+}
+
+function reasonLabel(reason: string | null) {
+  if (!reason) return ''
+  return REASON_LABELS[reason] || reason.slice(0, 120)
+}
+
 function shortReason(reason: string) {
   return reason.split(/[;\n]/)[0].trim().slice(0, 140)
 }
@@ -266,7 +291,7 @@ function getSourceState(
   if (fails >= FAIL_LIMIT) {
     return {
       state: 'degraded',
-      reason: `${fails} dəfə ardıcıl xəta${source.last_error ? `: ${source.last_error.slice(0, 120)}` : ''}`,
+      reason: `${fails} dəfə ardıcıl${source.last_error ? `: ${reasonLabel(source.last_error)}` : ' xəta'}`,
     }
   }
 
