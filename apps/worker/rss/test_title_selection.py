@@ -56,3 +56,10 @@ def test_cyrillic_title_for_unrelated_slug_is_still_rejected():
 def test_trailing_digit_in_slug_word_is_ignored():
     title_rejection_reason = m.title_rejection_reason
     assert title_rejection_reason("Qarabağ - Azərbaycandır!", "https://musicacademy.edu.az/az/kheberler/lahiyeler/qarabaq-azerbaycandir1.html") == ""
+
+
+def test_in_word_hyphen_is_not_cut_as_site_suffix():
+    suffix = " » Son xəbərlər,Azərbaycanda və Dünyada ən aktual hadisələr 1Xeber.com"
+    for title in ['"Sabah" bu gün Dortmund "Borussiya"sı ilə üz-üzə gələcək', "Bakıda küləyin sürəti 27 m/s-yə çatır"]:
+        assert m.clean_title_for_message(title + suffix) == title
+    assert m.clean_title_for_message("Xəbər başlığı - Son xəbərlər, Azərbaycanda") == "Xəbər başlığı"
