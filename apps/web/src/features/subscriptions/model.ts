@@ -24,6 +24,7 @@ export type SubscriptionPlan = {
   history_days: number | null
   telegram_enabled: boolean
   features: string[]
+  limits: Record<string, unknown>
   created_at?: string | null
   updated_at?: string | null
 }
@@ -56,6 +57,7 @@ export type PlanFormValues = {
   isCustom: boolean
   isPublic: boolean
   features: string
+  socialIntervalMinutes: string
 }
 
 export type PlanWritePayload = {
@@ -73,6 +75,7 @@ export type PlanWritePayload = {
   is_custom: boolean
   is_public: boolean
   features: string[]
+  limits: Record<string, unknown>
 }
 
 const intervalLabels: Record<BillingInterval, string> = {
@@ -97,6 +100,17 @@ export const emptyPlanForm: PlanFormValues = {
   isCustom: false,
   isPublic: true,
   features: '',
+  socialIntervalMinutes: '',
+}
+
+const SOCIAL_INTERVAL_MINUTES = [60, 120, 180, 360, 720]
+
+// The plan's Facebook/Instagram search interval, if it sets one.
+export function planSocialIntervalMinutes(
+  plan: Pick<SubscriptionPlan, 'limits'> | undefined
+) {
+  const value = Number(plan?.limits?.social_interval_minutes)
+  return SOCIAL_INTERVAL_MINUTES.includes(value) ? value : null
 }
 
 export function normalizePlanCode(value: string) {
@@ -141,8 +155,11 @@ function parseOptionalNumber(
   return { value: number }
 }
 
+// baseLimits: the plan's current limits, so keys this form does not edit
+// (max_keywords, ...) are kept.
 export function buildPlanPayload(
-  values: PlanFormValues
+  values: PlanFormValues,
+  baseLimits: Record<string, unknown> = {}
 ): { data: PlanWritePayload; error?: never } | { data?: never; error: string } {
   const name = values.name.trim()
   const code = normalizePlanCode(values.code || values.name)
@@ -185,6 +202,21 @@ export function buildPlanPayload(
   })
   if (historyDays.error) return { error: historyDays.error }
 
+  const socialInterval = values.socialIntervalMinutes
+    ? Number(values.socialIntervalMinutes)
+    : null
+  if (
+    socialInterval !== null &&
+    !SOCIAL_INTERVAL_MINUTES.includes(socialInterval)
+  ) {
+    return {
+      error: 'Sosial yoxlama tezliyi 1, 2, 3, 6 və ya 12 saat olmalıdır.',
+    }
+  }
+  const limits: Record<string, unknown> = { ...baseLimits }
+  delete limits.social_interval_minutes
+  if (socialInterval !== null) limits.social_interval_minutes = socialInterval
+
   const features = Array.from(
     new Set(
       values.features
@@ -210,6 +242,7 @@ export function buildPlanPayload(
       is_custom: values.isCustom,
       is_public: values.isPublic,
       features,
+      limits,
     },
   }
 }
@@ -230,6 +263,7 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     isCustom: plan.is_custom,
     isPublic: plan.is_public,
     features: plan.features.join('\n'),
+    socialIntervalMinutes: String(planSocialIntervalMinutes(plan) ?? ''),
   }
 }
 
@@ -253,10 +287,17 @@ export function formatPlanPrice(
 }
 
 export function normalizePlanRow(
-  row: Omit<SubscriptionPlan, 'features'> & { features?: unknown }
+  row: Omit<SubscriptionPlan, 'features' | 'limits'> & {
+    features?: unknown
+    limits?: unknown
+  }
 ): SubscriptionPlan {
   return {
     ...row,
+    limits:
+      row.limits && typeof row.limits === 'object' && !Array.isArray(row.limits)
+        ? (row.limits as Record<string, unknown>)
+        : {},
     features: Array.isArray(row.features)
       ? row.features.filter(
           (feature): feature is string => typeof feature === 'string'

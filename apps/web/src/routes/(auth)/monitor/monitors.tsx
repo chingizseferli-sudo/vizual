@@ -28,6 +28,9 @@ type Monitor = {
   name: string
   description: string | null
   status: string | null
+  // Added by migration 20261020000002; read with select('*') so the page
+  // works before it is applied.
+  inactive_reason?: string | null
   telegram_chat_id: string | null
   created_at: string | null
 }
@@ -184,7 +187,7 @@ async function fetchMonitorsData(): Promise<MonitorsData> {
 
     supabase
       .from('user_monitors')
-      .select('id,name,description,status,telegram_chat_id,created_at')
+      .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false }),
 
@@ -567,7 +570,7 @@ function MonitorsPage() {
       .update(payload)
       .eq('id', monitor.id)
       .eq('user_id', user.id)
-      .select('id,name,description,status,telegram_chat_id,created_at')
+      .select('*')
       .maybeSingle()
 
     setActionMonitorId(null)
@@ -645,13 +648,24 @@ function MonitorsPage() {
 
     if (error) {
       console.error('Monitor status xətası:', error)
-      setMessage(`Monitor statusu dəyişmədi: ${error.message}`)
+      setMessage(
+        error.message.includes('PLAN_WATCH_LIMIT_REACHED')
+          ? 'Planınızda aktiv monitor limiti dolub. Əvvəlcə başqa monitoru passiv edin və ya planı genişləndirin.'
+          : `Monitor statusu dəyişmədi: ${error.message}`
+      )
       return
     }
 
     setMonitors((prev) =>
       prev.map((item) =>
-        item.id === monitor.id ? { ...item, status: nextStatus } : item
+        item.id === monitor.id
+          ? {
+              ...item,
+              status: nextStatus,
+              inactive_reason:
+                nextStatus === 'active' ? null : item.inactive_reason,
+            }
+          : item
       )
     )
     invalidateCustomerMonitorCaches()
@@ -912,6 +926,12 @@ function MonitorsPage() {
                   >
                     {getStatusLabel(monitor.status)}
                   </span>
+                  {monitor.status !== 'active' &&
+                  monitor.inactive_reason === 'plan_limit' ? (
+                    <p className='mt-1 text-xs text-muted-foreground'>
+                      Plan limitini aşdığı üçün deaktiv edilib.
+                    </p>
+                  ) : null}
                 </div>
 
                 <div>

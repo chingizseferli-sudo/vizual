@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { customerQueryKeys } from '@/lib/query-keys'
+import { formatSocialInterval } from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
 import { openExternalUrl } from '@/lib/utils'
 
@@ -30,9 +31,14 @@ type ProfileRow = {
 type PlanInfo = {
   name: string | null
   max_watches: number | null
-  minimum_interval_minutes: number | null
   history_days: number | null
   telegram_enabled: boolean | null
+}
+
+type SocialAccess = {
+  interval_minutes: number | null
+  facebook_enabled: boolean | null
+  instagram_enabled: boolean | null
 }
 
 type ProfileState = {
@@ -45,6 +51,7 @@ type ProfileState = {
   monitorCount: number
   plan: PlanInfo | null
   planAvailable: boolean
+  social: SocialAccess | null
 }
 
 function formatDate(value: string | null) {
@@ -72,6 +79,14 @@ function getStatusLabel(status: string | null) {
   if (status === 'blocked') return 'Bloklanıb'
   if (status === 'inactive') return 'Passiv'
   return status || '-'
+}
+
+function socialIntervalText(social: SocialAccess | null) {
+  if (!social) return '-'
+  if (!social.facebook_enabled && !social.instagram_enabled) {
+    return 'Hələ aktiv deyil'
+  }
+  return formatSocialInterval(social.interval_minutes)
 }
 
 function getTelegramBotUrl(startToken?: string) {
@@ -112,9 +127,7 @@ async function loadOptionalPlan(
 
   const planResult = await supabase
     .from('subscription_plans')
-    .select(
-      'name,max_watches,minimum_interval_minutes,history_days,telegram_enabled'
-    )
+    .select('name,max_watches,history_days,telegram_enabled')
     .eq('id', planId)
     .maybeSingle()
 
@@ -141,18 +154,20 @@ async function fetchProfileData(): Promise<{
     }
   }
 
-  const [profileResult, monitorCountResult, planResult] = await Promise.all([
-    supabase
-      .from('user_profiles')
-      .select('user_id,email,role,status,telegram_chat_id')
-      .eq('user_id', user.id)
-      .maybeSingle(),
-    supabase
-      .from('user_monitors')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id),
-    loadOptionalPlan(user.id),
-  ])
+  const [profileResult, monitorCountResult, planResult, socialResult] =
+    await Promise.all([
+      supabase
+        .from('user_profiles')
+        .select('user_id,email,role,status,telegram_chat_id')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      supabase
+        .from('user_monitors')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id),
+      loadOptionalPlan(user.id),
+      supabase.rpc('current_user_social_access').maybeSingle(),
+    ])
 
   if (profileResult.error) {
     console.error('Customer profile load error:', profileResult.error)
@@ -175,6 +190,8 @@ async function fetchProfileData(): Promise<{
       monitorCount: monitorCountResult.count || 0,
       plan: planResult.plan,
       planAvailable: planResult.available,
+      // Missing until migration 20261020000002 is applied: the tile is hidden.
+      social: socialResult.error ? null : (socialResult.data as SocialAccess),
     },
     errorMessage: profileResult.error
       ? 'Profil məlumatları tam yüklənmədi. Əsas hesab məlumatları göstərilir.'
@@ -470,8 +487,9 @@ function ProfilePage() {
           <h2 className='text-lg font-semibold'>Plan və limitlər</h2>
         </div>
         <p className='mb-4 text-sm text-muted-foreground'>
-          Planınız neçə monitor yarada biləcəyinizi, yoxlama tezliyini və nəticə
-          tarixçəsinin nə qədər saxlanacağını müəyyən edir.
+          Planınız neçə monitor yarada biləcəyinizi və Facebook, Instagram
+          axtarışının tezliyini müəyyən edir. Xəbər saytları bütün planlarda
+          təxminən hər 5-20 dəqiqədən bir yoxlanır.
         </p>
 
         {profileState.planAvailable && profileState.plan ? (
@@ -486,12 +504,8 @@ function ProfilePage() {
                 value={planLimit ?? 'Limitsiz'}
               />
               <InfoTile
-                label='Ən qısa yoxlama intervalı'
-                value={
-                  profileState.plan.minimum_interval_minutes
-                    ? `${profileState.plan.minimum_interval_minutes} dəq`
-                    : '-'
-                }
+                label='Facebook və Instagram yoxlaması'
+                value={socialIntervalText(profileState.social)}
               />
               <InfoTile
                 label='Nəticə tarixçəsi'

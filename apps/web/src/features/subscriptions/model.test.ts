@@ -44,6 +44,28 @@ describe('subscription plan model', () => {
     expect(result.error).toContain('Minimum interval')
   })
 
+  it('keeps other limits and validates the social interval', () => {
+    const base = { max_keywords: 50, social_interval_minutes: 360 }
+    const twoHours = buildPlanPayload(
+      { ...emptyPlanForm, name: 'Pro', socialIntervalMinutes: '120' },
+      base
+    )
+    expect(twoHours.data?.limits).toEqual({
+      max_keywords: 50,
+      social_interval_minutes: 120,
+    })
+
+    const standard = buildPlanPayload({ ...emptyPlanForm, name: 'Pro' }, base)
+    expect(standard.data?.limits).toEqual({ max_keywords: 50 })
+
+    const invalid = buildPlanPayload({
+      ...emptyPlanForm,
+      name: 'Pro',
+      socialIntervalMinutes: '45',
+    })
+    expect(invalid.error).toContain('Sosial yoxlama')
+  })
+
   it('formats recurring and custom prices', () => {
     expect(
       formatPlanPrice({

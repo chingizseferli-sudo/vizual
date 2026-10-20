@@ -145,11 +145,11 @@ export const defaultPublicSiteContent: PublicSiteContent = {
         status: 'Tezliklə',
       },
       {
-        title: 'Sosial media monitorinqi',
+        title: 'Facebook və Instagram monitorinqi',
         description:
-          'Seçilmiş mövzular üzrə sosial şəbəkələrdə aparılan müzakirələri izləmək üçün gələcək modul.',
+          'Açar sözlərinizlə bağlı Facebook və Instagram paylaşımlarını izləyin və Telegram bildirişi alın.',
         icon: 'file',
-        status: 'Tezliklə',
+        status: 'Beta',
       },
       {
         title: 'Qlobal xəbər axını',

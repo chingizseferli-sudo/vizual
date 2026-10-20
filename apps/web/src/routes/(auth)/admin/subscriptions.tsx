@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Check, Pencil, Plus, RefreshCw, Users } from 'lucide-react'
+import { SOCIAL_INTERVAL_OPTIONS } from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
 import { ResponsiveTable } from '@/components/ui/responsive-table'
 import {
@@ -9,6 +10,7 @@ import {
   emptyPlanForm,
   formatPlanPrice,
   normalizePlanRow,
+  planSocialIntervalMinutes,
   planToFormValues,
   type PlanFormValues,
   type SubscriptionPlan,
@@ -25,7 +27,7 @@ type SubscriptionRow = UserSubscription & {
 }
 
 const planFields =
-  'id,code,name,description,is_active,is_custom,is_public,price_amount,currency,billing_interval,display_order,max_watches,minimum_interval_minutes,history_days,telegram_enabled,features,created_at,updated_at'
+  'id,code,name,description,is_active,is_custom,is_public,price_amount,currency,billing_interval,display_order,max_watches,minimum_interval_minutes,history_days,telegram_enabled,features,limits,created_at,updated_at'
 
 function formatDate(value: string | null | undefined) {
   if (!value) return 'Müddətsiz'
@@ -157,7 +159,10 @@ function SubscriptionPlansPage() {
 
   async function savePlan(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const result = buildPlanPayload(form)
+    const result = buildPlanPayload(
+      form,
+      plans.find((plan) => plan.id === editingPlanId)?.limits
+    )
 
     if (!result.data) {
       setMessageTone('error')
@@ -417,6 +422,23 @@ function SubscriptionPlansPage() {
             />
           </label>
           <label className='grid gap-1.5 text-sm font-medium'>
+            Sosial şəbəkə yoxlama tezliyi
+            <select
+              value={form.socialIntervalMinutes}
+              onChange={(event) =>
+                updateForm('socialIntervalMinutes', event.target.value)
+              }
+              className='rounded-lg border bg-background px-3 py-2 font-normal'
+            >
+              <option value=''>Standart (Sosial monitorinq səhifəsi)</option>
+              {SOCIAL_INTERVAL_OPTIONS.map((option) => (
+                <option key={option.minutes} value={option.minutes}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className='grid gap-1.5 text-sm font-medium'>
             Tarixçə (gün)
             <input
               type='number'
@@ -575,6 +597,17 @@ function SubscriptionPlansPage() {
                     {plan.minimum_interval_minutes
                       ? `${plan.minimum_interval_minutes} dəq`
                       : 'Fərdi'}
+                  </div>
+                </div>
+                <div className='rounded-lg bg-muted/50 p-2'>
+                  <div className='text-xs text-muted-foreground'>
+                    FB/IG yoxlama
+                  </div>
+                  <div className='font-semibold'>
+                    {SOCIAL_INTERVAL_OPTIONS.find(
+                      (option) =>
+                        option.minutes === planSocialIntervalMinutes(plan)
+                    )?.label ?? 'Standart'}
                   </div>
                 </div>
                 <div className='rounded-lg bg-muted/50 p-2'>

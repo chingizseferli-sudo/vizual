@@ -285,37 +285,38 @@ async function prefetchProfileData() {
     }
   }
 
-  const [profileResult, monitorCountResult, planResult] = await Promise.all([
-    supabase
-      .from('user_profiles')
-      .select('user_id,email,role,status,telegram_chat_id')
-      .eq('user_id', user.id)
-      .maybeSingle(),
-    supabase
-      .from('user_monitors')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id),
-    (async () => {
-      const profilePlan = await supabase
+  const [profileResult, monitorCountResult, planResult, socialResult] =
+    await Promise.all([
+      supabase
         .from('user_profiles')
-        .select('plan_id')
+        .select('user_id,email,role,status,telegram_chat_id')
         .eq('user_id', user.id)
-        .maybeSingle()
-      const planId = (profilePlan.data as { plan_id?: string | null } | null)
-        ?.plan_id
-      if (profilePlan.error || !planId) return { plan: null, available: false }
-      const planResult = await supabase
-        .from('subscription_plans')
-        .select(
-          'name,max_watches,minimum_interval_minutes,history_days,telegram_enabled'
-        )
-        .eq('id', planId)
-        .maybeSingle()
-      if (planResult.error || !planResult.data)
-        return { plan: null, available: false }
-      return { plan: planResult.data, available: true }
-    })(),
-  ])
+        .maybeSingle(),
+      supabase
+        .from('user_monitors')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id),
+      (async () => {
+        const profilePlan = await supabase
+          .from('user_profiles')
+          .select('plan_id')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        const planId = (profilePlan.data as { plan_id?: string | null } | null)
+          ?.plan_id
+        if (profilePlan.error || !planId)
+          return { plan: null, available: false }
+        const planResult = await supabase
+          .from('subscription_plans')
+          .select('name,max_watches,history_days,telegram_enabled')
+          .eq('id', planId)
+          .maybeSingle()
+        if (planResult.error || !planResult.data)
+          return { plan: null, available: false }
+        return { plan: planResult.data, available: true }
+      })(),
+      supabase.rpc('current_user_social_access').maybeSingle(),
+    ])
 
   const profile = profileResult.data || null
 
@@ -340,6 +341,7 @@ async function prefetchProfileData() {
       monitorCount: monitorCountResult.count || 0,
       plan: planResult.plan,
       planAvailable: planResult.available,
+      social: socialResult.error ? null : socialResult.data,
     },
     errorMessage: profileResult.error
       ? 'Profil məlumatları tam yüklənmədi. Əsas hesab məlumatları göstərilir.'

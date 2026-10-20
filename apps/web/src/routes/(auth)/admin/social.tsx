@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Loader2, RefreshCw, Share2 } from 'lucide-react'
-import { SOCIAL_INTERVAL_OPTIONS } from '@/lib/social-intervals'
+import {
+  SOCIAL_INTERVAL_OPTIONS,
+  isMissingTableError,
+} from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
 
 const socialAdminQueryKey = ['admin', 'social'] as const
@@ -72,11 +75,21 @@ async function fetchSocialAdminData(): Promise<SocialAdminData> {
       .maybeSingle(),
   ])
 
-  const errors = [
-    settingsResult.error && `Tənzimləmələr: ${settingsResult.error.message}`,
-    keywordsResult.error && `Açar sözlər: ${keywordsResult.error.message}`,
-    usageResult.error && `Xərc: ${usageResult.error.message}`,
-  ].filter(Boolean) as string[]
+  const results = [settingsResult, keywordsResult, usageResult]
+  const tablesMissing = results.some(
+    (result) => result.error && isMissingTableError(result.error)
+  )
+  const errors = tablesMissing
+    ? [
+        'Sosial monitorinq cədvəlləri bazada hələ yoxdur. Terminalda «npx supabase db push» əmrini işlədin, sonra səhifəni yeniləyin.',
+      ]
+    : ([
+        settingsResult.error &&
+          `Tənzimləmələr yüklənmədi: ${settingsResult.error.message}`,
+        keywordsResult.error &&
+          `Açar sözlər yüklənmədi: ${keywordsResult.error.message}`,
+        usageResult.error && `Xərc yüklənmədi: ${usageResult.error.message}`,
+      ].filter(Boolean) as string[])
 
   return {
     settings: (settingsResult.data as SocialSettings | null) ?? null,
@@ -207,10 +220,6 @@ function SocialAdminPage() {
           {data.errors.map((message) => (
             <div key={message}>{message}</div>
           ))}
-          <div className='mt-1 text-xs'>
-            Migrasiya (20261020000001_social_collectors) tətbiq olunmayıbsa, bu
-            cədvəllər hələ mövcud deyil.
-          </div>
         </div>
       ) : null}
 
@@ -245,9 +254,9 @@ function SocialAdminPage() {
         <section className='grid content-start gap-3 rounded-lg border bg-card p-4 md:p-5'>
           <h2 className='text-lg font-semibold'>Standart tezlik</h2>
           <p className='text-sm text-muted-foreground'>
-            Planında tezlik olmayan müştərilər üçün. Plan tezliyi: Start 6 saat,
-            Pro 3 saat, Business 1 saat. Müştəriyə ayrıca tezlik istifadəçi
-            səhifəsində verilir.
+            Planında tezlik olmayan müştərilər üçün. Planın tezliyi Abunəliklər
+            səhifəsində, müştəriyə fərdi təklif isə istifadəçi səhifəsində
+            verilir.
           </p>
           <select
             value={settings?.default_interval_minutes ?? 360}

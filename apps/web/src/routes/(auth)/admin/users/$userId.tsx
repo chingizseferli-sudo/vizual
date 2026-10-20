@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { SOCIAL_INTERVAL_OPTIONS } from '@/lib/social-intervals'
+import {
+  SOCIAL_INTERVAL_OPTIONS,
+  formatSocialInterval,
+} from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
 import { ResponsiveTable } from '@/components/ui/responsive-table'
 import {
   formatPlanPrice,
   normalizePlanRow,
+  planSocialIntervalMinutes,
   type SubscriptionPlan,
   type UserSubscription,
 } from '@/features/subscriptions/model'
@@ -26,6 +30,7 @@ type Monitor = {
   name: string
   description: string | null
   status: string | null
+  inactive_reason?: string | null
   notify_telegram: boolean | null
   telegram_chat_id: string | null
   created_at: string | null
@@ -123,17 +128,16 @@ function AdminUserDetailsPage() {
           )
           .eq('user_id', userId)
           .maybeSingle(),
+        // '*': inactive_reason exists only after migration 20261020000002.
         supabase
           .from('user_monitors')
-          .select(
-            'id,user_id,name,description,status,notify_telegram,telegram_chat_id,created_at'
-          )
+          .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false }),
         supabase
           .from('subscription_plans')
           .select(
-            'id,code,name,description,is_active,is_custom,is_public,price_amount,currency,billing_interval,display_order,max_watches,minimum_interval_minutes,history_days,telegram_enabled,features,created_at,updated_at'
+            'id,code,name,description,is_active,is_custom,is_public,price_amount,currency,billing_interval,display_order,max_watches,minimum_interval_minutes,history_days,telegram_enabled,features,limits,created_at,updated_at'
           )
           .order('display_order')
           .order('name'),
@@ -266,6 +270,10 @@ function AdminUserDetailsPage() {
         ['active', 'trialing'].includes(subscription.status)
       ) || null,
     [subscriptions]
+  )
+
+  const planSocialInterval = planSocialIntervalMinutes(
+    profile?.plan_id ? planById.get(profile.plan_id) : undefined
   )
 
   async function assignSubscription() {
@@ -692,14 +700,19 @@ function AdminUserDetailsPage() {
         </div>
 
         <label className='mt-4 grid max-w-sm gap-1.5 text-sm font-medium'>
-          Sosial şəbəkə yoxlama tezliyi
+          Fərdi təklif (plana baxmayaraq)
           <select
             value={socialInterval}
             onChange={(event) => void saveSocialInterval(event.target.value)}
             disabled={!profile}
             className='rounded-lg border bg-background px-3 py-2 font-normal'
           >
-            <option value=''>Plan üzrə</option>
+            <option value=''>
+              Plan üzrə
+              {planSocialInterval
+                ? ` (${formatSocialInterval(planSocialInterval)})`
+                : ''}
+            </option>
             {SOCIAL_INTERVAL_OPTIONS.map((option) => (
               <option key={option.minutes} value={option.minutes}>
                 {option.label}
@@ -707,8 +720,8 @@ function AdminUserDetailsPage() {
             ))}
           </select>
           <span className='text-xs font-normal text-muted-foreground'>
-            Facebook və Instagram axtarışı bu müştərinin açar sözləri üçün bu
-            tezliklə aparılır.
+            Facebook və Instagram-da bu müştərinin açar sözləri hansı tezliklə
+            axtarılsın. Boş qalsa, plan təyin edir.
           </span>
         </label>
 
@@ -845,7 +858,11 @@ function AdminUserDetailsPage() {
                         : 'border-destructive/25 bg-destructive/10 text-destructive'
                     }`}
                   >
-                    {monitor.status === 'active' ? 'Aktiv' : 'Passiv'}
+                    {monitor.status === 'active'
+                      ? 'Aktiv'
+                      : monitor.inactive_reason === 'plan_limit'
+                        ? 'Passiv · plan limiti'
+                        : 'Passiv'}
                   </span>
                   <button
                     type='button'
