@@ -338,6 +338,29 @@ async function fetchResultsData(): Promise<ResultsData> {
   return { rows, errorMessage: '' }
 }
 
+function collapseByItem(rows: ResultRow[]): ResultRow[] {
+  const byItem = new Map<string, { row: ResultRow; monitors: Set<string>; keywords: Set<string> }>()
+  for (const row of rows) {
+    const entry = byItem.get(row.item_id)
+    const monitor = row.user_monitors?.name
+    if (!entry) {
+      byItem.set(row.item_id, {
+        row,
+        monitors: new Set(monitor ? [monitor] : []),
+        keywords: new Set(row.matched_keyword ? [row.matched_keyword] : []),
+      })
+      continue
+    }
+    if (monitor) entry.monitors.add(monitor)
+    if (row.matched_keyword) entry.keywords.add(row.matched_keyword)
+  }
+  return [...byItem.values()].map(({ row, monitors, keywords }) => ({
+    ...row,
+    matched_keyword: keywords.size ? [...keywords].join(', ') : row.matched_keyword,
+    user_monitors: monitors.size ? { name: [...monitors].join(', ') } : row.user_monitors,
+  }))
+}
+
 function ResultsPage() {
   const { data, isLoading } = useQuery({
     queryKey: customerQueryKeys.results(),
@@ -475,13 +498,14 @@ function ResultsPage() {
     dateFilter,
   ])
 
-  const exportRows = useMemo(() => {
-    return filteredRows
-  }, [filteredRows])
+  // One article matched by several monitors is one result, not one card per monitor.
+  const itemRows = useMemo(() => collapseByItem(filteredRows), [filteredRows])
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE))
+  const exportRows = itemRows
+
+  const totalPages = Math.max(1, Math.ceil(itemRows.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
-  const paginatedRows = filteredRows.slice(
+  const paginatedRows = itemRows.slice(
     (safePage - 1) * PAGE_SIZE,
     safePage * PAGE_SIZE
   )
@@ -740,7 +764,7 @@ function ResultsPage() {
         <Pagination
           page={safePage}
           totalPages={totalPages}
-          totalItems={filteredRows.length}
+          totalItems={itemRows.length}
           onPageChange={setPage}
           compact
         />
@@ -991,12 +1015,12 @@ function ResultsPage() {
       <div className='overflow-hidden rounded-2xl border border-border bg-card shadow-sm'>
         <div className='flex items-center justify-between border-b border-border px-3 py-2 text-sm text-muted-foreground'>
           <span>
-            {filteredRows.length}{' '}{t("nəticə | səhifə")}{' '}{safePage} / {totalPages}
+            {itemRows.length}{' '}{t("nəticə | səhifə")}{' '}{safePage} / {totalPages}
           </span>
           <Pagination
             page={safePage}
             totalPages={totalPages}
-            totalItems={filteredRows.length}
+            totalItems={itemRows.length}
             onPageChange={setPage}
             compact
           />
