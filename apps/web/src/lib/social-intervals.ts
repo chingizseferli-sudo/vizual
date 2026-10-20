@@ -1,12 +1,13 @@
 import { t } from '@/lib/i18n'
 // Search intervals for the Facebook and Instagram collectors (minutes). The
-// database accepts only these values (migration 20261020000002).
+// database accepts only these values (migration 20261020000007).
 export const SOCIAL_INTERVAL_OPTIONS = [
   { minutes: 60, label: t("1 saat") },
   { minutes: 120, label: t("2 saat") },
   { minutes: 180, label: t("3 saat") },
   { minutes: 360, label: t("6 saat") },
   { minutes: 720, label: t("12 saat") },
+  { minutes: 1440, label: t("24 saat") },
 ]
 
 export function formatSocialInterval(minutes: number | null | undefined) {

@@ -5,6 +5,7 @@ import {
   formatSocialInterval,
 } from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 import { ResponsiveTable } from '@/components/ui/responsive-table'
 import {
   formatPlanPrice,
@@ -19,6 +20,7 @@ type UserProfile = {
   email: string | null
   telegram_chat_id: string | null
   plan_id: string | null
+  status: string | null
   social_interval_minutes: number | null
   created_at?: string | null
   updated_at?: string | null
@@ -109,6 +111,7 @@ function AdminUserDetailsPage() {
   const [subscriptionEnd, setSubscriptionEnd] = useState('')
   const [subscriptionNotes, setSubscriptionNotes] = useState('')
   const [assigningPlan, setAssigningPlan] = useState(false)
+  const [reviewingSignup, setReviewingSignup] = useState(false)
   const [newMonitorName, setNewMonitorName] = useState('')
   const [newMonitorDescription, setNewMonitorDescription] = useState('')
   const [newKeywordByMonitor, setNewKeywordByMonitor] = useState<
@@ -124,7 +127,7 @@ function AdminUserDetailsPage() {
         supabase
           .from('user_profiles')
           .select(
-            'user_id,email,telegram_chat_id,plan_id,social_interval_minutes,created_at,updated_at'
+            'user_id,email,telegram_chat_id,plan_id,status,social_interval_minutes,created_at,updated_at'
           )
           .eq('user_id', userId)
           .maybeSingle(),
@@ -324,6 +327,36 @@ function AdminUserDetailsPage() {
     setSubscriptionEnd('')
     await loadData()
     setMessage('Plan uğurla təyin edildi.')
+  }
+
+  async function reviewSignup(approve: boolean) {
+    const confirmed = window.confirm(
+      approve
+        ? `${profile?.email || userId} müraciəti təsdiqlənsin? Hesab aktiv olacaq və 7 günlük demo başlayacaq.`
+        : `${profile?.email || userId} müraciəti rədd edilsin? İstifadəçi hesaba daxil ola bilməyəcək.`
+    )
+    if (!confirmed) return
+
+    setReviewingSignup(true)
+    setMessage('')
+
+    const { error } = approve
+      ? await supabase.rpc('admin_approve_signup', { p_user_id: userId })
+      : await supabase.rpc('admin_reject_signup', { p_user_id: userId })
+
+    setReviewingSignup(false)
+
+    if (error) {
+      setMessage(error.message)
+      return
+    }
+
+    await loadData()
+    setMessage(
+      approve
+        ? 'Müraciət təsdiqləndi: 7 günlük demo başladı.'
+        : 'Müraciət rədd edildi.'
+    )
   }
 
   async function saveSocialInterval(value: string) {
@@ -625,7 +658,48 @@ function AdminUserDetailsPage() {
           </div>
           {currentSubscription?.current_period_end ? (
             <div className='mt-1 text-sm text-foreground'>
-              Bitmə tarixi: {formatDate(currentSubscription.current_period_end)}
+              {currentSubscription.status === 'trialing'
+                ? 'Demo bitmə tarixi'
+                : 'Bitmə tarixi'}
+              : {formatDate(currentSubscription.current_period_end)}
+            </div>
+          ) : null}
+          {profile?.status && profile.status !== 'active' ? (
+            <div className='mt-2 text-sm font-medium text-warning'>
+              Hesab:{' '}
+              {{
+                pending: 'Təsdiq gözləyir',
+                rejected: 'Rədd edilib',
+                expired: 'Demo bitib, plan təyin edilməyib',
+                inactive: 'Passiv',
+                blocked: 'Bloklanıb',
+              }[profile.status] || profile.status}
+            </div>
+          ) : null}
+          {profile?.status === 'pending' || profile?.status === 'rejected' ? (
+            <div className='mt-3 flex flex-wrap gap-2'>
+              <Button
+                size='sm'
+                disabled={reviewingSignup}
+                onClick={() => void reviewSignup(true)}
+              >
+                Təsdiqlə (7 günlük demo)
+              </Button>
+              {profile.status === 'pending' ? (
+                <Button
+                  variant='outline'
+                  size='sm'
+                  disabled={reviewingSignup}
+                  onClick={() => void reviewSignup(false)}
+                >
+                  Rədd et
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {profile?.status === 'expired' ? (
+            <div className='mt-1 text-xs text-muted-foreground'>
+              Aşağıdan plan təyin etmək hesabı yenidən aktiv edir.
             </div>
           ) : null}
         </div>

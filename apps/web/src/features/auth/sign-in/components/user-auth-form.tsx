@@ -158,6 +158,13 @@ export function UserAuthForm({
       return
     }
 
+    if (profile.status === 'rejected') {
+      await supabase.auth.signOut()
+      setIsLoading(false)
+      toast.error(t("Qeydiyyat müraciətiniz təsdiqlənmədi. Bizimlə əlaqə saxlayın."))
+      return
+    }
+
     if (profile.status === 'blocked' || profile.status === 'inactive') {
       await supabase.auth.signOut()
       setIsLoading(false)

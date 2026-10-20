@@ -74,13 +74,17 @@ export function SignUpForm({
     setIsLoading(false)
 
     if (signUpData.session) {
-      toast.success(t("Qeydiyyat uğurla tamamlandı."))
+      toast.success(
+        t("Müraciətiniz göndərildi. Admin təsdiqindən sonra hesabınız aktiv olacaq.")
+      )
       await navigate({ to: '/monitor', replace: true })
       return
     }
 
     toast.success(
-      t("Qeydiyyat yaradıldı. Emailinizi yoxlayın və hesabı təsdiqləyin.")
+      t(
+        "Müraciətiniz göndərildi. Emailinizi təsdiqləyin; admin təsdiqindən sonra hesabınız aktiv olacaq."
+      )
     )
     await navigate({ to: '/sign-in', replace: true })
   }

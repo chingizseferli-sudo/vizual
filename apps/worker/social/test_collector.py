@@ -125,9 +125,10 @@ def base_routes(settings, cache, usage=None):
     return {
         ("GET", "social_settings"): FakeResponse(200, [settings]),
         ("GET", "monitor_keywords"): FakeResponse(200, cache),
-        # One response serves both the interval read and the chat lookup (profile is the source of truth).
-        ("GET", "user_profiles"): FakeResponse(200, [{"user_id": USER_A, "plan_id": None, "social_interval_minutes": None,
-                                                      "telegram_chat_id": "777"}]),
+        # One response serves both the interval read and the chat lookup (profile is the source of truth);
+        # the inactive-owner read (status=neq.active) finds nobody.
+        ("GET", "user_profiles"): lambda kw: FakeResponse(200, [] if kw["params"].get("status") == "neq.active" else [
+            {"user_id": USER_A, "plan_id": None, "social_interval_minutes": None, "telegram_chat_id": "777"}]),
         ("GET", "subscription_plans"): FakeResponse(200, []),
         ("GET", "sources"): FakeResponse(200, [
             {"id": "src-fb", "base_url": "https://www.facebook.com"},
@@ -208,6 +209,17 @@ def test_already_stored_post_is_not_alerted_again(col):
     assert fake.find("POST", "monitored_items")
     assert not fake.find("POST", "monitor_matches")
     assert not fake.find("POST", "sendMessage")
+
+
+def test_keywords_of_inactive_accounts_are_not_searched(col):
+    routes = base_routes(FB_SETTINGS, [keyword_row("BDU", USER_A), keyword_row("AZAL", USER_B)])
+    profiles = routes[("GET", "user_profiles")]
+    # USER_A's demo expired: only USER_B's keyword is paid for.
+    routes[("GET", "user_profiles")] = lambda kw: (
+        FakeResponse(200, [{"user_id": USER_A}]) if kw["params"].get("status") == "neq.active" else profiles(kw))
+    fake = use(col, {**routes, **apify_routes([])})
+    col.run_tick(NOW)
+    assert fake.find("POST", "runs")[0]["json"]["searchQueries"] == ["AZAL"]
 
 
 def test_budget_exhausted_skips_provider(col):

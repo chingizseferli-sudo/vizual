@@ -112,6 +112,7 @@ def remember_article_verdict(link, reason, signature="", now=None):
         "at": now if now is not None else time.time(),
     }
 LAST_MONITOR_CLEANUP = None
+LAST_ACCOUNT_HOUSEKEEPING = None
 TELEGRAM_LAST_ERROR = ""
 BOT_SETTINGS_CACHE = {"paused": False, "fetched_at": 0.0}
 RUNTIME_STATE_TABLE_AVAILABLE = True
@@ -4447,6 +4448,72 @@ def cleanup_old_monitor_data_if_needed():
     cleanup_old_log_rows(now)
 
 
+def account_housekeeping_if_needed():
+    """Hourly: end demos whose 7 days are over, and tell admins about new sign-ups."""
+    global LAST_ACCOUNT_HOUSEKEEPING
+    if not supabase_ready():
+        return
+    now = datetime.now(BAKU_TZ)
+    if LAST_ACCOUNT_HOUSEKEEPING and now - LAST_ACCOUNT_HOUSEKEEPING < timedelta(hours=1):
+        return
+    LAST_ACCOUNT_HOUSEKEEPING = now
+    try:
+        response = requests.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/expire_demo_accounts",
+            headers=supabase_headers(),
+            json={},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code == 200:
+            expired = response.json() or 0
+            if expired:
+                print(f"Demo müddəti bitən hesablar: {expired}", flush=True)
+        else:
+            print(f"Demo expiry xetasi: {response.status_code} | {response.text[:200]}", flush=True)
+    except Exception as exc:
+        print(f"Demo expiry istisnasi: {exc}", flush=True)
+    notify_admins_about_pending_signups()
+
+
+def notify_admins_about_pending_signups():
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/user_profiles",
+            headers=supabase_headers(),
+            params={
+                "select": "user_id,email,created_at",
+                "status": "eq.pending",
+                "signup_notified_at": "is.null",
+                "order": "created_at.asc",
+                "limit": "20",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code != 200:
+            print(f"Yeni müraciətlər oxuma xetasi: {response.status_code} | {response.text[:200]}", flush=True)
+            return
+        pending = response.json() or []
+        if not pending:
+            return
+        chat_ids = admin_chat_ids()
+        if not chat_ids:
+            return
+        emails = "\n".join(f"• {clean_text(row.get('email')) or row.get('user_id')}" for row in pending)
+        message = f"🆕 Yeni qeydiyyat müraciəti ({len(pending)}):\n{emails}\n\nAdmin paneldə İstifadəçilər bölməsindən təsdiqləyin və ya rədd edin."
+        if not any([send_telegram(message, chat_id=chat_id, bypass_pause=True) for chat_id in chat_ids]):
+            return
+        user_ids = ",".join(row["user_id"] for row in pending if row.get("user_id"))
+        requests.patch(
+            f"{SUPABASE_URL}/rest/v1/user_profiles",
+            headers=supabase_headers({"Prefer": "return=minimal"}),
+            params={"user_id": f"in.({user_ids})", "status": "eq.pending"},
+            json={"signup_notified_at": datetime.now(BAKU_TZ).isoformat()},
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as exc:
+        print(f"Yeni müraciət bildirişi istisnasi: {exc}", flush=True)
+
+
 def log_retention_rules(now):
     """(table, timestamp column, cutoff) for rows that are logs, not customer data."""
     log_cutoff = now - timedelta(days=max(LOG_RETENTION_DAYS, 1))
@@ -4542,6 +4609,24 @@ def save_to_vizual_monitor(site, item, clean_title, published_time):
         return None
 
 
+def inactive_account_user_ids():
+    """Owners whose monitors must not run: pending, rejected, expired, inactive, blocked."""
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/user_profiles",
+            headers=supabase_headers(),
+            params={"select": "user_id", "status": "neq.active"},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code != 200:
+            print(f"Hesab statusu oxuma xetasi: {response.status_code} | {response.text[:200]}", flush=True)
+            return None
+        return {row.get("user_id") for row in response.json() or [] if row.get("user_id")}
+    except Exception as exc:
+        print(f"Hesab statusu istisnasi: {exc}", flush=True)
+        return None
+
+
 def load_active_monitor_keywords():
     if not supabase_ready():
         return None
@@ -4558,7 +4643,15 @@ def load_active_monitor_keywords():
             print(f"Monitor keyword cache oxuma xetasi: {response.status_code} | {response.text[:200]}", flush=True)
             return None
         rows = response.json() or []
-        active_rows = [row for row in rows if (row.get("user_monitors") or {}).get("status") == "active"]
+        inactive_owners = inactive_account_user_ids()
+        if inactive_owners is None:
+            return None
+        active_rows = [
+            row
+            for row in rows
+            if (row.get("user_monitors") or {}).get("status") == "active"
+            and (row.get("user_monitors") or {}).get("user_id") not in inactive_owners
+        ]
         print(f"Aktiv monitor keyword cache: {len(active_rows)}", flush=True)
         return active_rows
     except Exception as exc:
@@ -4570,21 +4663,9 @@ def find_matching_user_monitors(title, monitor_keywords_cache=None):
         return []
     title_text = normalize_text(title)
     try:
-        if monitor_keywords_cache is None:
-            response = requests.get(
-                f"{SUPABASE_URL}/rest/v1/monitor_keywords",
-                headers=supabase_headers(),
-                params={
-                    "select": "id,keyword,match_type,monitor_id,user_monitors(id,name,user_id,status,notify_telegram,telegram_chat_id)"
-                },
-                timeout=REQUEST_TIMEOUT,
-            )
-            if response.status_code != 200:
-                print(f"Monitor keyword oxuma xetasi: {response.status_code} | {response.text[:200]}", flush=True)
-                return []
-            keywords = response.json() or []
-        else:
-            keywords = monitor_keywords_cache
+        keywords = load_active_monitor_keywords() if monitor_keywords_cache is None else monitor_keywords_cache
+        if keywords is None:
+            return []
         matched_monitors = []
         seen_matches = set()
         for row in keywords:
@@ -4619,21 +4700,9 @@ def match_user_monitors(item_id, title, monitor_keywords_cache=None):
         return []
     title_text = normalize_text(title)
     try:
-        if monitor_keywords_cache is None:
-            response = requests.get(
-                f"{SUPABASE_URL}/rest/v1/monitor_keywords",
-                headers=supabase_headers(),
-                params={
-                    "select": "id,keyword,match_type,monitor_id,user_monitors(id,name,user_id,status,notify_telegram,telegram_chat_id)"
-                },
-                timeout=REQUEST_TIMEOUT,
-            )
-            if response.status_code != 200:
-                print(f"Monitor keyword oxuma xətası: {response.status_code} | {response.text[:200]}", flush=True)
-                return []
-            keywords = response.json() or []
-        else:
-            keywords = monitor_keywords_cache
+        keywords = load_active_monitor_keywords() if monitor_keywords_cache is None else monitor_keywords_cache
+        if keywords is None:
+            return []
         matched_monitors = []
         seen_matches = set()
         for row in keywords:
@@ -5067,6 +5136,7 @@ def check_sites(poll_commands=True):
     if poll_commands:
         connect_telegram_users_from_updates()
     cleanup_old_monitor_data_if_needed()
+    account_housekeeping_if_needed()
     # Long-running mode (RUN_ONCE=0) keeps module state between cycles; keep the
     # per-article title cache bounded instead of growing for the process lifetime.
     if len(ARTICLE_TITLE_INFO_CACHE) > 20000:

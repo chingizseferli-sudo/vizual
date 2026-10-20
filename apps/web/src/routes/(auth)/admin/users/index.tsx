@@ -16,6 +16,7 @@ type UserProfile = {
   email: string | null
   telegram_chat_id: string | null
   plan_id: string | null
+  status: string | null
   created_at?: string | null
   updated_at?: string | null
 }
@@ -62,6 +63,14 @@ type UserRow = UserProfile & {
   issueLabels: string[]
 }
 
+const ACCOUNT_STATUS_BADGES: Record<string, { label: string; className: string }> = {
+  pending: { label: 'Təsdiq gözləyir', className: 'bg-warning/15 text-warning' },
+  rejected: { label: 'Rədd edilib', className: 'bg-destructive/10 text-destructive' },
+  expired: { label: 'Demo bitib', className: 'bg-muted text-muted-foreground' },
+  inactive: { label: 'Passiv', className: 'bg-muted text-muted-foreground' },
+  blocked: { label: 'Bloklanıb', className: 'bg-destructive/10 text-destructive' },
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) return '-'
 
@@ -92,6 +101,7 @@ function UsersPage() {
   const [page, setPage] = useState(1)
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null)
   const [resettingUserId, setResettingUserId] = useState<string | null>(null)
+  const [reviewingUserId, setReviewingUserId] = useState<string | null>(null)
   const [temporaryPassword, setTemporaryPassword] = useState<{
     email: string
     password: string
@@ -112,7 +122,9 @@ function UsersPage() {
     ] = await Promise.all([
       supabase
         .from('user_profiles')
-        .select('user_id,email,telegram_chat_id,plan_id,created_at,updated_at')
+        .select(
+          'user_id,email,telegram_chat_id,plan_id,status,created_at,updated_at'
+        )
         .order('updated_at', { ascending: false, nullsFirst: false }),
       supabase
         .from('user_monitors')
@@ -172,6 +184,7 @@ function UsersPage() {
         email: authUser?.email || null,
         telegram_chat_id: null,
         plan_id: null,
+        status: null,
         created_at: authUser?.created_at || null,
         updated_at: authUser?.updated_at || authUser?.last_sign_in_at || null,
       }
@@ -222,11 +235,12 @@ function UsersPage() {
   const filteredRows = useMemo(() => {
     const q = search.toLowerCase().trim()
 
-    return rows.filter((row) => {
+    const matching = rows.filter((row) => {
       const hasTelegram = Boolean(row.telegram_chat_id)
       const hasProblem = row.issueLabels.length > 0
       const matchesStatus =
         statusFilter === 'all' ||
+        (statusFilter === 'pending' && row.status === 'pending') ||
         (statusFilter === 'problem' && hasProblem) ||
         (statusFilter === 'telegram' && hasTelegram) ||
         (statusFilter === 'no_telegram' && !hasTelegram) ||
@@ -245,6 +259,12 @@ function UsersPage() {
         )
       )
     })
+
+    // Sign-up requests waiting for approval come first.
+    return matching.sort(
+      (a, b) =>
+        Number(b.status === 'pending') - Number(a.status === 'pending')
+    )
   }, [rows, search, statusFilter])
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
@@ -257,6 +277,7 @@ function UsersPage() {
   const stats = useMemo(() => {
     return {
       total: rows.length,
+      pending: rows.filter((row) => row.status === 'pending').length,
       problem: rows.filter((row) => row.issueLabels.length > 0).length,
       telegram: rows.filter((row) => row.telegram_chat_id).length,
       withMonitor: rows.filter((row) => row.monitors.length > 0).length,
@@ -265,6 +286,40 @@ function UsersPage() {
 
   function resetFilteredView() {
     setPage(1)
+  }
+
+  async function reviewSignup(row: UserRow, approve: boolean) {
+    const label = row.email || row.user_id
+    const confirmed = window.confirm(
+      approve
+        ? `${label} müraciəti təsdiqlənsin?\n\nHesab aktiv olacaq və 7 günlük demo başlayacaq.`
+        : `${label} müraciəti rədd edilsin?\n\nİstifadəçi hesaba daxil ola bilməyəcək.`
+    )
+
+    if (!confirmed) return
+
+    setReviewingUserId(row.user_id)
+    setMessage('')
+
+    const { error } = approve
+      ? await supabase.rpc('admin_approve_signup', { p_user_id: row.user_id })
+      : await supabase.rpc('admin_reject_signup', { p_user_id: row.user_id })
+
+    setReviewingUserId(null)
+
+    if (error) {
+      setMessage(
+        `${approve ? 'Təsdiqlənmədi' : 'Rədd edilmədi'}: ${error.message}`
+      )
+      return
+    }
+
+    setMessage(
+      approve
+        ? `${label} təsdiqləndi: 7 günlük demo başladı.`
+        : `${label} müraciəti rədd edildi.`
+    )
+    await loadUsers()
   }
 
   async function deleteUser(row: UserRow) {
@@ -397,7 +452,28 @@ function UsersPage() {
         </div>
       ) : null}
 
-      <div className='grid grid-cols-2 gap-3 xl:grid-cols-4'>
+      <div className='grid grid-cols-2 gap-3 xl:grid-cols-5'>
+        <button
+          type='button'
+          onClick={() => {
+            setStatusFilter('pending')
+            resetFilteredView()
+          }}
+          className='rounded-lg border bg-card p-3 text-left hover:bg-muted'
+        >
+          <div className='text-sm text-muted-foreground'>
+            Gözləyən müraciətlər
+          </div>
+          <div
+            className={
+              stats.pending > 0
+                ? 'text-2xl font-bold text-warning'
+                : 'text-2xl font-bold text-foreground'
+            }
+          >
+            {stats.pending}
+          </div>
+        </button>
         <button
           type='button'
           onClick={() => {
@@ -472,6 +548,7 @@ function UsersPage() {
           className='rounded-lg border bg-background px-3 py-2'
         >
           <option value='all'>Bütün istifadəçilər</option>
+          <option value='pending'>Gözləyən müraciətlər</option>
           <option value='problem'>Müdaxilə lazımdır</option>
           <option value='telegram'>Telegram bağlıdır</option>
           <option value='no_telegram'>Telegram yoxdur</option>
@@ -508,6 +585,13 @@ function UsersPage() {
                   >
                     {row.user_id}
                   </div>
+                  {row.status && ACCOUNT_STATUS_BADGES[row.status] ? (
+                    <span
+                      className={`mt-1 inline-block rounded px-2 py-0.5 text-xs font-medium ${ACCOUNT_STATUS_BADGES[row.status].className}`}
+                    >
+                      {ACCOUNT_STATUS_BADGES[row.status].label}
+                    </span>
+                  ) : null}
                   {row.issueLabels.length > 0 && (
                     <div className='mt-1 max-w-64 text-xs text-warning'>
                       {row.issueLabels.join(' · ')}
@@ -550,6 +634,25 @@ function UsersPage() {
                 </td>
                 <td role='cell' data-label='Əməliyyatlar'>
                   <div className='flex items-center justify-end gap-1'>
+                    {row.status === 'pending' ? (
+                      <>
+                        <Button
+                          size='sm'
+                          disabled={reviewingUserId === row.user_id}
+                          onClick={() => void reviewSignup(row, true)}
+                        >
+                          Təsdiqlə
+                        </Button>
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          disabled={reviewingUserId === row.user_id}
+                          onClick={() => void reviewSignup(row, false)}
+                        >
+                          Rədd et
+                        </Button>
+                      </>
+                    ) : null}
                     <Button variant='outline' size='sm' asChild>
                       <Link
                         to='/admin/users/$userId'

@@ -103,7 +103,7 @@ export const emptyPlanForm: PlanFormValues = {
   socialIntervalMinutes: '',
 }
 
-const SOCIAL_INTERVAL_MINUTES = [60, 120, 180, 360, 720]
+const SOCIAL_INTERVAL_MINUTES = [60, 120, 180, 360, 720, 1440]
 
 // The plan's Facebook/Instagram search interval, if it sets one.
 export function planSocialIntervalMinutes(
@@ -213,7 +213,7 @@ export function buildPlanPayload(
     !SOCIAL_INTERVAL_MINUTES.includes(socialInterval)
   ) {
     return {
-      error: 'Sosial yoxlama tezliyi 1, 2, 3, 6 və ya 12 saat olmalıdır.',
+      error: 'Sosial yoxlama tezliyi 1, 2, 3, 6, 12 və ya 24 saat olmalıdır.',
     }
   }
   const limits: Record<string, unknown> = { ...baseLimits }

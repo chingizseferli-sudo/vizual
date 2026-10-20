@@ -413,3 +413,55 @@ def test_plain_start_from_unknown_chat_only_helps(sm):
 def test_plain_start_in_linked_chat_says_so(sm):
     fake = run_updates(sm, "/start", LINKED)
     assert fake.sent_texts() == [sm.TELEGRAM_REPLY_ALREADY_LINKED]
+
+
+def housekeeping_routes(pending, expired=0):
+    def profiles(kw):
+        if kw["params"].get("status") == "eq.pending":
+            return FakeResponse(200, pending)
+        return FakeResponse(200, [{"telegram_chat_id": CHAT_ID}])  # admin's chat
+    return {
+        ("POST", "expire_demo_accounts"): FakeResponse(200, expired),
+        ("GET", "user_profiles"): profiles,
+        ("PATCH", "user_profiles"): FakeResponse(204, None, text=""),
+        ("POST", "sendMessage"): FakeResponse(200, {"ok": True}),
+        **ADMIN,
+    }
+
+
+def test_housekeeping_expires_demos_and_tells_admins_once(sm):
+    fake = FakeRequests(housekeeping_routes([{"user_id": USER_ID, "email": "new@x.test"}], expired=2))
+    sm.requests = fake
+    sm.account_housekeeping_if_needed()
+    assert fake.find("POST", "expire_demo_accounts")
+    assert "new@x.test" in fake.sent_texts()[0]
+    mark = fake.find("PATCH", "user_profiles")[0]
+    assert mark["params"] == {"user_id": f"in.({USER_ID})", "status": "eq.pending"}
+    assert "signup_notified_at" in mark["json"]
+    # Runs at most hourly.
+    sm.account_housekeeping_if_needed()
+    assert len(fake.find("POST", "expire_demo_accounts")) == 1
+
+
+def test_no_pending_signups_sends_nothing(sm):
+    fake = FakeRequests(housekeeping_routes([]))
+    sm.requests = fake
+    sm.account_housekeeping_if_needed()
+    assert not fake.sent_texts()
+    assert not fake.find("PATCH", "user_profiles")
+
+
+def test_monitor_keywords_of_inactive_owners_are_skipped(sm):
+    def monitor(owner):
+        return {"id": f"m-{owner}", "name": "M", "user_id": owner, "status": "active", "notify_telegram": True}
+    fake = FakeRequests({
+        ("GET", "monitor_keywords"): FakeResponse(200, [
+            {"keyword": "ABB", "monitor_id": "m-a", "user_monitors": monitor("a")},
+            {"keyword": "ABB", "monitor_id": "m-b", "user_monitors": monitor("b")},
+        ]),
+        ("GET", "user_profiles"): FakeResponse(200, [{"user_id": "b"}]),  # status=neq.active
+    })
+    sm.requests = fake
+    rows = sm.load_active_monitor_keywords()
+    assert [row["monitor_id"] for row in rows] == ["m-a"]
+    assert fake.find("GET", "user_profiles")[0]["params"]["status"] == "neq.active"

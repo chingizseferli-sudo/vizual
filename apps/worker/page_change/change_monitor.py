@@ -391,12 +391,25 @@ def get_due_sources(config):
             "limit": str(config["due_batch_limit"] * 3),
         },
     ) or []
+    # Pending, rejected, expired, inactive and blocked accounts: their watches pause.
+    inactive_owners = {
+        row.get("user_id")
+        for row in supabase_request(
+            "GET",
+            "user_profiles",
+            config,
+            params={"select": "user_id", "status": "neq.active"},
+        ) or []
+    }
     now = utc_now()
     due = []
     skip_counts = {}
     skip_samples = []
     for row in rows:
-        is_row_due, reason = get_due_decision(row, now)
+        if row.get("user_id") in inactive_owners:
+            is_row_due, reason = False, "account_inactive"
+        else:
+            is_row_due, reason = get_due_decision(row, now)
         if is_row_due:
             due.append(row)
         else:

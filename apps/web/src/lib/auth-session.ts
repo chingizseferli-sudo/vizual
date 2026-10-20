@@ -147,7 +147,7 @@ export async function getCurrentSupabaseProfile(): Promise<CurrentProfile> {
       },
       isAuthenticated: true,
       isAdmin: role === 'admin' || role === 'superadmin',
-      isBlocked: status === 'blocked' || status === 'inactive',
+      isBlocked: ['blocked', 'inactive', 'rejected'].includes(status),
       error: null,
     }
   } catch (error) {

@@ -125,7 +125,7 @@ describe('SignUpForm', () => {
         },
       })
       expect(mocks.toastSuccess).toHaveBeenCalledWith(
-        'Qeydiyyat yaradıldı. Emailinizi yoxlayın və hesabı təsdiqləyin.'
+        'Müraciətiniz göndərildi. Emailinizi təsdiqləyin; admin təsdiqindən sonra hesabınız aktiv olacaq.'
       )
       expect(mocks.navigate).toHaveBeenCalledWith({
         to: '/sign-in',
@@ -149,7 +149,7 @@ describe('SignUpForm', () => {
 
     await vi.waitFor(() => {
       expect(mocks.toastSuccess).toHaveBeenCalledWith(
-        'Qeydiyyat uğurla tamamlandı.'
+        'Müraciətiniz göndərildi. Admin təsdiqindən sonra hesabınız aktiv olacaq.'
       )
       expect(mocks.navigate).toHaveBeenCalledWith({
         to: '/monitor',
