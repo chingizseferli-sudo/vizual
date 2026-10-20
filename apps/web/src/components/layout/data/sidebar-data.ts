@@ -1,4 +1,5 @@
 ﻿import {
+  Calculator,
   CreditCard,
   FileText,
   Globe,
@@ -64,6 +65,11 @@ export const sidebarData: SidebarData = {
           title: 'Sosial monitorinq',
           url: '/admin/social',
           icon: Share2,
+        },
+        {
+          title: 'Kalkulyator',
+          url: '/admin/calculator',
+          icon: Calculator,
         },
         {
           title: 'Tənzimləmələr',
