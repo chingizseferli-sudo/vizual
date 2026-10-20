@@ -1776,7 +1776,7 @@ def title_from_url_slug(url):
     if re.fullmatch(r"\d+", slug) and len(parts) > 1 and "-" in parts[-2]:
         # /slug-words/147723 -> the readable slug is the previous segment
         slug = re.sub(r"\.(?:html?|php|aspx?)$", "", unquote(parts[-2]), flags=re.IGNORECASE)
-    slug = re.sub(r"(?:^|[-_])\d{4,}(?:$|[-_])", " ", slug)
+    slug = re.sub(r"(?:^|[-_])[A-Za-z]?\d{4,}(?:$|[-_])", " ", slug)
     slug = re.sub(r"[-_]+", " ", slug)
     return clean_article_text(slug)
 
@@ -1943,6 +1943,8 @@ def meaningful_slug_words(article_url):
     slug_raw = title_from_url_slug(article_url)
     if len(slug_raw.split()) < 2:
         return []  # opaque id slug (e.g. 1805hgwolf12o7cyf7) says nothing about the title
+    if len(slug_raw.split()) < 3 and re.search(r"\d{4,}", urlparse(str(article_url or "")).path):
+        return []  # category + id slug (e.g. Dunya_e154160_az) is not a title either
     slug_title = fold_az(slug_raw)
     stop_words = {
         "az", "xeber", "xeberler", "xəbər", "xəbərlər", "news", "post",
