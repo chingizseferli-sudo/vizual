@@ -224,6 +224,20 @@ function shortReason(reason: string) {
   return reason.split(/[;\n]/)[0].trim().slice(0, 140)
 }
 
+const TELEGRAM_SENT = /\[telegram_success\]\s*sent_at=(\S+)/
+
+function lastTelegramAt(notes: string | null) {
+  return TELEGRAM_SENT.exec(notes || '')?.[1] ?? null
+}
+
+const STATE_ORDER: Record<SourceState, number> = {
+  review: 0,
+  degraded: 1,
+  trial: 2,
+  active: 3,
+  off: 4,
+}
+
 function sourceTitle(source: Source) {
   return (
     getHostname(source.base_url) ||
@@ -350,10 +364,12 @@ function SourcesPage() {
 
   const rows = useMemo(
     () =>
-      sources.map((source) => ({
-        source,
-        ...getSourceState(source, now),
-      })),
+      sources
+        .map((source) => ({
+          source,
+          ...getSourceState(source, now),
+        }))
+        .sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state]),
     [sources, now]
   )
 
@@ -533,6 +549,8 @@ function SourcesPage() {
         monitor_method: editing.monitor_method || 'latest_page',
         selector: editing.selector || null,
         article_pattern: editing.article_pattern || null,
+        consecutive_fail_count: 0,
+        last_error: null,
       })
       .eq('id', editing.id)
 
@@ -732,7 +750,7 @@ function SourcesPage() {
               <th className='w-[28%] p-3 text-left'>Mənbə</th>
               <th className='w-[32%] p-3 text-left'>Vəziyyət</th>
               <th className='w-36 p-3 text-left'>Üsul</th>
-              <th className='w-36 p-3 text-left'>Son xəbər</th>
+              <th className='w-48 p-3 text-left'>Fəaliyyət</th>
               <th className='w-52 bg-muted p-3 text-right md:sticky md:right-0'>
                 İş
               </th>
@@ -783,15 +801,26 @@ function SourcesPage() {
                     ) : null}
                   </td>
                   <td className='p-3'>{formatMethod(source.monitor_method)}</td>
-                  <td className='p-3'>
-                    {formatDate(source.last_article_found_at)}
+                  <td className='space-y-0.5 p-3 text-xs'>
+                    <div>
+                      <span className='text-muted-foreground'>Oxundu: </span>
+                      {formatDate(source.last_checked_at)}
+                    </div>
+                    <div>
+                      <span className='text-muted-foreground'>Xəbər: </span>
+                      {formatDate(source.last_article_found_at)}
+                    </div>
+                    <div>
+                      <span className='text-muted-foreground'>Bildiriş: </span>
+                      {formatDate(lastTelegramAt(source.notes))}
+                    </div>
                   </td>
                   <td className='bg-card p-3 text-right md:sticky md:right-0 md:shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.15)]'>
                     <div className='flex justify-end gap-1'>
                       <button
                         type='button'
-                        title='Yoxla'
-                        aria-label='Yoxla'
+                        title='Sürətli yoxla (Supabase-dən; botun həqiqi oxuması deyil)'
+                        aria-label='Sürətli yoxla'
                         disabled={busyId === source.id}
                         onClick={() => void checkNow(source)}
                         className={ACTION_BUTTON}
@@ -866,17 +895,7 @@ function SourcesPage() {
       {editing ? (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'>
           <div className='max-h-[90vh] w-full max-w-2xl space-y-4 overflow-auto rounded-xl border bg-background p-5'>
-            <div className='flex items-start justify-between gap-3'>
-              <h2 className='text-xl font-bold'>Mənbəni redaktə et</h2>
-              <a
-                href={`/admin/monitor/picker?sourceId=${encodeURIComponent(editing.id)}`}
-                target='_blank'
-                rel='noreferrer'
-                className='rounded-md border px-3 py-1 text-xs hover:bg-muted'
-              >
-                Selector seç
-              </a>
-            </div>
+            <h2 className='text-xl font-bold'>Mənbəni redaktə et</h2>
 
             <div className='grid gap-3 md:grid-cols-2'>
               <label className='grid gap-1 text-sm'>
@@ -909,55 +928,82 @@ function SourcesPage() {
                   className='rounded-lg border bg-background px-3 py-2'
                 />
               </label>
-              <label className='grid gap-1 text-sm'>
-                <span className='font-medium'>RSS</span>
-                <input
-                  value={editing.rss_url || ''}
-                  onChange={(e) =>
-                    setEditing({ ...editing, rss_url: e.target.value })
-                  }
-                  className='rounded-lg border bg-background px-3 py-2'
-                />
-              </label>
-              <label className='grid gap-1 text-sm'>
-                <span className='font-medium'>Oxuma üsulu</span>
-                <select
-                  value={editing.monitor_method || 'latest_page'}
-                  onChange={(e) =>
-                    setEditing({ ...editing, monitor_method: e.target.value })
-                  }
-                  className='rounded-lg border bg-background px-3 py-2'
-                >
-                  {EDITABLE_METHODS.map((method) => (
-                    <option key={method} value={method}>
-                      {formatMethod(method)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className='grid gap-1 text-sm'>
-                <span className='font-medium'>CSS selector</span>
-                <input
-                  value={editing.selector || ''}
-                  onChange={(e) =>
-                    setEditing({ ...editing, selector: e.target.value })
-                  }
-                  className='rounded-lg border bg-background px-3 py-2'
-                />
-              </label>
             </div>
 
-            <label className='grid gap-1 text-sm'>
-              <span className='font-medium'>Article pattern / XPath</span>
-              <textarea
-                value={editing.article_pattern || ''}
-                onChange={(e) =>
-                  setEditing({ ...editing, article_pattern: e.target.value })
-                }
-                rows={3}
-                className='rounded-lg border bg-background px-3 py-2'
-              />
-            </label>
+            <details className='rounded-lg border p-3'>
+              <summary className='cursor-pointer text-sm font-medium'>
+                Texniki ayarlar
+              </summary>
+              <p className='mt-2 text-xs text-muted-foreground'>
+                Adətən lazım deyil: bot işləyən üsulu özü tapıb saxlayır.
+                Selector pəncərəsi saytı Supabase-dən açır; sayt onu bloklayırsa
+                açılmaya bilər.
+              </p>
+              <div className='mt-3 grid gap-3 md:grid-cols-2'>
+                <label className='grid gap-1 text-sm'>
+                  <span className='font-medium'>RSS</span>
+                  <input
+                    value={editing.rss_url || ''}
+                    onChange={(e) =>
+                      setEditing({ ...editing, rss_url: e.target.value })
+                    }
+                    className='rounded-lg border bg-background px-3 py-2'
+                  />
+                </label>
+                <label className='grid gap-1 text-sm'>
+                  <span className='font-medium'>Oxuma üsulu</span>
+                  <select
+                    value={editing.monitor_method || 'latest_page'}
+                    onChange={(e) =>
+                      setEditing({ ...editing, monitor_method: e.target.value })
+                    }
+                    className='rounded-lg border bg-background px-3 py-2'
+                  >
+                    {EDITABLE_METHODS.map((method) => (
+                      <option key={method} value={method}>
+                        {formatMethod(method)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className='grid gap-1 text-sm'>
+                  <span className='font-medium'>CSS selector</span>
+                  <input
+                    value={editing.selector || ''}
+                    onChange={(e) =>
+                      setEditing({ ...editing, selector: e.target.value })
+                    }
+                    className='rounded-lg border bg-background px-3 py-2'
+                  />
+                </label>
+              </div>
+              <div className='mt-3 grid gap-3'>
+                <label className='grid gap-1 text-sm'>
+                  <span className='font-medium'>Article pattern / XPath</span>
+                  <textarea
+                    value={editing.article_pattern || ''}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        article_pattern: e.target.value,
+                      })
+                    }
+                    rows={3}
+                    className='rounded-lg border bg-background px-3 py-2'
+                  />
+                </label>
+                <div>
+                  <a
+                    href={`/admin/monitor/picker?sourceId=${encodeURIComponent(editing.id)}`}
+                    target='_blank'
+                    rel='noreferrer'
+                    className='inline-block rounded-md border px-3 py-1 text-xs hover:bg-muted'
+                  >
+                    Selector seç
+                  </a>
+                </div>
+              </div>
+            </details>
 
             <div className='flex justify-end gap-2'>
               <button
