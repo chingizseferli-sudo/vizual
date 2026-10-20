@@ -124,6 +124,7 @@ def test_token_link_success(sm):
     assert offset[0]["json"]["value"] == {"offset": 42}
     heartbeat = [c for c in fake.find("POST", "bot_runtime_state") if c["json"]["key"] == "telegram_heartbeat"]
     assert heartbeat[0]["json"]["value"]["last_poll_at"]
+    assert heartbeat[0]["json"]["value"]["last_poll_ok_at"] == heartbeat[0]["json"]["value"]["last_poll_at"]
 
 
 def test_token_link_expired(sm):
@@ -301,3 +302,47 @@ def test_command_menu_scopes_admin_commands_to_admin_chats(sm):
     assert "stats" not in {c["command"] for c in default["json"]["commands"]}
     assert admin["json"]["scope"] == {"type": "chat", "chat_id": CHAT_ID}
     assert "pause_all" in {c["command"] for c in admin["json"]["commands"]}
+
+
+def test_poll_error_is_recorded_without_marking_poll_ok(sm):
+    sm.requests = FakeRequests({
+        ("GET", "getUpdates"): FakeResponse(409, {"ok": False}, text="Conflict: terminated by other getUpdates request"),
+        ("GET", "bot_runtime_state"): FakeResponse(200, []),
+        ("POST", "bot_runtime_state"): FakeResponse(201, []),
+    })
+    sm.connect_telegram_users_from_updates()
+    heartbeat = [c for c in sm.requests.find("POST", "bot_runtime_state") if c["json"]["key"] == "telegram_heartbeat"]
+    value = heartbeat[0]["json"]["value"]
+    assert value["last_error"] == "poll:409"
+    assert value["last_poll_ok_at"] is None
+
+
+def test_daily_cleanup_trims_log_tables(sm):
+    ok = FakeResponse(204, None, text="")
+    fake = FakeRequests({
+        ("POST", "cleanup_old_monitor_data"): ok,
+        ("DELETE", "discovery_logs"): ok,
+        ("DELETE", "sent_news"): ok,
+        ("DELETE", "telegram_link_tokens"): ok,
+        ("DELETE", "edge_rate_limits"): ok,
+    })
+    fake.delete = lambda url, **kwargs: fake._call("DELETE", url, **kwargs)
+    sm.requests = fake
+    sm.LOG_RETENTION_DAYS = 14
+    sm.MONITOR_DATA_RETENTION_DAYS = 30
+    sm.cleanup_old_monitor_data_if_needed()
+
+    cutoffs = {c["name"]: next(iter(c["params"].items())) for c in fake.calls if c["method"] == "DELETE"}
+    assert set(cutoffs) == {"discovery_logs", "sent_news", "telegram_link_tokens", "edge_rate_limits"}
+    now = datetime.now(ZoneInfo("Asia/Baku"))
+
+    def days_kept(value):
+        return round((now - datetime.fromisoformat(value[3:])).total_seconds() / 86400)
+
+    assert cutoffs["discovery_logs"][0] == "created_at" and days_kept(cutoffs["discovery_logs"][1]) == 14
+    assert days_kept(cutoffs["sent_news"][1]) == 30
+    assert cutoffs["telegram_link_tokens"][0] == "expires_at"
+
+    # Runs once a day.
+    sm.cleanup_old_monitor_data_if_needed()
+    assert len(fake.find("DELETE", "discovery_logs")) == 1

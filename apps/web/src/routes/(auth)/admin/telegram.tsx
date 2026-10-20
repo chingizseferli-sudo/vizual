@@ -20,6 +20,7 @@ const telegramAdminQueryKey = ['admin', 'telegram'] as const
 
 type Heartbeat = {
   last_poll_at?: string | null
+  last_poll_ok_at?: string | null
   last_error?: string | null
   last_error_at?: string | null
   last_send_ok_at?: string | null
@@ -127,28 +128,69 @@ async function setNotificationsPaused(paused: boolean) {
   }
 }
 
+// Codes written by the rss worker: "poll:<http status>", "poll:exception",
+// "send:<reason>" (see parse_telegram_response in site_monitor.py).
+const TELEGRAM_ERROR_TEXT: Record<string, string> = {
+  'poll:409':
+    'Başqa proses eyni botu oxuyur. Deploy zamanı qısa müddət normaldır; davam edirsə köhnə bot prosesini (köhnə Railway servisi, GitHub Actions) söndürün.',
+  'poll:401': 'Bot token səhvdir. Railway-də BOT_TOKEN dəyərini yoxlayın.',
+  'poll:404': 'Bot token səhvdir. Railway-də BOT_TOKEN dəyərini yoxlayın.',
+  'poll:429': 'Telegram sorğuları müvəqqəti məhdudlaşdırıb.',
+  'poll:exception': 'Şəbəkə xətası: Telegram-a qoşulmaq alınmadı.',
+  'send:bot_blocked': 'Müştəri botu bloklayıb, ona mesaj getmir.',
+  'send:chat_not_found':
+    'Çat tapılmadı: müştəri botu silib və ya çat ID səhvdir.',
+  'send:forbidden': 'Bot bu çata yaza bilmir (icazə yoxdur).',
+  'send:telegram_429':
+    'Telegram göndərişi müvəqqəti məhdudlaşdırıb, mesaj təkrar göndərilir.',
+  'send:chat_migrated':
+    'Qrup supergroup-a çevrilib, müştəri Telegram-ı yenidən qoşmalıdır.',
+  'send:bad_request': 'Telegram mesajı qəbul etmədi (səhv sorğu).',
+  'send:network_error': 'Şəbəkə xətası: mesaj göndərilmədi.',
+}
+
+function describeTelegramError(code: string) {
+  return (
+    TELEGRAM_ERROR_TEXT[code] ??
+    (code.startsWith('poll:5') ? 'Telegram serverində müvəqqəti xəta.' : code)
+  )
+}
+
+function isAfter(a: string | null | undefined, b: string | null | undefined) {
+  if (!a) return false
+  if (!b) return true
+  return new Date(a).getTime() > new Date(b).getTime()
+}
+
 function StatusTile({
   label,
   value,
+  detail,
   tone = 'default',
 }: {
   label: string
   value: string
-  tone?: 'default' | 'warning' | 'error'
+  detail?: string
+  tone?: 'default' | 'warning' | 'error' | 'muted'
 }) {
   const toneClass =
     tone === 'error'
       ? 'text-destructive'
       : tone === 'warning'
         ? 'text-amber-600'
-        : 'text-foreground'
+        : tone === 'muted'
+          ? 'text-muted-foreground'
+          : 'text-foreground'
 
   return (
-    <div className='rounded-lg border bg-background p-3'>
+    <div className='min-w-0 rounded-lg border bg-background p-3'>
       <div className='text-xs text-muted-foreground'>{label}</div>
-      <div className={`mt-1 text-sm font-medium break-all ${toneClass}`}>
+      <div className={`mt-1 text-sm font-medium break-words ${toneClass}`}>
         {value}
       </div>
+      {detail ? (
+        <div className='mt-1 text-xs text-muted-foreground'>{detail}</div>
+      ) : null}
     </div>
   )
 }
@@ -176,6 +218,16 @@ function TelegramAdminPage() {
   }
 
   const lastPollAt = data.heartbeat?.last_poll_at ?? null
+  const lastError = data.heartbeat?.last_error ?? null
+  // An error counts only until the same kind of call succeeds again.
+  const lastErrorCurrent = lastError
+    ? isAfter(
+        data.heartbeat?.last_error_at,
+        lastError.startsWith('poll:')
+          ? data.heartbeat?.last_poll_ok_at
+          : data.heartbeat?.last_send_ok_at
+      )
+    : false
   const lastPollTime = lastPollAt ? new Date(lastPollAt).getTime() : NaN
   const pollStale =
     Number.isNaN(lastPollTime) || data.fetchedAt - lastPollTime > STALE_POLL_MS
@@ -269,11 +321,16 @@ function TelegramAdminPage() {
             <StatusTile
               label='Son xəta'
               value={
-                data.heartbeat?.last_error
-                  ? `${data.heartbeat.last_error} · ${formatDate(data.heartbeat.last_error_at)}`
-                  : '—'
+                lastError ? describeTelegramError(lastError) : 'Xəta yoxdur'
               }
-              tone={data.heartbeat?.last_error ? 'error' : 'default'}
+              detail={
+                lastError
+                  ? `${lastErrorCurrent ? '' : 'Köhnə, sonra bot normal işləyib · '}${lastError} · ${formatDate(data.heartbeat?.last_error_at)}`
+                  : undefined
+              }
+              tone={
+                !lastError ? 'default' : lastErrorCurrent ? 'error' : 'muted'
+              }
             />
           </div>
         </section>

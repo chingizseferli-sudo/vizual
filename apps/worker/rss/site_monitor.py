@@ -36,6 +36,8 @@ NEWS_TIME_LIMIT_HOURS = int(os.getenv("NEWS_TIME_LIMIT_HOURS", "1"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "10"))
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "10"))
 MONITOR_DATA_RETENTION_DAYS = int(os.getenv("MONITOR_DATA_RETENTION_DAYS", "30"))
+# Worker logs kept in Postgres only as long as the admin pages need them.
+LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "14"))
 SOURCE_HEALTH_ENABLED = os.getenv("SOURCE_HEALTH_ENABLED", "false").strip().lower() in {"1", "true", "yes"}
 SOURCE_MAX_CONSECUTIVE_FAILS = int(os.getenv("SOURCE_MAX_CONSECUTIVE_FAILS", "5"))
 GOOGLE_NEWS_FALLBACK_HOURS = max(1, int(os.getenv("GOOGLE_NEWS_FALLBACK_HOURS", str(NEWS_TIME_LIMIT_HOURS))))
@@ -109,7 +111,7 @@ LAST_MONITOR_CLEANUP = None
 TELEGRAM_LAST_ERROR = ""
 BOT_SETTINGS_CACHE = {"paused": False, "fetched_at": 0.0}
 RUNTIME_STATE_TABLE_AVAILABLE = True
-TELEGRAM_HEARTBEAT = {"last_poll_at": None, "last_error": None, "last_error_at": None, "last_send_ok_at": None, "loaded": False}
+TELEGRAM_HEARTBEAT = {"last_poll_at": None, "last_poll_ok_at": None, "last_error": None, "last_error_at": None, "last_send_ok_at": None, "loaded": False}
 
 STRICT_WORDS = {
     "dim", "tkta", "arti", "pisa", "timss", "pirls", "bağça", "magistr",
@@ -1451,13 +1453,16 @@ def save_telegram_heartbeat():
         # Keep last_send_ok_at / last_error across worker restarts.
         ok, previous = load_runtime_state("telegram_heartbeat")
         if ok and isinstance(previous, dict):
-            for field in ("last_error", "last_error_at", "last_send_ok_at"):
+            for field in ("last_error", "last_error_at", "last_send_ok_at", "last_poll_ok_at"):
                 if TELEGRAM_HEARTBEAT.get(field) is None and previous.get(field):
                     TELEGRAM_HEARTBEAT[field] = previous.get(field)
         TELEGRAM_HEARTBEAT["loaded"] = True
     save_runtime_state(
         "telegram_heartbeat",
-        {field: TELEGRAM_HEARTBEAT.get(field) for field in ("last_poll_at", "last_error", "last_error_at", "last_send_ok_at")},
+        {
+            field: TELEGRAM_HEARTBEAT.get(field)
+            for field in ("last_poll_at", "last_poll_ok_at", "last_error", "last_error_at", "last_send_ok_at")
+        },
     )
 
 
@@ -1823,6 +1828,8 @@ def connect_telegram_users_from_updates(poll_seconds=0):
             record_telegram_error(f"poll:{response.status_code}")
             print(f"Telegram getUpdates xetasi: {response.status_code} | {redact_secrets(response.text[:200])}", flush=True)
             return
+        # The admin page treats a poll error older than this as resolved.
+        TELEGRAM_HEARTBEAT["last_poll_ok_at"] = TELEGRAM_HEARTBEAT["last_poll_at"]
         updates = response.json().get("result", []) or []
         next_offset = None
         for update in updates:
@@ -4334,6 +4341,36 @@ def cleanup_old_monitor_data_if_needed():
             print(f"Monitor cleanup xetasi: {response.status_code} | {response.text[:200]}", flush=True)
     except Exception as exc:
         print(f"Monitor cleanup istisnasi: {exc}", flush=True)
+    cleanup_old_log_rows(now)
+
+
+def log_retention_rules(now):
+    """(table, timestamp column, cutoff) for rows that are logs, not customer data."""
+    log_cutoff = now - timedelta(days=max(LOG_RETENTION_DAYS, 1))
+    # sent_news is the URL dedupe list: keep it as long as the monitored items.
+    dedupe_cutoff = now - timedelta(days=max(MONITOR_DATA_RETENTION_DAYS, LOG_RETENTION_DAYS, 1))
+    day_cutoff = now - timedelta(days=1)
+    return [
+        ("discovery_logs", "created_at", log_cutoff),
+        ("sent_news", "created_at", dedupe_cutoff),
+        ("telegram_link_tokens", "expires_at", day_cutoff),
+        ("edge_rate_limits", "window_start", day_cutoff),
+    ]
+
+
+def cleanup_old_log_rows(now):
+    for table, column, cutoff in log_retention_rules(now):
+        try:
+            response = requests.delete(
+                f"{SUPABASE_URL}/rest/v1/{table}",
+                headers=supabase_headers({"Prefer": "return=minimal"}),
+                params={column: f"lt.{cutoff.isoformat()}"},
+                timeout=REQUEST_TIMEOUT,
+            )
+            if response.status_code not in (200, 204):
+                print(f"Log cleanup xetasi: {table} | {response.status_code} | {response.text[:160]}", flush=True)
+        except Exception as exc:
+            print(f"Log cleanup istisnasi: {table} | {redact_secrets(exc)}", flush=True)
 
 
 def save_to_vizual_monitor(site, item, clean_title, published_time):
