@@ -346,3 +346,23 @@ def test_daily_cleanup_trims_log_tables(sm):
     # Runs once a day.
     sm.cleanup_old_monitor_data_if_needed()
     assert len(fake.find("DELETE", "discovery_logs")) == 1
+
+
+def test_reserve_skips_same_headline_from_same_source(sm):
+    fake = FakeRequests({("GET", "sent_news"): lambda kw: FakeResponse(
+        200, [{"link": "https://a.az/x"}] if "source_id" in kw["params"] else []
+    )})
+    sm.requests = fake
+    assert sm.reserve_news("https://a.az/y?id=2", "Eyni başlıq", {"name": "A"}, source_id="s1") is False
+    assert fake.find("GET", "sent_news")[1]["params"]["source_id"] == "eq.s1"
+    assert not fake.find("POST", "sent_news")
+
+
+def test_reserve_new_headline_is_written(sm):
+    fake = FakeRequests({
+        ("GET", "sent_news"): FakeResponse(200, []),
+        ("POST", "sent_news"): FakeResponse(201, []),
+    })
+    sm.requests = fake
+    assert sm.reserve_news("https://a.az/z", "Yeni başlıq", {"name": "A"}, source_id="s1") is True
+    assert fake.find("POST", "sent_news")[0]["json"]["link"] == "https://a.az/z"

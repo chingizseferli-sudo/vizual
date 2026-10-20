@@ -2440,6 +2440,31 @@ def exists(link, title=None):
         return False
 
 
+def same_source_title_sent_recently(source_id, title_key):
+    """One source publishing the same headline under a second URL within a day is the same story."""
+    if not source_id or not title_key:
+        return False
+    since = (datetime.now(BAKU_TZ) - timedelta(hours=24)).isoformat()
+    try:
+        with DB_LOCK:
+            response = requests.get(
+                f"{SUPABASE_URL}/rest/v1/sent_news",
+                headers=supabase_headers(),
+                params={
+                    "select": "link",
+                    "source_id": f"eq.{source_id}",
+                    "title": f"eq.{title_key}",
+                    "created_at": f"gte.{since}",
+                    "limit": "1",
+                },
+                timeout=REQUEST_TIMEOUT,
+            )
+        return response.status_code == 200 and bool(response.json())
+    except Exception as exc:
+        print(f"Supabase title dedupe istisnası: {redact_secrets(exc)}", flush=True)
+        return False
+
+
 def reserve_news(link, title, source, source_id=None):
     if not supabase_ready():
         return True
@@ -2454,6 +2479,11 @@ def reserve_news(link, title, source, source_id=None):
 
     source_name = source.get("name") if isinstance(source, dict) else source
     resolved_source_id = source_id or (source.get("id") if isinstance(source, dict) else None)
+    if same_source_title_sent_recently(resolved_source_id, title_key):
+        if isinstance(source, dict):
+            source["_reserve_failure_reason"] = "duplicate_url"
+        print(f"⛔ duplicate_title_same_source: {title_key[:80]} | {normalized_link}", flush=True)
+        return False
     payload = {"link": normalized_link, "title": title_key or clean_text(title), "source": source_name}
     if resolved_source_id:
         payload["source_id"] = resolved_source_id
