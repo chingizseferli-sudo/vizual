@@ -54,6 +54,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { dateLocale, t } from '@/lib/i18n'
 
 type ChangeSourceStatus = 'active' | 'inactive' | 'paused'
 
@@ -726,7 +727,7 @@ function parseSnapshotItems(text: string | null | undefined): SnapshotItem[] {
 
         return {
           title:
-            title && title !== '0' ? title : normalizedUrl || 'Başlıq yoxdur',
+            title && title !== '0' ? title : normalizedUrl || t("Başlıq yoxdur"),
           url: normalizedUrl,
           published,
           image,
@@ -860,7 +861,7 @@ function getDiffToneClass(tone: DiffCellTone) {
 function formatDate(value: string | null | undefined) {
   if (!value) return '-'
 
-  return new Date(value).toLocaleString('az-AZ', {
+  return new Date(value).toLocaleString(dateLocale(), {
     timeZone: 'Asia/Baku',
     day: '2-digit',
     month: '2-digit',
@@ -900,10 +901,10 @@ function getDomain(source: ChangeSource) {
 }
 
 function getStatusLabel(status: string | null | undefined) {
-  if (status === 'active') return 'Aktiv'
-  if (status === 'inactive') return 'Passiv'
-  if (status === 'paused') return 'Dayandırılıb'
-  if (status === 'error') return 'Xətalı'
+  if (status === 'active') return t("Aktiv")
+  if (status === 'inactive') return t("Passiv")
+  if (status === 'paused') return t("Dayandırılıb")
+  if (status === 'error') return t("Xətalı")
   return status || '-'
 }
 
@@ -914,9 +915,9 @@ function getStatusVariant(status: string | null | undefined) {
 }
 
 function getAlertStatusLabel(status: string | null | undefined) {
-  if (status === 'sent') return 'Göndərildi'
-  if (status === 'pending') return 'Gözləyir'
-  if (status === 'failed') return 'Xəta'
+  if (status === 'sent') return t("Göndərildi")
+  if (status === 'pending') return t("Gözləyir")
+  if (status === 'failed') return t("Xəta")
   return status || 'Alert yoxdur'
 }
 
@@ -938,10 +939,10 @@ function parseChangeSummaryForNotification(summary: string | null | undefined) {
     return inline || lines[index + 1] || ''
   }
 
-  let title = readValueAfterLabel(['Başlıq:', 'Title:'])
+  let title = readValueAfterLabel([t("Başlıq:"), 'Title:'])
   let published = readValueAfterLabel([
-    'Saytda yayımlandığı tarix:',
-    'Yayımlanma vaxtı:',
+    t("Saytda yayımlandığı tarix:"),
+    t("Yayımlanma vaxtı:"),
     'Published:',
   ])
 
@@ -967,7 +968,7 @@ function parseChangeSummaryForNotification(summary: string | null | undefined) {
       .trim()
 
   return {
-    title: title || text || 'Dəyişiklik tapılıb.',
+    title: title || text || t("Dəyişiklik tapılıb."),
     itemUrl,
     published,
   }
@@ -987,28 +988,28 @@ function getReadableWatchError(error: string | null | undefined) {
   const lower = code.toLowerCase()
 
   if (lower === 'selector_missing') {
-    return 'Selector səhifədə tapılmadı. Saytın quruluşu dəyişib və ya seçilən hissə başqa bölmədədir. Selectoru yenidən seç.'
+    return t("Selector səhifədə tapılmadı. Saytın quruluşu dəyişib və ya seçilən hissə başqa bölmədədir. Selectoru yenidən seç.")
   }
   if (lower === 'empty_content') {
-    return 'Selector tapıldı, amma oxunaqlı mətn və ya link çıxmadı. Daha geniş xəbər bloku seçilməlidir.'
+    return t("Selector tapıldı, amma oxunaqlı mətn və ya link çıxmadı. Daha geniş xəbər bloku seçilməlidir.")
   }
   if (lower === 'http_403') {
-    return 'Sayt botun sorğusunu bloklayır (403). Sistem browser kimi təkrar yoxlayacaq; davam edərsə həmin səhifə server tərəfindən qorunur.'
+    return t("Sayt botun sorğusunu bloklayır (403). Sistem browser kimi təkrar yoxlayacaq; davam edərsə həmin səhifə server tərəfindən qorunur.")
   }
   if (lower === 'http_429') {
-    return 'Sayt çox sorğuya görə müvəqqəti məhdudlaşdırıb (429). Interval artırılmalı və ya gözlənilməlidir.'
+    return t("Sayt çox sorğuya görə müvəqqəti məhdudlaşdırıb (429). Interval artırılmalı və ya gözlənilməlidir.")
   }
   if (lower === 'timeout') {
-    return 'Sayt vaxtında cavab vermədi. Səhifə yavaşdır və ya müvəqqəti əlçatmazdır.'
+    return t("Sayt vaxtında cavab vermədi. Səhifə yavaşdır və ya müvəqqəti əlçatmazdır.")
   }
   if (lower === 'network_error') {
-    return 'Sayta qoşulmaq mümkün olmadı. Domen, SSL və ya şəbəkə problemi ola bilər.'
+    return t("Sayta qoşulmaq mümkün olmadı. Domen, SSL və ya şəbəkə problemi ola bilər.")
   }
   if (lower === 'unsupported_content_type') {
-    return 'Bu URL HTML səhifə kimi oxunmadı. İzləmə üçün normal səhifə URL-i seçilməlidir.'
+    return t("Bu URL HTML səhifə kimi oxunmadı. İzləmə üçün normal səhifə URL-i seçilməlidir.")
   }
   if (lower.startsWith('http_')) {
-    return `Sayt HTTP xəta qaytardı (${code}). URL və seçilən səhifə yoxlanmalıdır.`
+    return t("Sayt HTTP xəta qaytardı ({0}). URL və seçilən səhifə yoxlanmalıdır.", [code])
   }
   return code
 }
@@ -1022,7 +1023,7 @@ function getWatchDiagnostic(
     return {
       label: 'Passivdir',
       tone: 'muted' as const,
-      reason: 'Bu izləmə hazırda aktiv deyil. Bot passiv izləmələri yoxlamır.',
+      reason: t("Bu izləmə hazırda aktiv deyil. Bot passiv izləmələri yoxlamır."),
     }
   }
 
@@ -1030,13 +1031,13 @@ function getWatchDiagnostic(
     return {
       label: 'Selector yoxdur',
       tone: 'danger' as const,
-      reason: 'İzlənəcək hissə seçilməyib. Saytı aç və selector seç.',
+      reason: t("İzlənəcək hissə seçilməyib. Saytı aç və selector seç."),
     }
   }
 
   if (source.last_error) {
     return {
-      label: 'Xəta var',
+      label: t("Xəta var"),
       tone: 'danger' as const,
       reason: getReadableWatchError(source.last_error),
     }
@@ -1044,43 +1045,43 @@ function getWatchDiagnostic(
 
   if ((source.consecutive_fail_count || 0) > 0) {
     return {
-      label: 'Yoxlama alınmayıb',
+      label: t("Yoxlama alınmayıb"),
       tone: 'warning' as const,
-      reason: `${source.consecutive_fail_count || 0} uğursuz yoxlama var. Selector və URL yoxlanmalıdır.`,
+      reason: t("{0} uğursuz yoxlama var. Selector və URL yoxlanmalıdır.", [source.consecutive_fail_count || 0]),
     }
   }
 
   if (event) {
     return {
-      label: 'Dəyişiklik tapılıb',
+      label: t("Dəyişiklik tapılıb"),
       tone: 'success' as const,
-      reason: 'Bu izləmə üçün dəyişiklik hadisəsi var.',
+      reason: t("Bu izləmə üçün dəyişiklik hadisəsi var."),
     }
   }
 
   if (hasSnapshot) {
     return {
-      label: 'Snapshot var',
+      label: t("Snapshot var"),
       tone: 'info' as const,
       reason:
-        'Bot seçilmiş hissəni oxuyub. Hələ yeni dəyişiklik hadisəsi yaranmayıb.',
+        t("Bot seçilmiş hissəni oxuyub. Hələ yeni dəyişiklik hadisəsi yaranmayıb."),
     }
   }
 
   if (!source.last_checked_at) {
     return {
-      label: 'Hələ yoxlanmayıb',
+      label: t("Hələ yoxlanmayıb"),
       tone: 'warning' as const,
       reason:
-        'Bot bu izləməni hələ yoxlamayıb və baseline snapshot yaratmayıb.',
+        t("Bot bu izləməni hələ yoxlamayıb və baseline snapshot yaratmayıb."),
     }
   }
 
   return {
-    label: 'Snapshot gözlənilir',
+    label: t("Snapshot gözlənilir"),
     tone: 'warning' as const,
     reason:
-      'Bot yoxlama aparıb, amma bu izləmə üçün snapshot tapılmadı. Selector boş nəticə verə bilər.',
+      t("Bot yoxlama aparıb, amma bu izləmə üçün snapshot tapılmadı. Selector boş nəticə verə bilər."),
   }
 }
 
@@ -1102,7 +1103,7 @@ function getWatchStatusBadge(
 ) {
   if (source.last_error || source.status === 'error') {
     return {
-      label: 'Xəta',
+      label: t("Xəta"),
       className: 'border-red-200 bg-red-50 text-red-700',
     }
   }
@@ -1113,27 +1114,27 @@ function getWatchStatusBadge(
     (!source.last_checked_at && source.status === 'active')
   ) {
     return {
-      label: 'Xəbərdarlıq',
+      label: t("Xəbərdarlıq"),
       className: 'border-amber-200 bg-amber-50 text-amber-700',
     }
   }
 
   if (latestEvent) {
     return {
-      label: 'Dəyişib',
+      label: t("Dəyişib"),
       className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     }
   }
 
   if (hasSnapshot || source.last_checked_at || source.last_success_at) {
     return {
-      label: 'Dəyişiklik yoxdur',
+      label: t("Dəyişiklik yoxdur"),
       className: 'border-sky-200 bg-sky-50 text-sky-700',
     }
   }
 
   return {
-    label: 'Sağlam',
+    label: t("Sağlam"),
     className: 'border-border bg-muted/50 text-foreground',
   }
 }
@@ -1227,8 +1228,8 @@ function parseNotificationTarget(
   if (addedMatch) {
     return {
       kind: 'new' as const,
-      title: addedMatch[1]?.trim() || 'Yeni məlumat əlavə olunub',
-      summary: 'Yeni məlumat əlavə olunub.',
+      title: addedMatch[1]?.trim() || t("Yeni məlumat əlavə olunub"),
+      summary: t("Yeni məlumat əlavə olunub."),
       url: addedMatch[2]?.trim() || null,
     }
   }
@@ -1239,26 +1240,26 @@ function parseNotificationTarget(
   if (removedMatch) {
     return {
       kind: 'removed' as const,
-      title: removedMatch[1]?.trim() || 'Məlumat silinib',
-      summary: 'Əvvəl mövcud olan məlumat artıq saytda tapılmadı.',
+      title: removedMatch[1]?.trim() || t("Məlumat silinib"),
+      summary: t("Əvvəl mövcud olan məlumat artıq saytda tapılmadı."),
       url: removedMatch[2]?.trim() || sourceUrl || null,
     }
   }
 
-  const changedCount = parseSummaryCount(text, 'Dəyişən')
+  const changedCount = parseSummaryCount(text, t("Dəyişən"))
   if (changedCount > 0) {
     return {
       kind: 'changed' as const,
-      title: 'Məlumatda dəyişiklik var',
-      summary: `${changedCount} məlumatda dəyişiklik aşkarlanıb.`,
+      title: t("Məlumatda dəyişiklik var"),
+      summary: t("{0} məlumatda dəyişiklik aşkarlanıb.", [changedCount]),
       url: sourceUrl || null,
     }
   }
 
   return {
     kind: 'generic' as const,
-    title: 'Dəyişiklik bildirişi',
-    summary: 'Yeni dəyişiklik bildirişi var.',
+    title: t("Dəyişiklik bildirişi"),
+    summary: t("Yeni dəyişiklik bildirişi var."),
     url: sourceUrl || null,
   }
 }
@@ -1279,14 +1280,14 @@ function getEventItemCompare(
 
   if (oldSnapshot || newSnapshot) {
     const confirmedRemovedItems = parseConfirmedRemovedItems(event.diff_summary)
-    const realRemovedCount = parseSummaryCount(event.diff_summary, 'Silinən')
+    const realRemovedCount = parseSummaryCount(event.diff_summary, t("Silinən"))
     return {
       ...compare,
       removed:
         confirmedRemovedItems.length > 0
           ? confirmedRemovedItems
           : Array.from({ length: realRemovedCount }, (_, index) => ({
-              title: `Təsdiqlənmiş silinən element ${index + 1}`,
+              title: t("Təsdiqlənmiş silinən element {0}", [index + 1]),
               url: '',
             })),
     }
@@ -1294,36 +1295,36 @@ function getEventItemCompare(
 
   return {
     added: Array.from(
-      { length: parseSummaryCount(event.diff_summary, 'Əlavə olunan') },
+      { length: parseSummaryCount(event.diff_summary, t("Əlavə olunan")) },
       (_, index) => ({
-        title: `Yeni paylaşım ${index + 1}`,
+        title: t("Yeni paylaşım {0}", [index + 1]),
         url: '',
       })
     ),
     removed: Array.from(
-      { length: parseSummaryCount(event.diff_summary, 'Silinən') },
+      { length: parseSummaryCount(event.diff_summary, t("Silinən")) },
       (_, index) => ({
-        title: `Silinən element ${index + 1}`,
+        title: t("Silinən element {0}", [index + 1]),
         url: '',
       })
     ),
     changed: Array.from(
-      { length: parseSummaryCount(event.diff_summary, 'Dəyişən') },
+      { length: parseSummaryCount(event.diff_summary, t("Dəyişən")) },
       (_, index) => ({
-        before: { title: `Əvvəlki element ${index + 1}`, url: '' },
-        after: { title: `Dəyişən element ${index + 1}`, url: '' },
+        before: { title: t("Əvvəlki element {0}", [index + 1]), url: '' },
+        after: { title: t("Dəyişən element {0}", [index + 1]), url: '' },
       })
     ),
   }
 }
 
 function getSourceDisplayName(source: ChangeSource | null) {
-  if (!source) return 'Mənbə'
+  if (!source) return t("Mənbə")
   return (
     source.name ||
     source.domain ||
     getDomainFromUrl(source.url || '') ||
-    'Mənbə'
+    t("Mənbə")
   )
 }
 
@@ -1347,12 +1348,12 @@ function validateForm(form: SourceFormState) {
   const selector = form.selector.trim()
   const interval = Number(form.interval_minutes)
 
-  if (!name) return 'İzləmə adı yazılmalıdır.'
-  if (!url) return 'URL yazılmalıdır.'
-  if (!getDomainFromUrl(url)) return 'URL düzgün formatda deyil.'
-  if (!selector) return 'CSS selector yazılmalıdır.'
+  if (!name) return t("İzləmə adı yazılmalıdır.")
+  if (!url) return t("URL yazılmalıdır.")
+  if (!getDomainFromUrl(url)) return t("URL düzgün formatda deyil.")
+  if (!selector) return t("CSS selector yazılmalıdır.")
   if (!Number.isFinite(interval) || interval < 5)
-    return 'Interval ən azı 5 dəqiqə olmalıdır.'
+    return t("Interval ən azı 5 dəqiqə olmalıdır.")
 
   return ''
 }
@@ -1464,7 +1465,7 @@ function ChangeMonitorPage() {
 
     const sessionProfile = await getCurrentSupabaseProfile()
     if (!sessionProfile.user) {
-      throw new Error('Sessiya tapılmadı. Yenidən daxil olun.')
+      throw new Error(t("Sessiya tapılmadı. Yenidən daxil olun."))
     }
 
     const role = sessionProfile.profile?.role || 'customer'
@@ -1494,7 +1495,7 @@ function ChangeMonitorPage() {
       const sourcesRes = await sourcesQuery
 
       if (sourcesRes.error) {
-        setError(`İzləmələr oxunmadı: ${sourcesRes.error.message}`)
+        setError(t("İzləmələr oxunmadı: {0}", [sourcesRes.error.message]))
         return
       }
 
@@ -1537,15 +1538,15 @@ function ChangeMonitorPage() {
       ])
 
       if (eventsRes.error) {
-        setError(`Dəyişiklik tarixçəsi oxunmadı: ${eventsRes.error.message}`)
+        setError(t("Dəyişiklik tarixçəsi oxunmadı: {0}", [eventsRes.error.message]))
         return
       }
       if (recentEventsRes.error) {
-        setError(`Son nəticələr oxunmadı: ${recentEventsRes.error.message}`)
+        setError(t("Son nəticələr oxunmadı: {0}", [recentEventsRes.error.message]))
         return
       }
       if (alertsRes.error) {
-        setError(`Bildirişlər oxunmadı: ${alertsRes.error.message}`)
+        setError(t("Bildirişlər oxunmadı: {0}", [alertsRes.error.message]))
         return
       }
 
@@ -1553,7 +1554,7 @@ function ChangeMonitorPage() {
       setRecentEvents((recentEventsRes.data || []) as ChangeEvent[])
       setAlerts((alertsRes.data || []) as ChangeAlert[])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'İzləmələr oxunmadı.')
+      setError(err instanceof Error ? err.message : t("İzləmələr oxunmadı."))
     } finally {
       setLoading(false)
     }
@@ -1596,7 +1597,7 @@ function ChangeMonitorPage() {
   function openInBrowserForExtension() {
     const rawUrl = normalizeInputUrl(form.url)
     if (!rawUrl || !getDomainFromUrl(rawUrl)) {
-      toast.error('Əvvəl düzgün domen və ya URL yaz. Məsələn: apa.az')
+      toast.error(t("Əvvəl düzgün domen və ya URL yaz. Məsələn: apa.az"))
       return
     }
 
@@ -1611,7 +1612,7 @@ function ChangeMonitorPage() {
 
     openExternalUrl(rawUrl)
     toast.message(
-      'Sayt yeni tabda açıldı. Extension panelindən Selector seç düyməsini istifadə et.'
+      t("Sayt yeni tabda açıldı. Extension panelindən Selector seç düyməsini istifadə et.")
     )
   }
 
@@ -1650,7 +1651,7 @@ function ChangeMonitorPage() {
     const dedupeKey = `${url}::${selector}`
 
     if (!url || !domain || !selector) {
-      const message = 'Selector saxlanmadı: URL və selector məlumatı tam deyil.'
+      const message = t("Selector saxlanmadı: URL və selector məlumatı tam deyil.")
       toast.error(message)
       publishExtensionSaveResult(payload, 'error', message)
       return
@@ -1664,7 +1665,7 @@ function ChangeMonitorPage() {
       publishExtensionSaveResult(
         payload,
         'exists',
-        'Bu selector artıq emal olunur.'
+        t("Bu selector artıq emal olunur.")
       )
       return
     }
@@ -1681,7 +1682,7 @@ function ChangeMonitorPage() {
       const message =
         err instanceof Error
           ? err.message
-          : 'Sessiya tapılmadı. Yenidən daxil olun.'
+          : t("Sessiya tapılmadı. Yenidən daxil olun.")
       toast.error(message)
       publishExtensionSaveResult(payload, 'error', message)
       return
@@ -1702,14 +1703,14 @@ function ChangeMonitorPage() {
     const { data: existing, error: existingError } = await existingQuery
 
     if (existingError) {
-      const message = `İzləmə yoxlanmadı: ${existingError.message}`
+      const message = t("İzləmə yoxlanmadı: {0}", [existingError.message])
       toast.error(message)
       publishExtensionSaveResult(payload, 'error', message)
       return
     }
 
     if (existing?.length) {
-      const message = 'Bu hissə artıq bazada var.'
+      const message = t("Bu hissə artıq bazada var.")
       toast.message(message)
       publishExtensionSaveResult(payload, 'exists', message)
       await loadData()
@@ -1735,7 +1736,7 @@ function ChangeMonitorPage() {
       })
 
     if (insertError) {
-      const message = `İzləmə əlavə edilmədi: ${insertError.message}`
+      const message = t("İzləmə əlavə edilmədi: {0}", [insertError.message])
       toast.error(message)
       publishExtensionSaveResult(payload, 'error', message)
       return
@@ -1745,7 +1746,7 @@ function ChangeMonitorPage() {
     setEditingSource(null)
     setForm(emptyForm)
     resetVisualPicker()
-    const message = 'İzləmə siyahısına əlavə edildi.'
+    const message = t("İzləmə siyahısına əlavə edildi.")
     toast.success(message)
     publishExtensionSaveResult(payload, 'saved', message)
     lastExtensionSaveRef.current = { key: dedupeKey, at: Date.now() }
@@ -1755,7 +1756,7 @@ function ChangeMonitorPage() {
   async function loadVisualPage(nextUrl?: string) {
     const rawUrl = normalizeInputUrl(nextUrl || form.url)
     if (!rawUrl || !getDomainFromUrl(rawUrl)) {
-      setVisualMessage('Əvvəl düzgün domen və ya URL yaz. Məsələn: apa.az')
+      setVisualMessage(t("Əvvəl düzgün domen və ya URL yaz. Məsələn: apa.az"))
       setVisualOpen(true)
       return
     }
@@ -1772,7 +1773,7 @@ function ChangeMonitorPage() {
     setVisualOpen(true)
     setVisualLoading(true)
     setSelectorMode(false)
-    setVisualMessage('Sayt açılır...')
+    setVisualMessage(t("Sayt açılır..."))
     setPickedElement(null)
     setSelectorTestResult(null)
     setCurrentVisualUrl(rawUrl)
@@ -1787,7 +1788,7 @@ function ChangeMonitorPage() {
     if (invokeError) {
       setVisualHtml('')
       setVisualMessage(
-        `Proxy xətası: ${invokeError.message}. Sayt pəncərədə açılmırsa, "Saytı ayrıca aç" düyməsi ilə brauzer extension-dan selector seçin.`
+        t("Proxy xətası: {0}. Sayt pəncərədə açılmırsa, \"Saytı ayrıca aç\" düyməsi ilə brauzer extension-dan selector seçin.", [invokeError.message])
       )
       setVisualLoading(false)
       return
@@ -1797,8 +1798,8 @@ function ChangeMonitorPage() {
       setVisualHtml('')
       setVisualMessage(
         data?.error
-          ? `${data.error} Sayt pəncərədə açılmırsa, "Saytı ayrıca aç" düyməsi ilə brauzer extension-dan selector seçin.`
-          : 'Sayt pəncərədə göstərilə bilmədi. "Saytı ayrıca aç" düyməsi ilə brauzer extension-dan selector seçin.'
+          ? t("{0} Sayt pəncərədə açılmırsa, \"Saytı ayrıca aç\" düyməsi ilə brauzer extension-dan selector seçin.", [data.error])
+          : t("Sayt pəncərədə göstərilə bilmədi. \"Saytı ayrıca aç\" düyməsi ilə brauzer extension-dan selector seçin.")
       )
       setVisualLoading(false)
       return
@@ -1807,7 +1808,7 @@ function ChangeMonitorPage() {
     setCurrentVisualUrl(data.finalUrl || rawUrl)
     setVisualHtml(buildPickerHtml(data.html, data.finalUrl || rawUrl))
     setVisualMessage(
-      'Sayt açıldı. Bölmələrə daxil ola bilərsən; seçmək üçün selector rejimini aktiv et.'
+      t("Sayt açıldı. Bölmələrə daxil ola bilərsən; seçmək üçün selector rejimini aktiv et.")
     )
     setVisualLoading(false)
   }
@@ -1829,7 +1830,7 @@ function ChangeMonitorPage() {
       const message =
         err instanceof Error
           ? err.message
-          : 'Sessiya tapılmadı. Yenidən daxil olun.'
+          : t("Sessiya tapılmadı. Yenidən daxil olun.")
       setSaving(false)
       setFormError(message)
       toast.error(message)
@@ -1864,15 +1865,15 @@ function ChangeMonitorPage() {
 
     if (response.error) {
       const message = editingSource
-        ? `İzləmə yenilənmədi: ${response.error.message}`
-        : `İzləmə əlavə edilmədi: ${response.error.message}`
+        ? t("İzləmə yenilənmədi: {0}", [response.error.message])
+        : t("İzləmə əlavə edilmədi: {0}", [response.error.message])
       setFormError(message)
       toast.error(message)
       return false
     }
 
     toast.success(
-      editingSource ? 'İzləmə yeniləndi.' : 'Yeni veb izləmə əlavə edildi.'
+      editingSource ? t("İzləmə yeniləndi.") : t("Yeni veb izləmə əlavə edildi.")
     )
     setDialogOpen(false)
     setEditingSource(null)
@@ -1889,13 +1890,13 @@ function ChangeMonitorPage() {
 
   async function testPickedSelector(picked = pickedElement) {
     if (!picked?.selector) {
-      toast.error('Əvvəl izlənəcək hissəni seç.')
+      toast.error(t("Əvvəl izlənəcək hissəni seç."))
       return null
     }
 
     const url = currentVisualUrl || normalizeInputUrl(form.url)
     if (!url || !getDomainFromUrl(url)) {
-      toast.error('Selectoru test etmək üçün düzgün URL lazımdır.')
+      toast.error(t("Selectoru test etmək üçün düzgün URL lazımdır."))
       return null
     }
 
@@ -1921,13 +1922,13 @@ function ChangeMonitorPage() {
 
     if (!result.ok) {
       setVisualMessage(
-        result.error || 'Seçilmiş hissə oxunmadı. Daha dəqiq element seçin.'
+        result.error || t("Seçilmiş hissə oxunmadı. Daha dəqiq element seçin.")
       )
       return result
     }
 
     setVisualMessage(
-      `Selector işləyir: ${result.matchedCount} uyğun element tapıldı.`
+      t("Selector işləyir: {0} uyğun element tapıldı.", [result.matchedCount])
     )
     return result
   }
@@ -1941,7 +1942,7 @@ function ChangeMonitorPage() {
 
   async function handleConfirmSelector() {
     if (!pickedElement?.selector) {
-      toast.error('Əvvəl izlənəcək hissəni seç.')
+      toast.error(t("Əvvəl izlənəcək hissəni seç."))
       return
     }
 
@@ -1951,7 +1952,7 @@ function ChangeMonitorPage() {
         : await testPickedSelector(pickedElement)
 
     if (!result?.ok || result.matchedCount < 1) {
-      toast.error('Seçilmiş hissə boşdur. Başqa element seçin.')
+      toast.error(t("Seçilmiş hissə boşdur. Başqa element seçin."))
       return
     }
 
@@ -1963,11 +1964,11 @@ function ChangeMonitorPage() {
 
     if (editingSource) {
       const saved = await saveSource(nextForm)
-      if (saved) toast.success('Selector bazaya yazıldı.')
+      if (saved) toast.success(t("Selector bazaya yazıldı."))
       return
     }
 
-    toast.success('Selector formaya yazıldı. İndi izləməni yadda saxla.')
+    toast.success(t("Selector formaya yazıldı. İndi izləməni yadda saxla."))
   }
 
   function toggleSourceSelection(sourceId: string, checked: boolean) {
@@ -2019,8 +2020,8 @@ function ChangeMonitorPage() {
 
     const confirmed = window.confirm(
       ids.length === 1
-        ? 'Bu izləmə silinsin? Bu əməliyyat geri qaytarılmır.'
-        : `${ids.length} izləmə silinsin? Bu əməliyyat geri qaytarılmır.`
+        ? t("Bu izləmə silinsin? Bu əməliyyat geri qaytarılmır.")
+        : t("{0} izləmə silinsin? Bu əməliyyat geri qaytarılmır.", [ids.length])
     )
     if (!confirmed) return
 
@@ -2031,7 +2032,7 @@ function ChangeMonitorPage() {
       const message =
         err instanceof Error
           ? err.message
-          : 'Sessiya tapılmadı. Yenidən daxil olun.'
+          : t("Sessiya tapılmadı. Yenidən daxil olun.")
       toast.error(message)
       setError(message)
       return
@@ -2046,21 +2047,21 @@ function ChangeMonitorPage() {
       }
     } catch (err) {
       deleteErrors.push(
-        err instanceof Error ? err.message : 'İzləmə silinmədi.'
+        err instanceof Error ? err.message : t("İzləmə silinmədi.")
       )
     } finally {
       setDeleting(false)
     }
 
     if (deleteErrors.length > 0) {
-      const message = `İzləmə silinmədi: ${deleteErrors[0]}`
+      const message = t("İzləmə silinmədi: {0}", [deleteErrors[0]])
       toast.error(message)
       setError(message)
       return
     }
 
     toast.success(
-      ids.length === 1 ? 'İzləmə silindi.' : `${ids.length} izləmə silindi.`
+      ids.length === 1 ? t("İzləmə silindi.") : t("{0} izləmə silindi.", [ids.length])
     )
     setSelectedSourceIds((current) => current.filter((id) => !ids.includes(id)))
     await loadData()
@@ -2077,7 +2078,7 @@ function ChangeMonitorPage() {
       const message =
         err instanceof Error
           ? err.message
-          : 'Sessiya tapılmadı. Yenidən daxil olun.'
+          : t("Sessiya tapılmadı. Yenidən daxil olun.")
       toast.error(message)
       setError(message)
       return
@@ -2092,14 +2093,14 @@ function ChangeMonitorPage() {
     const { error: statusError } = await statusQuery
 
     if (statusError) {
-      const message = `Status dəyişmədi: ${statusError.message}`
+      const message = t("Status dəyişmədi: {0}", [statusError.message])
       toast.error(message)
       setError(message)
       return
     }
 
     toast.success(
-      nextStatus === 'active' ? 'İzləmə aktiv edildi.' : 'İzləmə passiv edildi.'
+      nextStatus === 'active' ? t("İzləmə aktiv edildi.") : t("İzləmə passiv edildi.")
     )
     setSources((current) =>
       current.map((item) =>
@@ -2127,7 +2128,7 @@ function ChangeMonitorPage() {
       Boolean
     ) as string[]
     if (snapshotIds.length === 0) {
-      setDetailError('Bu nəticə üçün snapshot məlumatı tapılmadı.')
+      setDetailError(t("Bu nəticə üçün snapshot məlumatı tapılmadı."))
       setDetailLoading(false)
       return
     }
@@ -2138,7 +2139,7 @@ function ChangeMonitorPage() {
       .in('id', snapshotIds)
 
     if (snapshotError) {
-      setDetailError('Snapshot məlumatı oxunmadı: ' + snapshotError.message)
+      setDetailError(t("Snapshot məlumatı oxunmadı: {0}", [snapshotError.message]))
       setDetailLoading(false)
       return
     }
@@ -2176,7 +2177,7 @@ function ChangeMonitorPage() {
         .limit(10)
 
       if (eventError)
-        throw new Error(`Dəyişiklik nəticəsi oxunmadı: ${eventError.message}`)
+        throw new Error(t("Dəyişiklik nəticəsi oxunmadı: {0}", [eventError.message]))
 
       const events = (eventData || []) as ChangeEvent[]
       const snapshotIds = Array.from(
@@ -2197,7 +2198,7 @@ function ChangeMonitorPage() {
 
         if (snapshotError)
           throw new Error(
-            `Snapshot məlumatı oxunmadı: ${snapshotError.message}`
+            t("Snapshot məlumatı oxunmadı: {0}", [snapshotError.message])
           )
 
         for (const snapshot of (snapshotData || []) as ChangeSnapshot[]) {
@@ -2224,7 +2225,7 @@ function ChangeMonitorPage() {
 
       if (latestSnapshotError)
         throw new Error(
-          `Son snapshot məlumatı oxunmadı: ${latestSnapshotError.message}`
+          t("Son snapshot məlumatı oxunmadı: {0}", [latestSnapshotError.message])
         )
 
       latestSnapshots = (latestSnapshotData || []) as ChangeSnapshot[]
@@ -2242,7 +2243,7 @@ function ChangeMonitorPage() {
         .maybeSingle()
 
       if (alertError)
-        throw new Error(`Bildiriş məlumatı oxunmadı: ${alertError.message}`)
+        throw new Error(t("Bildiriş məlumatı oxunmadı: {0}", [alertError.message]))
 
       setExpandedDetails((current) => ({
         ...current,
@@ -2257,7 +2258,7 @@ function ChangeMonitorPage() {
       const message =
         detailLoadError instanceof Error
           ? detailLoadError.message
-          : 'Məlumat oxunmadı.'
+          : t("Məlumat oxunmadı.")
       setExpandedErrors((current) => ({ ...current, [source.id]: message }))
     } finally {
       setExpandedLoading((current) => ({ ...current, [source.id]: false }))
@@ -2310,13 +2311,13 @@ function ChangeMonitorPage() {
       .maybeSingle()
 
     if (eventError) {
-      setDetailError(`Dəyişiklik hadisəsi oxunmadı: ${eventError.message}`)
+      setDetailError(t("Dəyişiklik hadisəsi oxunmadı: {0}", [eventError.message]))
       setDetailLoading(false)
       return
     }
 
     if (!eventData) {
-      setDetailError('Bu izləmə üçün hələ dəyişiklik hadisəsi yoxdur.')
+      setDetailError(t("Bu izləmə üçün hələ dəyişiklik hadisəsi yoxdur."))
       setDetailLoading(false)
       return
     }
@@ -2328,7 +2329,7 @@ function ChangeMonitorPage() {
       Boolean
     ) as string[]
     if (snapshotIds.length === 0) {
-      setDetailError('Bu hadisə üçün snapshot məlumatı tapılmadı.')
+      setDetailError(t("Bu hadisə üçün snapshot məlumatı tapılmadı."))
       setDetailLoading(false)
       return
     }
@@ -2339,7 +2340,7 @@ function ChangeMonitorPage() {
       .in('id', snapshotIds)
 
     if (snapshotError) {
-      setDetailError(`Snapshot məlumatı oxunmadı: ${snapshotError.message}`)
+      setDetailError(t("Snapshot məlumatı oxunmadı: {0}", [snapshotError.message]))
       setDetailLoading(false)
       return
     }
@@ -2386,7 +2387,7 @@ function ChangeMonitorPage() {
           title: parsedSummary.title,
           published: parsedSummary.published,
           summary:
-            parsedSummary.title || event.diff_summary || 'Dəyişiklik tapılıb.',
+            parsedSummary.title || event.diff_summary || t("Dəyişiklik tapılıb."),
           changedAt: event.created_at,
         }
       })
@@ -2454,10 +2455,10 @@ function ChangeMonitorPage() {
       if (isPicked) setSelectorMode(false)
       setVisualMessage(
         isPicked
-          ? 'Selector seçildi və formaya yazıldı. Düzgündürsə, izləməni yadda saxla.'
-          : 'Sistem izlənəcək hissə üçün avtomatik selector təklif etdi. İstəsən əl ilə başqa hissə seçə bilərsən.'
+          ? t("Selector seçildi və formaya yazıldı. Düzgündürsə, izləməni yadda saxla.")
+          : t("Sistem izlənəcək hissə üçün avtomatik selector təklif etdi. İstəsən əl ilə başqa hissə seçə bilərsən.")
       )
-      if (isPicked) toast.success('Selector formaya yazıldı.')
+      if (isPicked) toast.success(t("Selector formaya yazıldı."))
     }
 
     window.addEventListener('message', handleMessage)
@@ -2534,7 +2535,7 @@ function ChangeMonitorPage() {
           target.summary ||
           alert.error ||
           source?.last_error ||
-          'Yeni dəyişiklik bildirişi var.',
+          t("Yeni dəyişiklik bildirişi var."),
         time: alert.sent_at || alert.created_at || event?.created_at || null,
         url: target.url,
         kind: target.kind,
@@ -2585,14 +2586,14 @@ function ChangeMonitorPage() {
   }, [activeFilter, events24h, sources])
   const activeFilterLabel =
     activeFilter === 'active'
-      ? 'aktiv izləmələr'
+      ? t("aktiv izləmələr")
       : activeFilter === 'inactive'
-        ? 'passiv izləmələr'
+        ? t("passiv izləmələr")
         : activeFilter === 'error'
-          ? 'xətalı izləmələr'
+          ? t("xətalı izləmələr")
           : activeFilter === 'changed24h'
-            ? 'son 24 saatda dəyişən izləmələr'
-            : 'bütün izləmələr'
+            ? t("son 24 saatda dəyişən izləmələr")
+            : t("bütün izləmələr")
   const diffResult = useMemo(
     () =>
       buildDiffRows(
@@ -2635,10 +2636,8 @@ function ChangeMonitorPage() {
     <div className='max-w-full min-w-0 space-y-4 p-4 md:p-6'>
       <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
         <div>
-          <h1 className='text-2xl font-bold tracking-tight'>Veb izləmə</h1>
-          <p className='text-muted-foreground'>
-            URL və CSS selector ilə izlənən vacib sayt hissələri.
-          </p>
+          <h1 className='text-2xl font-bold tracking-tight'>{t("Veb izləmə")}</h1>
+          <p className='text-muted-foreground'>{t("URL və CSS selector ilə izlənən vacib sayt hissələri.")}</p>
         </div>
         <div className='flex flex-wrap items-center gap-2'>
           <Dialog open={notificationOpen} onOpenChange={setNotificationOpen}>
@@ -2647,7 +2646,7 @@ function ChangeMonitorPage() {
                 type='button'
                 variant='outline'
                 className='relative size-11 shrink-0 rounded-lg p-0'
-                aria-label='Dəyişiklik bildirişləri'
+                aria-label={t("Dəyişiklik bildirişləri")}
               >
                 <span aria-hidden='true'>🔔</span>
                 {unreadNotificationCount > 0 ? (
@@ -2663,25 +2662,19 @@ function ChangeMonitorPage() {
             <DialogContent className='gap-0 overflow-hidden p-0 sm:max-w-md sm:p-0'>
               <div className='flex flex-wrap items-center justify-between gap-3 border-b bg-muted/50 px-4 py-3 pr-14'>
                 <div>
-                  <DialogTitle>Dəyişiklik bildirişləri</DialogTitle>
-                  <DialogDescription>
-                    Son bildirişlər və yeni dəyişikliklər
-                  </DialogDescription>
+                  <DialogTitle>{t("Dəyişiklik bildirişləri")}</DialogTitle>
+                  <DialogDescription>{t("Son bildirişlər və yeni dəyişikliklər")}</DialogDescription>
                 </div>
                 <Button
                   variant='ghost'
                   size='sm'
                   onClick={markAllNotificationsRead}
                   disabled={notificationItems.length === 0}
-                >
-                  Hamısı oxundu
-                </Button>
+                >{t("Hamısı oxundu")}</Button>
               </div>
 
               {notificationItems.length === 0 ? (
-                <div className='px-4 py-8 text-center text-sm text-muted-foreground'>
-                  Hələ bildiriş yoxdur.
-                </div>
+                <div className='px-4 py-8 text-center text-sm text-muted-foreground'>{t("Hələ bildiriş yoxdur.")}</div>
               ) : (
                 <div className='max-h-[min(420px,65dvh)] overflow-auto'>
                   {notificationItems.map((item) => (
@@ -2726,14 +2719,14 @@ function ChangeMonitorPage() {
                           }`}
                         >
                           {item.kind === 'new'
-                            ? 'Yeni'
+                            ? t("Yeni")
                             : item.kind === 'removed'
                               ? 'Silinib'
                               : item.kind === 'changed'
-                                ? 'Dəyişib'
+                                ? t("Dəyişib")
                                 : item.isRead
                                   ? 'Oxunub'
-                                  : 'Yeni'}
+                                  : t("Yeni")}
                         </span>
                       </div>
                       <div className='mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground'>
@@ -2747,7 +2740,7 @@ function ChangeMonitorPage() {
             </DialogContent>
           </Dialog>
 
-          <Button onClick={openCreateDialog}>Yeni veb izləmə</Button>
+          <Button onClick={openCreateDialog}>{t("Yeni veb izləmə")}</Button>
         </div>
       </div>
 
@@ -2759,17 +2752,17 @@ function ChangeMonitorPage() {
 
       <div className='grid grid-cols-2 gap-3 xl:grid-cols-5'>
         <KpiCard
-          title='Ümumi'
+          title={t("Ümumi")}
           value={stats.total}
-          description='Bütün izləmələr'
+          description={t("Bütün izləmələr")}
           compact
           active={activeFilter === 'all'}
           onClick={() => setActiveFilter('all')}
         />
         <KpiCard
-          title='Aktiv'
+          title={t("Aktiv")}
           value={stats.active}
-          description='İşlək izləmələr'
+          description={t("İşlək izləmələr")}
           tone='success'
           compact
           active={activeFilter === 'active'}
@@ -2778,9 +2771,9 @@ function ChangeMonitorPage() {
           }
         />
         <KpiCard
-          title='Passiv'
+          title={t("Passiv")}
           value={stats.inactive}
-          description='Aktiv olmayanlar'
+          description={t("Aktiv olmayanlar")}
           tone='muted'
           compact
           active={activeFilter === 'inactive'}
@@ -2789,9 +2782,9 @@ function ChangeMonitorPage() {
           }
         />
         <KpiCard
-          title='Xətalı'
+          title={t("Xətalı")}
           value={stats.error}
-          description='Xəta və ya fail'
+          description={t("Xəta və ya fail")}
           tone='danger'
           compact
           active={activeFilter === 'error'}
@@ -2800,9 +2793,9 @@ function ChangeMonitorPage() {
           }
         />
         <KpiCard
-          title='24 saat'
+          title={t("24 saat")}
           value={stats.changes24h}
-          description='Dəyişən izləmələr'
+          description={t("Dəyişən izləmələr")}
           tone='info'
           compact
           active={activeFilter === 'changed24h'}
@@ -2818,13 +2811,13 @@ function ChangeMonitorPage() {
         <CardHeader className='pb-3'>
           <div className='flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'>
             <div>
-              <CardTitle>İzləmələr</CardTitle>
+              <CardTitle>{t("İzləmələr")}</CardTitle>
               <CardDescription>
                 {loading
-                  ? 'Məlumatlar yüklənir...'
-                  : `${filteredSources.length} / ${sources.length} izləmə göstərilir · ${activeFilterLabel}${
+                  ? t("Məlumatlar yüklənir...")
+                  : `${t('{0} / {1} izləmə göstərilir', [filteredSources.length, sources.length])} · ${activeFilterLabel}${
                       latestAlert
-                        ? ` · son bildiriş: ${getStatusLabel(latestAlert.status)} (${formatDate(latestAlert.sent_at || latestAlert.created_at)})`
+                        ? t(" · son bildiriş: {0} ({1})", [getStatusLabel(latestAlert.status), formatDate(latestAlert.sent_at || latestAlert.created_at)])
                         : ''
                     }`}
               </CardDescription>
@@ -2838,36 +2831,28 @@ function ChangeMonitorPage() {
               >
                 {deleting
                   ? 'Silinir...'
-                  : `Seçilənləri sil (${selectedSourceIds.length})`}
+                  : t("Seçilənləri sil ({0})", [selectedSourceIds.length])}
               </Button>
             ) : null}
           </div>
         </CardHeader>
         <CardContent className='min-w-0 overflow-hidden'>
           {loading ? (
-            <div className='rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground'>
-              İzləmələr yüklənir...
-            </div>
+            <div className='rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground'>{t("İzləmələr yüklənir...")}</div>
           ) : sources.length === 0 ? (
-            <div className='rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground'>
-              Hələ Veb izləmə üçün izləmə əlavə edilməyib.
-            </div>
+            <div className='rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground'>{t("Hələ Veb izləmə üçün izləmə əlavə edilməyib.")}</div>
           ) : filteredSources.length === 0 ? (
-            <div className='rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground'>
-              Bu filtrə uyğun izləmə yoxdur.
-            </div>
+            <div className='rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground'>{t("Bu filtrə uyğun izləmə yoxdur.")}</div>
           ) : (
-            <ResponsiveTable label='Veb izləmələr' mobileLayout='cards'>
+            <ResponsiveTable label={t("Veb izləmələr")} mobileLayout='cards'>
               <label className='flex min-h-11 items-center gap-3 border-b px-3 py-2 md:hidden'>
                 <Checkbox
                   checked={allSourcesSelected}
                   onCheckedChange={(checked) =>
                     toggleAllSources(Boolean(checked), filteredSources)
                   }
-                  aria-label='Görünən izləmələrin hamısını seç'
-                />
-                Bütün izləmələri seç
-              </label>
+                  aria-label={t("Görünən izləmələrin hamısını seç")}
+                />{t("Bütün izləmələri seç")}</label>
               <Table className='w-full table-fixed text-sm'>
                 <TableHeader>
                   <TableRow>
@@ -2878,22 +2863,18 @@ function ChangeMonitorPage() {
                           onCheckedChange={(checked) =>
                             toggleAllSources(Boolean(checked), filteredSources)
                           }
-                          aria-label='Bütün izləmələri seç'
+                          aria-label={t("Bütün izləmələri seç")}
                         />
                       )}
-                      <span className='ml-2'>Status</span>
+                      <span className='ml-2'>{t("Status")}</span>
                     </TableHead>
-                    <TableHead className='w-[18%]'>İzləmə</TableHead>
-                    <TableHead className='w-[18%]'>URL / domain</TableHead>
+                    <TableHead className='w-[18%]'>{t("İzləmə")}</TableHead>
+                    <TableHead className='w-[18%]'>{t("URL / domain")}</TableHead>
                     <TableHead className='w-[18%]'>Selector</TableHead>
-                    <TableHead className='hidden w-[11%] xl:table-cell'>
-                      Son yoxlama
-                    </TableHead>
-                    <TableHead className='hidden w-[11%] xl:table-cell'>
-                      Son dəyişiklik
-                    </TableHead>
-                    <TableHead className='w-[8%]'>Dəyişiklik</TableHead>
-                    <TableHead className='w-[10%]'>İş</TableHead>
+                    <TableHead className='hidden w-[11%] xl:table-cell'>{t("Son yoxlama")}</TableHead>
+                    <TableHead className='hidden w-[11%] xl:table-cell'>{t("Son dəyişiklik")}</TableHead>
+                    <TableHead className='w-[8%]'>{t("Dəyişiklik")}</TableHead>
+                    <TableHead className='w-[10%]'>{t("İş")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -3034,7 +3015,7 @@ function ChangeMonitorPage() {
                         >
                           <TableCell
                             role='cell'
-                            data-label='Vəziyyət'
+                            data-label={t("Vəziyyət")}
                             className='px-2 py-2 align-top'
                             onClick={(event) => event.stopPropagation()}
                           >
@@ -3047,7 +3028,7 @@ function ChangeMonitorPage() {
                                     Boolean(checked)
                                   )
                                 }
-                                aria-label='İzləməni seç'
+                                aria-label={t("İzləməni seç")}
                               />
                               <div className='min-w-0 space-y-1'>
                                 <span
@@ -3064,7 +3045,7 @@ function ChangeMonitorPage() {
                                       ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                                       : 'bg-red-100 text-red-700 hover:bg-red-200'
                                   }`}
-                                  title='Aktiv/passiv et'
+                                  title={t("Aktiv/passiv et")}
                                 >
                                   {source.status === 'active' ? 'ON' : 'OFF'}
                                 </button>
@@ -3073,7 +3054,7 @@ function ChangeMonitorPage() {
                           </TableCell>
                           <TableCell
                             role='cell'
-                            data-label='İzləmə'
+                            data-label={t("İzləmə")}
                             className='min-w-0 px-2 py-2 align-top'
                           >
                             <div
@@ -3093,9 +3074,7 @@ function ChangeMonitorPage() {
                                 <Badge
                                   className='h-5 px-1.5 text-[11px]'
                                   variant='default'
-                                >
-                                  Yeni
-                                </Badge>
+                                >{t("Yeni")}</Badge>
                               ) : null}
                             </div>
                           </TableCell>
@@ -3124,9 +3103,9 @@ function ChangeMonitorPage() {
                           >
                             <div
                               className='truncate font-mono text-xs text-muted-foreground'
-                              title={source.selector || 'Selector seçilməyib'}
+                              title={source.selector || t("Selector seçilməyib")}
                             >
-                              {source.selector || 'Selector seçilməyib'}
+                              {source.selector || t("Selector seçilməyib")}
                             </div>
                           </TableCell>
                           <TableCell
@@ -3138,26 +3117,26 @@ function ChangeMonitorPage() {
                           </TableCell>
                           <TableCell
                             role='cell'
-                            data-label='Son dəyişiklik'
+                            data-label={t("Son dəyişiklik")}
                             className='hidden px-2 py-2 align-top whitespace-nowrap xl:table-cell'
                           >
                             {formatDate(source.last_changed_at)}
                           </TableCell>
                           <TableCell
                             role='cell'
-                            data-label='Dəyişiklik'
+                            data-label={t("Dəyişiklik")}
                             className='px-2 py-2 align-top'
                           >
                             <span
                               className='rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground'
-                              title='Son dəyişiklik hadisələrinin sayı'
+                              title={t("Son dəyişiklik hadisələrinin sayı")}
                             >
                               {recentChangeCount}
                             </span>
                           </TableCell>
                           <TableCell
                             role='cell'
-                            data-label='Əməliyyatlar'
+                            data-label={t("Əməliyyatlar")}
                             className='px-2 py-2 align-top'
                             onClick={(event) => event.stopPropagation()}
                           >
@@ -3168,7 +3147,7 @@ function ChangeMonitorPage() {
                                   target='_blank'
                                   rel='noreferrer'
                                   className='inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border text-sm hover:bg-muted'
-                                  aria-label='İzləməni yeni tabda aç'
+                                  aria-label={t("İzləməni yeni tabda aç")}
                                 >
                                   ↗
                                 </a>
@@ -3178,8 +3157,8 @@ function ChangeMonitorPage() {
                                 size='sm'
                                 className='h-8 w-8 shrink-0 px-0'
                                 onClick={() => openEditDialog(source)}
-                                title='Redaktə et'
-                                aria-label='Redaktə et'
+                                title={t("Redaktə et")}
+                                aria-label={t("Redaktə et")}
                               >
                                 ✎
                               </Button>
@@ -3189,10 +3168,8 @@ function ChangeMonitorPage() {
                                 className='h-8 shrink-0 px-2 text-red-600 hover:text-red-700'
                                 onClick={() => deleteSources([source.id])}
                                 disabled={deleting}
-                                title='Sil'
-                              >
-                                Sil
-                              </Button>
+                                title={t("Sil")}
+                              >{t("Sil")}</Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -3205,9 +3182,7 @@ function ChangeMonitorPage() {
                             >
                               <div className='min-w-0 overflow-hidden border-b bg-muted/20 p-3'>
                                 {expandedLoading[source.id] ? (
-                                  <div className='rounded-lg border bg-background px-4 py-4 text-center text-sm text-muted-foreground'>
-                                    İzləmə nəticəsi yüklənir...
-                                  </div>
+                                  <div className='rounded-lg border bg-background px-4 py-4 text-center text-sm text-muted-foreground'>{t("İzləmə nəticəsi yüklənir...")}</div>
                                 ) : expandedErrors[source.id] ? (
                                   <div className='rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800'>
                                     {expandedErrors[source.id]}
@@ -3217,19 +3192,14 @@ function ChangeMonitorPage() {
                                   !source.content_hash ? (
                                   <div className='rounded-lg border bg-background p-3'>
                                     <div className='flex flex-wrap items-center gap-2'>
-                                      <div className='text-sm font-semibold'>
-                                        Dəyişiklik yoxdur
-                                      </div>
+                                      <div className='text-sm font-semibold'>{t("Dəyişiklik yoxdur")}</div>
                                       <span
                                         className={`rounded-full border px-1.5 py-0.5 text-[11px] font-medium ${getDiagnosticBadgeClass(diagnostic.tone)}`}
                                       >
                                         {diagnostic.label}
                                       </span>
                                     </div>
-                                    <div className='mt-1 text-sm text-muted-foreground'>
-                                      Dəyişiklik yoxdur. İlk dəyişiklik olduqda
-                                      burada görünəcək.
-                                    </div>
+                                    <div className='mt-1 text-sm text-muted-foreground'>{t("Dəyişiklik yoxdur. İlk dəyişiklik olduqda burada görünəcək.")}</div>
                                     <div
                                       className='mt-2 truncate text-xs text-muted-foreground'
                                       title={diagnostic.reason}
@@ -3243,15 +3213,8 @@ function ChangeMonitorPage() {
                                       <div className='min-w-0 rounded-lg border bg-background p-2'>
                                         <div className='flex flex-wrap items-center justify-between gap-2'>
                                           <div>
-                                            <div className='text-sm font-semibold'>
-                                              Son yoxlamanın nəticəsi
-                                            </div>
-                                            <div className='text-xs text-muted-foreground'>
-                                              Əvvəlki və indiki siyahı eyni
-                                              sayda göstərilir. Yalnız yeni
-                                              xəbər və real başlıq dəyişikliyi
-                                              rənglə işarələnir.
-                                            </div>
+                                            <div className='text-sm font-semibold'>{t("Son yoxlamanın nəticəsi")}</div>
+                                            <div className='text-xs text-muted-foreground'>{t("Əvvəlki və indiki siyahı eyni sayda göstərilir. Yalnız yeni xəbər və real başlıq dəyişikliyi rənglə işarələnir.")}</div>
                                           </div>
                                           <div className='text-xs text-muted-foreground'>
                                             {formatDate(
@@ -3263,9 +3226,7 @@ function ChangeMonitorPage() {
 
                                         <div className='mt-2 grid gap-2 md:grid-cols-2'>
                                           <div className='rounded-md border bg-muted/50 p-2'>
-                                            <div className='mb-1 text-xs font-semibold text-muted-foreground'>
-                                              Əvvəl
-                                            </div>
+                                            <div className='mb-1 text-xs font-semibold text-muted-foreground'>{t("Əvvəl")}</div>
                                             <div className='space-y-1.5'>
                                               {latestVisibleEvent.comparisonRows.map(
                                                 (row, index) => (
@@ -3284,14 +3245,11 @@ function ChangeMonitorPage() {
                                                         >
                                                           {row.before.title ||
                                                             row.before.url ||
-                                                            'Başlıq yoxdur'}
+                                                            t("Başlıq yoxdur")}
                                                         </div>
                                                       </>
                                                     ) : (
-                                                      <div className='text-muted-foreground'>
-                                                        Bu məlumat əvvəl yox
-                                                        idi.
-                                                      </div>
+                                                      <div className='text-muted-foreground'>{t("Bu məlumat əvvəl yox idi.")}</div>
                                                     )}
                                                   </div>
                                                 )
@@ -3300,9 +3258,7 @@ function ChangeMonitorPage() {
                                           </div>
 
                                           <div className='rounded-md border bg-background p-2'>
-                                            <div className='mb-1 text-xs font-semibold text-muted-foreground'>
-                                              İndi
-                                            </div>
+                                            <div className='mb-1 text-xs font-semibold text-muted-foreground'>{t("İndi")}</div>
                                             <div className='space-y-1.5'>
                                               {latestVisibleEvent.comparisonRows.map(
                                                 (row, index) => {
@@ -3321,15 +3277,11 @@ function ChangeMonitorPage() {
                                                       className={`rounded border px-2 py-1 text-xs ${toneClass}`}
                                                     >
                                                       {row.status === 'new' ? (
-                                                        <div className='mb-0.5 text-[11px] font-semibold text-emerald-700'>
-                                                          Yeni məlumat
-                                                        </div>
+                                                        <div className='mb-0.5 text-[11px] font-semibold text-emerald-700'>{t("Yeni məlumat")}</div>
                                                       ) : null}
                                                       {row.status ===
                                                       'changed' ? (
-                                                        <div className='mb-0.5 text-[11px] font-semibold text-amber-700'>
-                                                          Başlıq dəyişib
-                                                        </div>
+                                                        <div className='mb-0.5 text-[11px] font-semibold text-amber-700'>{t("Başlıq dəyişib")}</div>
                                                       ) : null}
                                                       {row.status ===
                                                       'removed' ? (
@@ -3355,7 +3307,7 @@ function ChangeMonitorPage() {
                                                           >
                                                             {row.after.title ||
                                                               row.after.url ||
-                                                              'Başlıq yoxdur'}
+                                                              t("Başlıq yoxdur")}
                                                           </a>
                                                         </>
                                                       ) : (
@@ -3368,7 +3320,7 @@ function ChangeMonitorPage() {
                                                         >
                                                           {row.before?.title ||
                                                             row.before?.url ||
-                                                            'Silinən məlumat'}
+                                                            t("Silinən məlumat")}
                                                         </div>
                                                       )}
                                                     </div>
@@ -3380,10 +3332,7 @@ function ChangeMonitorPage() {
                                         </div>
                                       </div>
                                     ) : (
-                                      <div className='rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground'>
-                                        Son yoxlamada göstəriləcək yeni, silinən
-                                        və ya dəyişən element yoxdur.
-                                      </div>
+                                      <div className='rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground'>{t("Son yoxlamada göstəriləcək yeni, silinən və ya dəyişən element yoxdur.")}</div>
                                     )}
                                     {displayNewSnapshot &&
                                     LEGACY_SNAPSHOT_VIEW_ENABLED ? (
@@ -3392,13 +3341,8 @@ function ChangeMonitorPage() {
                                       >
                                         <div className='flex flex-wrap items-center justify-between gap-2'>
                                           <div>
-                                            <div className='text-sm font-semibold'>
-                                              İzləmə nəticəsi
-                                            </div>
-                                            <div className='text-xs text-muted-foreground'>
-                                              Seçilmiş hissəyə vizual və mətn
-                                              rejimində bax.
-                                            </div>
+                                            <div className='text-sm font-semibold'>{t("İzləmə nəticəsi")}</div>
+                                            <div className='text-xs text-muted-foreground'>{t("Seçilmiş hissəyə vizual və mətn rejimində bax.")}</div>
                                           </div>
                                           <div className='flex flex-wrap items-center gap-2'>
                                             {(
@@ -3426,15 +3370,15 @@ function ChangeMonitorPage() {
                                               >
                                                 {mode === 'visual'
                                                   ? 'Vizual'
-                                                  : 'Mətn'}
+                                                  : t("Mətn")}
                                               </button>
                                             ))}
                                             <span
                                               className={`rounded-full border px-2 py-0.5 text-xs font-medium ${latestInlineEvent ? 'border-emerald-200 bg-emerald-100 text-emerald-700' : 'border-sky-200 bg-sky-50 text-sky-700'}`}
                                             >
                                               {latestInlineEvent
-                                                ? 'Dəyişiklik tapılıb'
-                                                : 'Snapshot var'}
+                                                ? t("Dəyişiklik tapılıb")
+                                                : t("Snapshot var")}
                                             </span>
                                           </div>
                                         </div>
@@ -3443,14 +3387,8 @@ function ChangeMonitorPage() {
                                           <div className='mt-3 min-w-0 rounded-lg border bg-card p-4'>
                                             <div className='mb-3 flex flex-wrap items-center justify-between gap-2 border-b pb-2'>
                                               <div>
-                                                <div className='text-sm font-semibold'>
-                                                  Vizual görünüş
-                                                </div>
-                                                <div className='text-xs text-muted-foreground'>
-                                                  Seçilmiş hissənin oxunaqlı
-                                                  görünüşü. Yeni/dəyişənlər
-                                                  yaşıl göstərilir.
-                                                </div>
+                                                <div className='text-sm font-semibold'>{t("Vizual görünüş")}</div>
+                                                <div className='text-xs text-muted-foreground'>{t("Seçilmiş hissənin oxunaqlı görünüşü. Yeni/dəyişənlər yaşıl göstərilir.")}</div>
                                               </div>
                                               <div className='flex items-center gap-2'>
                                                 {source.url ? (
@@ -3461,9 +3399,7 @@ function ChangeMonitorPage() {
                                                     target='_blank'
                                                     rel='noreferrer'
                                                     className='text-xs text-sky-700 underline'
-                                                  >
-                                                    Saytı ayrıca aç
-                                                  </a>
+                                                  >{t("Saytı ayrıca aç")}</a>
                                                 ) : null}
                                                 <span className='rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700'>
                                                   {currentSnapshotItems.length ||
@@ -3534,23 +3470,19 @@ function ChangeMonitorPage() {
                                                 {splitSnapshotLines(
                                                   displayNewSnapshot.content_text
                                                 ).join('\n\n') ||
-                                                  'Məlumat yoxdur.'}
+                                                  t("Məlumat yoxdur.")}
                                               </pre>
                                             )}
                                           </div>
                                         ) : expandedViewMode === 'text' ? (
                                           <div className='mt-3 rounded-lg border bg-card p-4'>
                                             <div className='mb-3 flex flex-wrap items-center justify-between gap-2'>
-                                              <div className='text-sm font-semibold'>
-                                                Mətn görünüşü
-                                              </div>
+                                              <div className='text-sm font-semibold'>{t("Mətn görünüşü")}</div>
                                               <span className='rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700'>
                                                 {currentSnapshotItems.length ||
                                                   splitSnapshotLines(
                                                     displayNewSnapshot.content_text
-                                                  ).length}{' '}
-                                                sətir
-                                              </span>
+                                                  ).length}{' '}{t("sətir")}</span>
                                             </div>
                                             {currentSnapshotItems.length > 0 ? (
                                               <div className='max-h-[380px] min-w-0 space-y-3 overflow-auto pr-2 text-sm'>
@@ -3611,7 +3543,7 @@ function ChangeMonitorPage() {
                                                 {splitSnapshotLines(
                                                   displayNewSnapshot.content_text
                                                 ).join('\n\n') ||
-                                                  'Mətn yoxdur.'}
+                                                  t("Mətn yoxdur.")}
                                               </pre>
                                             )}
                                           </div>
@@ -3639,30 +3571,24 @@ function ChangeMonitorPage() {
           <DialogHeader>
             <DialogTitle>
               {detailSource?.name ||
-                (detailSource ? getDomain(detailSource) : 'İzləmə detalları')}
+                (detailSource ? getDomain(detailSource) : t("İzləmə detalları"))}
             </DialogTitle>
-            <DialogDescription>
-              Son dəyişiklik üzrə əvvəlki və cari snapshot müqayisəsi.
-            </DialogDescription>
+            <DialogDescription>{t("Son dəyişiklik üzrə əvvəlki və cari snapshot müqayisəsi.")}</DialogDescription>
           </DialogHeader>
 
           {detailLoading ? (
-            <div className='rounded-lg border bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground'>
-              Müqayisə məlumatları yüklənir...
-            </div>
+            <div className='rounded-lg border bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground'>{t("Müqayisə məlumatları yüklənir...")}</div>
           ) : detailError ? (
             <div className='rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800'>
               {detailError}
             </div>
           ) : !detailOldSnapshot || !detailNewSnapshot ? (
-            <div className='rounded-lg border bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground'>
-              Müqayisə üçün əvvəlki və cari snapshot tapılmadı.
-            </div>
+            <div className='rounded-lg border bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground'>{t("Müqayisə üçün əvvəlki və cari snapshot tapılmadı.")}</div>
           ) : (
             <div className='space-y-4'>
               <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-5'>
                 <KpiCard
-                  title='Əvvəlki snapshot'
+                  title={t("Əvvəlki snapshot")}
                   value={(detailOldSnapshot.content_text || '').length}
                   description='simvol'
                   tone='muted'
@@ -3674,27 +3600,27 @@ function ChangeMonitorPage() {
                   tone='info'
                 />
                 <KpiCard
-                  title='Əlavə olunan'
+                  title={t("Əlavə olunan")}
                   value={diffResult.added}
-                  description='sətir'
+                  description={t("sətir")}
                   tone='success'
                 />
                 <KpiCard
-                  title='Silinən'
+                  title={t("Silinən")}
                   value={diffResult.removed}
-                  description='sətir'
+                  description={t("sətir")}
                   tone='danger'
                 />
                 <KpiCard
-                  title='Dəyişən'
+                  title={t("Dəyişən")}
                   value={diffResult.modified}
-                  description='sətir'
+                  description={t("sətir")}
                 />
               </div>
 
               <div className='grid gap-3 text-sm lg:grid-cols-2'>
                 <div className='rounded-lg border bg-background p-3'>
-                  <div className='font-semibold'>İzləmə</div>
+                  <div className='font-semibold'>{t("İzləmə")}</div>
                   <div className='mt-1 break-all text-muted-foreground'>
                     {detailSource?.url || '-'}
                   </div>
@@ -3703,9 +3629,8 @@ function ChangeMonitorPage() {
                   </div>
                 </div>
                 <div className='rounded-lg border bg-background p-3'>
-                  <div className='font-semibold'>Snapshot vaxtları</div>
-                  <div className='mt-1 text-muted-foreground'>
-                    Əvvəlki: {formatDate(detailOldSnapshot.captured_at)}
+                  <div className='font-semibold'>{t("Snapshot vaxtları")}</div>
+                  <div className='mt-1 text-muted-foreground'>{t("Əvvəlki:")}{' '}{formatDate(detailOldSnapshot.captured_at)}
                   </div>
                   <div className='text-muted-foreground'>
                     Cari: {formatDate(detailNewSnapshot.captured_at)}
@@ -3717,9 +3642,7 @@ function ChangeMonitorPage() {
                 <div className='grid gap-3 lg:grid-cols-2'>
                   {addedLinkItems.length > 0 ? (
                     <div className='rounded-lg border border-emerald-200 bg-emerald-50 p-3'>
-                      <div className='font-semibold text-emerald-900'>
-                        Yeni linklər
-                      </div>
+                      <div className='font-semibold text-emerald-900'>{t("Yeni linklər")}</div>
                       <div className='mt-2 max-h-48 space-y-2 overflow-auto text-sm'>
                         {addedLinkItems.map((item) => (
                           <div key={item.url} className='break-words'>
@@ -3742,9 +3665,7 @@ function ChangeMonitorPage() {
 
                   {removedLinkItems.length > 0 ? (
                     <div className='rounded-lg border border-red-200 bg-red-50 p-3'>
-                      <div className='font-semibold text-red-900'>
-                        Silinən linklər
-                      </div>
+                      <div className='font-semibold text-red-900'>{t("Silinən linklər")}</div>
                       <div className='mt-2 max-h-48 space-y-2 overflow-auto text-sm'>
                         {removedLinkItems.map((item) => (
                           <div key={item.url} className='break-words'>
@@ -3769,17 +3690,13 @@ function ChangeMonitorPage() {
 
               <div className='rounded-xl border bg-background'>
                 <div className='grid border-b bg-muted/50 text-sm font-semibold md:grid-cols-2'>
-                  <div className='border-b p-3 md:border-r md:border-b-0'>
-                    Əvvəlki snapshot
-                  </div>
+                  <div className='border-b p-3 md:border-r md:border-b-0'>{t("Əvvəlki snapshot")}</div>
                   <div className='p-3'>Cari snapshot</div>
                 </div>
 
                 <div className='max-h-[62vh] overflow-auto'>
                   {diffResult.rows.length === 0 ? (
-                    <div className='p-6 text-center text-sm text-muted-foreground'>
-                      Snapshot mətnləri boşdur.
-                    </div>
+                    <div className='p-6 text-center text-sm text-muted-foreground'>{t("Snapshot mətnləri boşdur.")}</div>
                   ) : (
                     <div className='min-w-0'>
                       {diffResult.rows.map((row, index) => (
@@ -3793,9 +3710,7 @@ function ChangeMonitorPage() {
                             <span className='mr-2 text-muted-foreground select-none'>
                               {index + 1}
                             </span>
-                            <span className='mb-1 block font-sans font-semibold md:hidden'>
-                              Əvvəlki snapshot
-                            </span>
+                            <span className='mb-1 block font-sans font-semibold md:hidden'>{t("Əvvəlki snapshot")}</span>
                             {row.left || ' '}
                           </div>
                           <div
@@ -3823,12 +3738,9 @@ function ChangeMonitorPage() {
         <DialogContent className='max-h-[calc(100dvh-2rem)] w-[96vw] max-w-[96vw] overflow-y-auto sm:max-w-[96vw]'>
           <DialogHeader>
             <DialogTitle>
-              {editingSource ? 'İzləməni redaktə et' : 'Yeni veb izləmə'}
+              {editingSource ? t("İzləməni redaktə et") : t("Yeni veb izləmə")}
             </DialogTitle>
-            <DialogDescription>
-              URL yaz, saytı vizual aç, izlənəcək hissəni seç və selector
-              avtomatik formaya düşsün.
-            </DialogDescription>
+            <DialogDescription>{t("URL yaz, saytı vizual aç, izlənəcək hissəni seç və selector avtomatik formaya düşsün.")}</DialogDescription>
           </DialogHeader>
 
           <form className='space-y-4' onSubmit={handleSave}>
@@ -3840,17 +3752,17 @@ function ChangeMonitorPage() {
 
             <div className='grid gap-4 sm:grid-cols-2'>
               <div className='space-y-2'>
-                <Label htmlFor='change-source-name'>İzləmə adı</Label>
+                <Label htmlFor='change-source-name'>{t("İzləmə adı")}</Label>
                 <Input
                   id='change-source-name'
                   value={form.name}
                   onChange={(event) => updateForm('name', event.target.value)}
-                  placeholder='Məsələn: Hacker News'
+                  placeholder={t("Məsələn: Hacker News")}
                   disabled={saving}
                 />
               </div>
               <div className='space-y-2'>
-                <Label htmlFor='change-source-status'>Status</Label>
+                <Label htmlFor='change-source-status'>{t("Status")}</Label>
                 <Select
                   value={form.status}
                   onValueChange={(value) =>
@@ -3859,25 +3771,25 @@ function ChangeMonitorPage() {
                   disabled={saving}
                 >
                   <SelectTrigger id='change-source-status' className='w-full'>
-                    <SelectValue placeholder='Status seç' />
+                    <SelectValue placeholder={t("Status seç")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='active'>Aktiv</SelectItem>
-                    <SelectItem value='inactive'>Passiv</SelectItem>
-                    <SelectItem value='paused'>Dayandırılıb</SelectItem>
+                    <SelectItem value='active'>{t("Aktiv")}</SelectItem>
+                    <SelectItem value='inactive'>{t("Passiv")}</SelectItem>
+                    <SelectItem value='paused'>{t("Dayandırılıb")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div className='grid gap-2'>
-              <Label htmlFor='change-source-url'>URL</Label>
+              <Label htmlFor='change-source-url'>{t("URL")}</Label>
               <div className='flex flex-col gap-2 sm:flex-row'>
                 <Input
                   id='change-source-url'
                   value={form.url}
                   onChange={(event) => updateForm('url', event.target.value)}
-                  placeholder='apa.az və ya https://example.az/page'
+                  placeholder={t("apa.az və ya https://example.az/page")}
                   disabled={saving}
                 />
                 <Button
@@ -3885,16 +3797,14 @@ function ChangeMonitorPage() {
                   variant='outline'
                   onClick={openInBrowserForExtension}
                   disabled={saving}
-                >
-                  Brauzerdə aç
-                </Button>
+                >{t("Brauzerdə aç")}</Button>
                 <Button
                   type='button'
                   variant='outline'
                   onClick={() => loadVisualPage()}
                   disabled={saving || visualLoading}
                 >
-                  {visualLoading ? 'Açılır...' : 'Selector pəncərəsində aç'}
+                  {visualLoading ? t("Açılır...") : t("Selector pəncərəsində aç")}
                 </Button>
               </div>
             </div>
@@ -3913,7 +3823,7 @@ function ChangeMonitorPage() {
 
             <div className='grid gap-4 sm:grid-cols-2'>
               <div className='space-y-2'>
-                <Label htmlFor='change-source-interval'>Interval, dəqiqə</Label>
+                <Label htmlFor='change-source-interval'>{t("Interval, dəqiqə")}</Label>
                 <Input
                   id='change-source-interval'
                   type='number'
@@ -3926,14 +3836,14 @@ function ChangeMonitorPage() {
                 />
               </div>
               <div className='space-y-2'>
-                <Label htmlFor='change-source-chat'>Telegram chat ID</Label>
+                <Label htmlFor='change-source-chat'>{t("Telegram chat ID")}</Label>
                 <Input
                   id='change-source-chat'
                   value={form.telegram_chat_id}
                   onChange={(event) =>
                     updateForm('telegram_chat_id', event.target.value)
                   }
-                  placeholder='Boş qala bilər'
+                  placeholder={t("Boş qala bilər")}
                   disabled={saving}
                 />
               </div>
@@ -3945,11 +3855,9 @@ function ChangeMonitorPage() {
                 variant='outline'
                 onClick={() => setDialogOpen(false)}
                 disabled={saving}
-              >
-                Bağla
-              </Button>
+              >{t("Bağla")}</Button>
               <Button type='submit' disabled={saving}>
-                {saving ? 'Saxlanılır...' : 'Yadda saxla'}
+                {saving ? t("Saxlanılır...") : t("Yadda saxla")}
               </Button>
             </DialogFooter>
           </form>
@@ -3967,13 +3875,9 @@ function ChangeMonitorPage() {
         <DialogContent className='h-[96dvh] w-[98vw] max-w-[98vw] overflow-y-auto p-0 sm:max-w-[98vw]'>
           <div className='flex min-h-full flex-col'>
             <DialogHeader className='border-b px-5 py-4'>
-              <DialogTitle>Selector seç</DialogTitle>
-              <DialogDescription>
-                Saytda gəz, lazım olan bölməyə daxil ol, sonra selector rejimini
-                aktiv edib izlənəcək hissəni seç.
-                {currentVisualUrl ? (
-                  <span className='mt-1 block text-xs break-all'>
-                    Açılan URL: {currentVisualUrl}
+              <DialogTitle>{t("Selector seç")}</DialogTitle>
+              <DialogDescription>{t("Saytda gəz, lazım olan bölməyə daxil ol, sonra selector rejimini aktiv edib izlənəcək hissəni seç.")}{currentVisualUrl ? (
+                  <span className='mt-1 block text-xs break-all'>{t("Açılan URL:")}{' '}{currentVisualUrl}
                   </span>
                 ) : null}
               </DialogDescription>
@@ -3983,8 +3887,8 @@ function ChangeMonitorPage() {
               <div className='flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-slate-950 px-3 py-2 text-sm text-white'>
                 <span>
                   {selectorMode
-                    ? 'Selector rejimi aktivdir. İzlənəcək blokun üzərinə kliklə.'
-                    : 'Gəzinti rejimindəsən. Saytın bölmələrinə daxil ola bilərsən.'}
+                    ? t("Selector rejimi aktivdir. İzlənəcək blokun üzərinə kliklə.")
+                    : t("Gəzinti rejimindəsən. Saytın bölmələrinə daxil ola bilərsən.")}
                 </span>
                 <Button
                   type='button'
@@ -3996,18 +3900,18 @@ function ChangeMonitorPage() {
                       : 'bg-emerald-300 text-emerald-950 hover:bg-emerald-400'
                   }
                 >
-                  {selectorMode ? 'Gəzintiyə qayıt' : 'Selectoru aktiv et'}
+                  {selectorMode ? t("Gəzintiyə qayıt") : 'Selectoru aktiv et'}
                 </Button>
               </div>
 
               <div className='rounded-lg border bg-background p-3 text-sm shadow-sm'>
                 {pickedElement ? (
                   <div className='space-y-2'>
-                    <div className='font-semibold'>Seçilən hissə</div>
+                    <div className='font-semibold'>{t("Seçilən hissə")}</div>
                     <div className='max-h-24 overflow-auto rounded-md bg-muted p-2 text-xs text-muted-foreground'>
                       {pickedElement.text ||
                         pickedElement.href ||
-                        'Mətn tapılmadı'}
+                        t("Mətn tapılmadı")}
                     </div>
                     <div className='text-xs break-all'>
                       <b>Selector:</b> {pickedElement.selector}
@@ -4017,7 +3921,7 @@ function ChangeMonitorPage() {
                       <span className='text-right font-medium text-foreground'>
                         {pickedElement.tag || '-'}
                       </span>
-                      <span>Uyğun element sayı</span>
+                      <span>{t("Uyğun element sayı")}</span>
                       <span className='text-right font-medium text-foreground'>
                         {pickedElement.matchCount || '-'}
                       </span>
@@ -4041,9 +3945,9 @@ function ChangeMonitorPage() {
                         }
                       >
                         {selectorTestResult.ok
-                          ? `${selectorTestResult.matchedCount} uyğun element tapıldı.`
+                          ? t("{0} uyğun element tapıldı.", [selectorTestResult.matchedCount])
                           : selectorTestResult.error ||
-                            'Selector boş nəticə verdi.'}
+                            t("Selector boş nəticə verdi.")}
                         {selectorTestResult.previewText ? (
                           <div className='mt-1 line-clamp-2'>
                             {selectorTestResult.previewText}
@@ -4057,17 +3961,13 @@ function ChangeMonitorPage() {
                         size='sm'
                         variant='outline'
                         onClick={() => adjustVisualSelection('child')}
-                      >
-                        Daha kiçik
-                      </Button>
+                      >{t("Daha kiçik")}</Button>
                       <Button
                         type='button'
                         size='sm'
                         variant='outline'
                         onClick={() => adjustVisualSelection('parent')}
-                      >
-                        Üst element
-                      </Button>
+                      >{t("Üst element")}</Button>
                     </div>
                     <Button
                       type='button'
@@ -4085,14 +3985,10 @@ function ChangeMonitorPage() {
                       className='w-full'
                       onClick={handleConfirmSelector}
                       disabled={selectorTesting || saving}
-                    >
-                      Seçimi təsdiqlə
-                    </Button>
+                    >{t("Seçimi təsdiqlə")}</Button>
                   </div>
                 ) : (
-                  <div className='text-muted-foreground'>
-                    Seçilən hissənin preview-i burada görünəcək.
-                  </div>
+                  <div className='text-muted-foreground'>{t("Seçilən hissənin preview-i burada görünəcək.")}</div>
                 )}
               </div>
             </div>
@@ -4105,9 +4001,7 @@ function ChangeMonitorPage() {
 
             <div className='min-h-80 flex-1 bg-card'>
               {visualLoading ? (
-                <div className='p-6 text-sm text-muted-foreground'>
-                  Sayt açılır...
-                </div>
+                <div className='p-6 text-sm text-muted-foreground'>{t("Sayt açılır...")}</div>
               ) : visualHtml ? (
                 <iframe
                   ref={iframeRef}
@@ -4117,9 +4011,7 @@ function ChangeMonitorPage() {
                   className='h-[60dvh] min-h-80 w-full bg-card'
                 />
               ) : (
-                <div className='p-6 text-sm text-muted-foreground'>
-                  Sayt pəncərədə göstərilə bilmədi.
-                </div>
+                <div className='p-6 text-sm text-muted-foreground'>{t("Sayt pəncərədə göstərilə bilmədi.")}</div>
               )}
             </div>
           </div>

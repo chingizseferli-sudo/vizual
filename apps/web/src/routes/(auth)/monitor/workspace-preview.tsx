@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
+import { dateLocale, t } from '@/lib/i18n'
 
 type MonitorRow = {
   id: string
@@ -104,7 +105,7 @@ function decodeHtml(text: string) {
 function formatDate(value: string | null) {
   if (!value) return '-'
 
-  return new Date(value).toLocaleString('az-AZ', {
+  return new Date(value).toLocaleString(dateLocale(), {
     timeZone: 'Asia/Baku',
     day: '2-digit',
     month: '2-digit',
@@ -114,7 +115,7 @@ function formatDate(value: string | null) {
 }
 
 function getHost(url: string | null | undefined) {
-  if (!url) return 'Mənbə yoxdur'
+  if (!url) return t("Mənbə yoxdur")
 
   try {
     return new URL(url).hostname.replace(/^www\./, '')
@@ -132,7 +133,7 @@ async function fetchWorkspaceData(): Promise<WorkspaceData> {
   if (userError || !user) {
     return {
       ...EMPTY_WORKSPACE,
-      errorMessage: 'Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun.',
+      errorMessage: t("Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun."),
     }
   }
 
@@ -152,7 +153,7 @@ async function fetchWorkspaceData(): Promise<WorkspaceData> {
   if (monitorsRes.error) {
     return {
       ...EMPTY_WORKSPACE,
-      errorMessage: 'Monitor məlumatlarını yükləmək mümkün olmadı.',
+      errorMessage: t("Monitor məlumatlarını yükləmək mümkün olmadı."),
     }
   }
 
@@ -244,7 +245,7 @@ async function fetchWorkspaceData(): Promise<WorkspaceData> {
     planName,
     maxWatches,
     errorMessage: matchesRes.error
-      ? 'Son nəticələri yükləmək mümkün olmadı.'
+      ? t("Son nəticələri yükləmək mümkün olmadı.")
       : '',
   }
 }
@@ -316,21 +317,21 @@ function WorkspacePreviewPage() {
     : `${data.monitorCount}`
   const signals = [
     data.resultCount > 0
-      ? `${data.resultCount} uyğun media nəticəsi tapılıb.`
-      : 'Hələ uyğun media nəticəsi yoxdur.',
+      ? t("{0} uyğun media nəticəsi tapılıb.", [data.resultCount])
+      : t("Hələ uyğun media nəticəsi yoxdur."),
     data.alertCount > 0
-      ? `${data.alertCount} bildiriş qeydi mövcuddur.`
-      : 'Bildiriş yaranması üçün əvvəlcə uyğun nəticə tapılmalıdır.',
+      ? t("{0} bildiriş qeydi mövcuddur.", [data.alertCount])
+      : t("Bildiriş yaranması üçün əvvəlcə uyğun nəticə tapılmalıdır."),
     data.activeMonitorCount > 0
-      ? `${data.activeMonitorCount} monitor aktiv izləmədədir.`
-      : 'Aktiv monitor yoxdur. Monitor yaradaraq izləməyə başlayın.',
+      ? t("{0} monitor aktiv izləmədədir.", [data.activeMonitorCount])
+      : t("Aktiv monitor yoxdur. Monitor yaradaraq izləməyə başlayın."),
   ]
 
   if (isLoading) {
     return (
       <div className='flex min-h-[360px] items-center justify-center p-6 text-muted-foreground'>
         <Loader2 className='mr-2 h-5 w-5 animate-spin' />
-        <span>İş masası yüklənir...</span>
+        <span>{t("İş masası yüklənir...")}</span>
       </div>
     )
   }
@@ -340,32 +341,20 @@ function WorkspacePreviewPage() {
       <section className='rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6'>
         <div className='grid gap-5 lg:grid-cols-[1.4fr_0.75fr] lg:items-end'>
           <div>
-            <div className='inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary'>
-              Dinamik iş masası
-            </div>
-            <p className='mt-4 text-sm font-semibold text-muted-foreground'>
-              Sabahınız xeyir.
-            </p>
-            <h1 className='mt-2 max-w-3xl text-3xl font-semibold tracking-tight text-foreground md:text-5xl'>
-              Bu gün təşkilatınız haqqında nə baş verir?
-            </h1>
-            <p className='mt-4 max-w-2xl text-base leading-7 text-muted-foreground'>
-              Monitorlarınızın son vəziyyəti, tapılan nəticələr və bildirişlər
-              burada bir səhifədə toplanır.
-            </p>
+            <div className='inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary'>{t("Dinamik iş masası")}</div>
+            <p className='mt-4 text-sm font-semibold text-muted-foreground'>{t("Sabahınız xeyir.")}</p>
+            <h1 className='mt-2 max-w-3xl text-3xl font-semibold tracking-tight text-foreground md:text-5xl'>{t("Bu gün təşkilatınız haqqında nə baş verir?")}</h1>
+            <p className='mt-4 max-w-2xl text-base leading-7 text-muted-foreground'>{t("Monitorlarınızın son vəziyyəti, tapılan nəticələr və bildirişlər burada bir səhifədə toplanır.")}</p>
           </div>
           <div className='rounded-2xl border border-emerald-200 bg-emerald-50 p-4'>
             <div className='flex items-center gap-2 text-sm font-semibold text-emerald-700'>
-              <CheckCircle2 className='h-4 w-4' />
-              Günün statusu
-            </div>
+              <CheckCircle2 className='h-4 w-4' />{t("Günün statusu")}</div>
             <p className='mt-3 text-2xl font-semibold text-foreground'>
               {data.activeMonitorCount > 0
                 ? 'Monitorinq aktivdir'
-                : 'Başlamağa hazırdır'}
+                : t("Başlamağa hazırdır")}
             </p>
-            <p className='mt-2 text-sm text-muted-foreground'>
-              Son yoxlama: {latestMatchTime}
+            <p className='mt-2 text-sm text-muted-foreground'>{t("Son yoxlama:")}{' '}{latestMatchTime}
             </p>
           </div>
         </div>
@@ -373,47 +362,45 @@ function WorkspacePreviewPage() {
 
       {isError || data.errorMessage ? (
         <div className='rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800'>
-          <div className='font-semibold'>İş masası tam yüklənmədi.</div>
+          <div className='font-semibold'>{t("İş masası tam yüklənmədi.")}</div>
           <p className='mt-1'>
-            {data.errorMessage || 'Məlumatları yükləmək mümkün olmadı.'}
+            {data.errorMessage || t("Məlumatları yükləmək mümkün olmadı.")}
           </p>
           <button
             type='button'
             onClick={() => refetch()}
             className='mt-3 rounded-lg border border-amber-300 bg-card px-3 py-2 text-sm font-bold'
-          >
-            Yenidən yoxla
-          </button>
+          >{t("Yenidən yoxla")}</button>
         </div>
       ) : null}
 
       <SectionShell
-        title='Bugünkü xülasə'
-        description='İstifadəçi hesabınızdan oxunan real monitorinq göstəriciləri.'
+        title={t("Bugünkü xülasə")}
+        description={t("İstifadəçi hesabınızdan oxunan real monitorinq göstəriciləri.")}
       >
         <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
           <SummaryCard
-            label='Yeni media materialı'
+            label={t("Yeni media materialı")}
             value={data.resultCount}
-            note='Tapılan uyğun nəticələr'
+            note={t("Tapılan uyğun nəticələr")}
             icon={Newspaper}
           />
           <SummaryCard
-            label='Bildiriş'
+            label={t("Bildiriş")}
             value={data.alertCount}
-            note='Son nəticələr üzrə bildiriş qeydləri'
+            note={t("Son nəticələr üzrə bildiriş qeydləri")}
             icon={Bell}
           />
           <SummaryCard
-            label='Aktiv monitor'
+            label={t("Aktiv monitor")}
             value={data.activeMonitorCount}
-            note={`${data.monitorCount} monitor içindən`}
+            note={t("{0} monitor içindən", [data.monitorCount])}
             icon={Radio}
           />
           <SummaryCard
-            label='Plan istifadəsi'
+            label={t("Plan istifadəsi")}
             value={planUsage}
-            note={data.planName || 'Plan məlumatı aktiv deyil'}
+            note={data.planName || t("Plan məlumatı aktiv deyil")}
             icon={ShieldCheck}
           />
         </div>
@@ -422,7 +409,7 @@ function WorkspacePreviewPage() {
       <div className='grid gap-4 xl:grid-cols-[0.85fr_1.15fr]'>
         <SectionShell
           title='Vacib siqnallar'
-          description='Cari hesab datasına görə qısa qərar siqnalları.'
+          description={t("Cari hesab datasına görə qısa qərar siqnalları.")}
         >
           <div className='grid gap-2'>
             {signals.map((signal) => (
@@ -437,25 +424,23 @@ function WorkspacePreviewPage() {
         </SectionShell>
 
         <SectionShell
-          title='Media axını'
-          description='Açar sözlər üzrə tapılmış son media materialları.'
+          title={t("Media axını")}
+          description={t("Açar sözlər üzrə tapılmış son media materialları.")}
         >
           {data.recentMatches.length === 0 ? (
             <div className='rounded-xl border border-dashed border-border p-6 text-center'>
               <div className='font-semibold text-foreground'>
-                {hasNoMonitors ? 'Monitor yaradın' : 'Hələ nəticə yoxdur'}
+                {hasNoMonitors ? t("Monitor yaradın") : t("Hələ nəticə yoxdur")}
               </div>
               <p className='mx-auto mt-1 max-w-md text-sm text-muted-foreground'>
                 {hasNoMonitors
-                  ? 'İlk monitoru yaradın və açar söz əlavə edin. Sistem uyğun materialları tapdıqca burada göstərəcək.'
-                  : 'Sistem mənbələri yoxladıqca uyğun nəticələr bu axında görünəcək.'}
+                  ? t("İlk monitoru yaradın və açar söz əlavə edin. Sistem uyğun materialları tapdıqca burada göstərəcək.")
+                  : t("Sistem mənbələri yoxladıqca uyğun nəticələr bu axında görünəcək.")}
               </p>
               <Link
                 to='/monitor/monitors'
                 className='mt-3 inline-flex rounded-lg border border-border px-3 py-2 text-sm font-bold hover:bg-muted/50'
-              >
-                Monitorlara keç
-              </Link>
+              >{t("Monitorlara keç")}</Link>
             </div>
           ) : (
             <div className='grid gap-2'>
@@ -463,7 +448,7 @@ function WorkspacePreviewPage() {
                 const item = match.monitored_items
                 const title = item?.title
                   ? decodeHtml(item.title)
-                  : 'Başlıq yoxdur'
+                  : t("Başlıq yoxdur")
 
                 return (
                   <article
@@ -474,7 +459,7 @@ function WorkspacePreviewPage() {
                       <div className='min-w-0'>
                         <div className='flex flex-wrap gap-2 text-xs font-bold text-muted-foreground'>
                           <span>{getHost(item?.url)}</span>
-                          <span>{match.matched_keyword || 'Açar söz'}</span>
+                          <span>{match.matched_keyword || t("Açar söz")}</span>
                           <span>{formatDate(match.created_at)}</span>
                         </div>
                         <h3 className='mt-1 line-clamp-2 text-sm leading-5 font-semibold text-foreground'>
@@ -487,9 +472,7 @@ function WorkspacePreviewPage() {
                           target='_blank'
                           rel='noreferrer'
                           className='inline-flex w-fit items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-card'
-                        >
-                          Mənbəyə bax
-                          <ExternalLink className='h-3.5 w-3.5' />
+                        >{t("Mənbəyə bax")}<ExternalLink className='h-3.5 w-3.5' />
                         </a>
                       ) : null}
                     </div>
@@ -503,26 +486,26 @@ function WorkspacePreviewPage() {
 
       <div className='grid gap-4 xl:grid-cols-[1.1fr_0.9fr]'>
         <SectionShell
-          title='Növbəti ən yaxşı addım'
-          description='Cari vəziyyətə uyğun praktik keçidlər.'
+          title={t("Növbəti ən yaxşı addım")}
+          description={t("Cari vəziyyətə uyğun praktik keçidlər.")}
         >
           <div className='grid gap-3 md:grid-cols-3'>
             {[
               {
                 label: hasNoMonitors
-                  ? 'İlk monitoru yarat'
-                  : 'Monitorları idarə et',
-                description: 'Mövzuları və açar sözləri yeniləyin',
+                  ? t("İlk monitoru yarat")
+                  : t("Monitorları idarə et"),
+                description: t("Mövzuları və açar sözləri yeniləyin"),
                 to: '/monitor/monitors' as const,
               },
               {
-                label: 'Nəticələrə bax',
-                description: 'Tapılan media materiallarını açın',
+                label: t("Nəticələrə bax"),
+                description: t("Tapılan media materiallarını açın"),
                 to: '/monitor/results' as const,
               },
               {
-                label: 'Bildirişləri yoxla',
-                description: 'Göndərilən bildiriş tarixçəsinə baxın',
+                label: t("Bildirişləri yoxla"),
+                description: t("Göndərilən bildiriş tarixçəsinə baxın"),
                 to: '/monitor/alerts' as const,
               },
             ].map((action) => (
@@ -544,18 +527,18 @@ function WorkspacePreviewPage() {
         </SectionShell>
 
         <SectionShell
-          title='İş masası sağlamlığı'
-          description='Hesabın iş üçün hazır olub-olmadığını göstərən status bloku.'
+          title={t("İş masası sağlamlığı")}
+          description={t("Hesabın iş üçün hazır olub-olmadığını göstərən status bloku.")}
         >
           <div className='grid gap-2'>
             {[
               [
                 'Monitorinq',
-                data.activeMonitorCount > 0 ? 'Aktiv' : 'Monitor lazımdır',
+                data.activeMonitorCount > 0 ? t("Aktiv") : t("Monitor lazımdır"),
               ],
-              ['Telegram', data.telegramConnected ? 'Aktiv' : 'Aktiv deyil'],
-              ['Plan', data.planName || 'Məlumat yoxdur'],
-              ['Son nəticə', latestMatchTime],
+              [t("Telegram"), data.telegramConnected ? t("Aktiv") : t("Aktiv deyil")],
+              [t("Plan"), data.planName || t("Məlumat yoxdur")],
+              [t("Son nəticə"), latestMatchTime],
             ].map(([label, value]) => (
               <div
                 key={label}

@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Slot } from '@radix-ui/react-slot'
 import { VariantProps, cva } from 'class-variance-authority'
 import { PanelLeftIcon } from 'lucide-react'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
@@ -274,7 +275,7 @@ function SidebarTrigger({
       data-slot='sidebar-trigger'
       variant='ghost'
       size='icon'
-      aria-label='Menyunu aç / bağla'
+      aria-label={t('Menyunu aç / bağla')}
       aria-expanded={isMobile ? openMobile : open}
       aria-controls={isMobile && openMobile ? 'portal-navigation' : undefined}
       className={cn('size-11 md:size-9', className)}
@@ -285,7 +286,7 @@ function SidebarTrigger({
       {...props}
     >
       <PanelLeftIcon />
-      <span className='sr-only'>Menyunu aç / bağla</span>
+      <span className='sr-only'>{t('Menyunu aç / bağla')}</span>
     </Button>
   )
 }

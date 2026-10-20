@@ -4,6 +4,7 @@ import {
   type CurrentProfile,
   getCurrentSupabaseProfile,
 } from '@/lib/auth-session'
+import { t } from '@/lib/i18n'
 
 type ProtectedRouteProps = {
   allowedRoles: string[]
@@ -68,9 +69,7 @@ export function ProtectedRoute({
 
   if (isChecking || !sessionProfile) {
     return (
-      <div className='p-6 text-sm text-muted-foreground'>
-        Sessiya yoxlanılır...
-      </div>
+      <div className='p-6 text-sm text-muted-foreground'>{t("Sessiya yoxlanılır...")}</div>
     )
   }
 
@@ -81,9 +80,7 @@ export function ProtectedRoute({
     !sessionProfile.profile
   ) {
     return (
-      <div className='p-6 text-sm text-muted-foreground'>
-        Sessiya yoxlanılır...
-      </div>
+      <div className='p-6 text-sm text-muted-foreground'>{t("Sessiya yoxlanılır...")}</div>
     )
   }
 
@@ -91,9 +88,7 @@ export function ProtectedRoute({
 
   if (!allowedRoles.includes(role)) {
     return (
-      <div className='p-6 text-sm text-muted-foreground'>
-        Sessiya yoxlanılır...
-      </div>
+      <div className='p-6 text-sm text-muted-foreground'>{t("Sessiya yoxlanılır...")}</div>
     )
   }
 

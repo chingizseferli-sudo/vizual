@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
+import { dateLocale, t } from '@/lib/i18n'
 
 const STORY_FETCH_LIMIT = 700
 
@@ -105,7 +106,7 @@ function makeStoryKey(title: string, keyword: string) {
 function formatDate(value: string | null) {
   if (!value) return '-'
 
-  return new Date(value).toLocaleString('az-AZ', {
+  return new Date(value).toLocaleString(dateLocale(), {
     timeZone: 'Asia/Baku',
     day: '2-digit',
     month: '2-digit',
@@ -118,7 +119,7 @@ function formatDate(value: string | null) {
 function formatTime(value: string | null) {
   if (!value) return '-'
 
-  return new Date(value).toLocaleTimeString('az-AZ', {
+  return new Date(value).toLocaleTimeString(dateLocale(), {
     timeZone: 'Asia/Baku',
     hour: '2-digit',
     minute: '2-digit',
@@ -126,7 +127,7 @@ function formatTime(value: string | null) {
 }
 
 function getHost(url: string | null | undefined) {
-  if (!url) return 'Mənbə yoxdur'
+  if (!url) return t("Mənbə yoxdur")
 
   try {
     return new URL(url).hostname.replace(/^www\./, '')
@@ -152,27 +153,27 @@ function minutesBetween(start: string | null, end: string | null) {
 }
 
 function formatSpread(minutes: number | null, total: number) {
-  if (minutes === null) return `${total} media üzrə yayılma`
-  if (minutes < 60) return `İlk ${Math.max(1, minutes)} dəqiqədə ${total} media`
+  if (minutes === null) return t("{0} media üzrə yayılma", [total])
+  if (minutes < 60) return t("İlk {0} dəqiqədə {1} media", [Math.max(1, minutes), total])
 
   const hours = Math.round(minutes / 60)
-  return `İlk ${hours} saatda ${total} media`
+  return t("İlk {0} saatda {1} media", [hours, total])
 }
 
 function getCoverageLevel(count: number) {
-  if (count >= 20) return 'Yüksək'
+  if (count >= 20) return t("Yüksək")
   if (count >= 8) return 'Orta'
-  return 'Aşağı'
+  return t("Aşağı")
 }
 
 function getSimilarityLabel(item: StoryItem, firstItem: StoryItem) {
-  if (item.normalizedTitle === firstItem.normalizedTitle) return 'Eyni mətn'
+  if (item.normalizedTitle === firstItem.normalizedTitle) return t("Eyni mətn")
 
   const itemLength = item.normalizedTitle.length
   const firstLength = firstItem.normalizedTitle.length
-  if (itemLength > firstLength + 24) return 'Əlavə məlumat əlavə olunub'
+  if (itemLength > firstLength + 24) return t("Əlavə məlumat əlavə olunub")
 
-  return 'Başlıq dəyişib'
+  return t("Başlıq dəyişib")
 }
 
 function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
@@ -180,7 +181,7 @@ function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
     .map((row) => {
       const title = cleanTitle(row.monitored_items?.title)
       const url = row.monitored_items?.url || ''
-      const keyword = row.matched_keyword || 'Açar söz'
+      const keyword = row.matched_keyword || t("Açar söz")
 
       if (!title || !url) return null
 
@@ -192,7 +193,7 @@ function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
         url,
         detectedAt: getDetectedAt(row),
         keyword,
-        monitor: row.user_monitors?.name || 'Monitor',
+        monitor: row.user_monitors?.name || t("Monitor"),
       } satisfies StoryItem
     })
     .filter(Boolean) as StoryItem[]
@@ -223,7 +224,7 @@ function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
 
       return {
         key,
-        title: first?.title || 'Xəbər mövzusu',
+        title: first?.title || t("Xəbər mövzusu"),
         firstSource: first?.source || '-',
         firstDetectedAt: first?.detectedAt || null,
         totalCoverage: sorted.length,
@@ -259,7 +260,7 @@ async function fetchStoryData(): Promise<StoryData> {
     return {
       groups: [],
       totalRows: 0,
-      errorMessage: 'Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun.',
+      errorMessage: t("Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun."),
     }
   }
 
@@ -272,7 +273,7 @@ async function fetchStoryData(): Promise<StoryData> {
     return {
       groups: [],
       totalRows: 0,
-      errorMessage: 'Monitor məlumatlarını yükləmək mümkün olmadı.',
+      errorMessage: t("Monitor məlumatlarını yükləmək mümkün olmadı."),
     }
   }
 
@@ -298,7 +299,7 @@ async function fetchStoryData(): Promise<StoryData> {
     return {
       groups: [],
       totalRows: 0,
-      errorMessage: 'Story Intelligence məlumatlarını yükləmək mümkün olmadı.',
+      errorMessage: t("Story Intelligence məlumatlarını yükləmək mümkün olmadı."),
     }
   }
 
@@ -335,14 +336,14 @@ function StoryIntelligence() {
   const changedTitleCount =
     story && firstItem
       ? story.items.filter(
-          (item) => getSimilarityLabel(item, firstItem) === 'Başlıq dəyişib'
+          (item) => getSimilarityLabel(item, firstItem) === t('Başlıq dəyişib')
         ).length
       : 0
   const addedInfoCount =
     story && firstItem
       ? story.items.filter(
           (item) =>
-            getSimilarityLabel(item, firstItem) === 'Əlavə məlumat əlavə olunub'
+            getSimilarityLabel(item, firstItem) === t('Əlavə məlumat əlavə olunub')
         ).length
       : 0
 
@@ -355,15 +356,8 @@ function StoryIntelligence() {
               <h1 className='text-3xl font-bold tracking-tight sm:text-4xl'>
                 Story Intelligence
               </h1>
-              <p className='mt-2 text-lg text-muted-foreground'>
-                Xəbərin ilk harada yayımlandığını və mediada necə yayıldığını
-                izləyin.
-              </p>
-              <p className='mt-3 text-sm text-muted-foreground'>
-                Son 30 gündə tapılan nəticələr mövzular üzrə qruplaşdırılır.
-                Aşağıdakı siyahıdan konkret mövzunu seçib yayılma xəritəsinə
-                baxa bilərsiniz.
-              </p>
+              <p className='mt-2 text-lg text-muted-foreground'>{t("Xəbərin ilk harada yayımlandığını və mediada necə yayıldığını izləyin.")}</p>
+              <p className='mt-3 text-sm text-muted-foreground'>{t("Son 30 gündə tapılan nəticələr mövzular üzrə qruplaşdırılır. Aşağıdakı siyahıdan konkret mövzunu seçib yayılma xəritəsinə baxa bilərsiniz.")}</p>
             </div>
             <button
               type='button'
@@ -374,30 +368,28 @@ function StoryIntelligence() {
                 <Loader2 className='h-4 w-4 animate-spin' />
               ) : (
                 <Search className='h-4 w-4' />
-              )}
-              Yenilə
-            </button>
+              )}{t("Yenilə")}</button>
           </div>
         </section>
 
         {isLoading ? (
           <StateCard
             icon={Loader2}
-            title='Story məlumatları yüklənir'
-            description='Mövzular və yayılma ardıcıllığı hazırlanır.'
+            title={t("Story məlumatları yüklənir")}
+            description={t("Mövzular və yayılma ardıcıllığı hazırlanır.")}
             loading
           />
         ) : storyData.errorMessage ? (
           <StateCard
             icon={AlertCircle}
-            title='Məlumat yüklənmədi'
+            title={t("Məlumat yüklənmədi")}
             description={storyData.errorMessage}
           />
         ) : !story ? (
           <StateCard
             icon={Newspaper}
-            title='Hələ yayılma xəritəsi üçün məlumat yoxdur'
-            description='Monitor nəticələri toplandıqca eyni mövzu üzrə yayılan xəbərlər burada qruplaşdırılacaq.'
+            title={t("Hələ yayılma xəritəsi üçün məlumat yoxdur")}
+            description={t("Monitor nəticələri toplandıqca eyni mövzu üzrə yayılan xəbərlər burada qruplaşdırılacaq.")}
           />
         ) : (
           <>
@@ -405,28 +397,24 @@ function StoryIntelligence() {
               <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
                 <div className='min-w-0'>
                   <div className='flex items-center gap-2 text-sm font-medium text-primary'>
-                    <MapPinned className='h-4 w-4' />
-                    Qruplaşdırılan mövzular
-                  </div>
+                    <MapPinned className='h-4 w-4' />{t("Qruplaşdırılan mövzular")}</div>
                   <h2 className='mt-2 line-clamp-2 text-lg leading-tight font-bold'>
                     {story.title}
                   </h2>
-                  <p className='mt-1 text-sm text-muted-foreground'>
-                    İlk mənbə: {story.firstSource} ·{' '}
+                  <p className='mt-1 text-sm text-muted-foreground'>{t("İlk mənbə:")}{' '}{story.firstSource} ·{' '}
                     {formatTime(story.firstDetectedAt)} ·{' '}
                     {story.uniqueSourceCount} media
                   </p>
                 </div>
                 <div className='flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center'>
                   <span className='rounded-full border border-border bg-muted/50 px-3 py-2 text-sm font-semibold text-foreground'>
-                    {storyData.groups.length} mövzu
-                  </span>
+                    {storyData.groups.length}{' '}{t("mövzu")}</span>
                   <button
                     type='button'
                     onClick={() => setIsTopicListOpen((value) => !value)}
                     className='inline-flex items-center justify-center rounded-xl border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-blue-100'
                   >
-                    {isTopicListOpen ? 'Siyahını bağla' : 'Bütün mövzuları aç'}
+                    {isTopicListOpen ? t("Siyahını bağla") : t("Bütün mövzuları aç")}
                   </button>
                 </div>
               </div>
@@ -434,12 +422,8 @@ function StoryIntelligence() {
               {isTopicListOpen ? (
                 <div className='mt-4 border-t border-border pt-4'>
                   <div className='mb-3 flex items-center justify-between gap-3'>
-                    <p className='text-sm font-semibold text-foreground'>
-                      Mövzu siyahısı
-                    </p>
-                    <p className='text-xs text-muted-foreground'>
-                      Seçdiyiniz mövzu aşağıdakı xəritədə açılır.
-                    </p>
+                    <p className='text-sm font-semibold text-foreground'>{t("Mövzu siyahısı")}</p>
+                    <p className='text-xs text-muted-foreground'>{t("Seçdiyiniz mövzu aşağıdakı xəritədə açılır.")}</p>
                   </div>
                   <div className='max-h-[360px] overflow-y-auto rounded-xl border border-border'>
                     {storyData.groups.map((group) => {
@@ -462,8 +446,7 @@ function StoryIntelligence() {
                             <p className='line-clamp-1 leading-snug font-semibold'>
                               {group.title}
                             </p>
-                            <p className='mt-1 text-sm text-muted-foreground'>
-                              İlk mənbə: {group.firstSource} ·{' '}
+                            <p className='mt-1 text-sm text-muted-foreground'>{t("İlk mənbə:")}{' '}{group.firstSource} ·{' '}
                               {formatTime(group.firstDetectedAt)}
                             </p>
                           </div>
@@ -488,30 +471,30 @@ function StoryIntelligence() {
                   {story.title}
                 </h2>
                 <div className='mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
-                  <SummaryItem label='İlk mənbə' value={story.firstSource} />
+                  <SummaryItem label={t("İlk mənbə")} value={story.firstSource} />
                   <SummaryItem
-                    label='İlk aşkarlanma'
+                    label={t("İlk aşkarlanma")}
                     value={formatDate(story.firstDetectedAt)}
                   />
                   <SummaryItem
-                    label='Media əhatəsi'
+                    label={t("Media əhatəsi")}
                     value={`${story.uniqueSourceCount} media`}
                   />
                   <SummaryItem
-                    label='Yayılma sürəti'
+                    label={t("Yayılma sürəti")}
                     value={formatSpread(
                       story.spreadMinutes,
                       story.uniqueSourceCount
                     )}
                   />
                   <SummaryItem
-                    label='Əhatə səviyyəsi'
+                    label={t("Əhatə səviyyəsi")}
                     value={story.coverageLevel}
                     tone='strong'
                   />
                   <SummaryItem
-                    label='Qruplaşdırılan nəticə'
-                    value={`${story.totalCoverage} nəticə`}
+                    label={t("Qruplaşdırılan nəticə")}
+                    value={t("{0} nəticə", [story.totalCoverage])}
                   />
                 </div>
               </article>
@@ -523,12 +506,12 @@ function StoryIntelligence() {
                 </div>
                 <div className='mt-4 grid gap-3'>
                   <InsightItem
-                    title='İlk paylaşan media'
+                    title={t("İlk paylaşan media")}
                     value={story.firstSource}
                     icon={Radio}
                   />
                   <InsightItem
-                    title='Ən sürətli götürən media'
+                    title={t("Ən sürətli götürən media")}
                     value={
                       fastest
                         ? `${fastest.source} · ${formatTime(fastest.detectedAt)}`
@@ -537,12 +520,12 @@ function StoryIntelligence() {
                     icon={Clock3}
                   />
                   <InsightItem
-                    title='Başlığı dəyişən media sayı'
+                    title={t("Başlığı dəyişən media sayı")}
                     value={`${changedTitleCount} media`}
                     icon={FileText}
                   />
                   <InsightItem
-                    title='Mətnə əlavə edən media sayı'
+                    title={t("Mətnə əlavə edən media sayı")}
                     value={`${addedInfoCount} media`}
                     icon={Layers3}
                   />
@@ -602,14 +585,13 @@ function StoryIntelligence() {
                           <h3 className='mt-1 leading-snug font-semibold'>
                             {item.title}
                           </h3>
-                          <p className='mt-2 text-sm text-muted-foreground'>
-                            Aşkarlanma: {formatDate(item.detectedAt)}
+                          <p className='mt-2 text-sm text-muted-foreground'>{t("Aşkarlanma:")}{' '}{formatDate(item.detectedAt)}
                           </p>
                         </div>
                         <span className='w-fit rounded-full border border-border bg-card px-3 py-1 text-sm font-medium text-foreground'>
                           {firstItem
                             ? getSimilarityLabel(item, firstItem)
-                            : 'Oxşar xəbər'}
+                            : t("Oxşar xəbər")}
                         </span>
                       </div>
                     </a>
@@ -620,18 +602,9 @@ function StoryIntelligence() {
 
             <section className='rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6'>
               <div className='flex items-center gap-2 text-sm font-medium text-primary'>
-                <FileText className='h-4 w-4' />
-                İstifadəçi üçün izah
-              </div>
-              <p className='mt-3 max-w-4xl text-muted-foreground'>
-                Bu bölmə eyni mövzu üzrə yayılan media materiallarını
-                qruplaşdırır və xəbərin yayılma ardıcıllığını göstərir.
-                Qruplaşdırma mövcud nəticələrin başlığı, mənbəsi, açar sözü və
-                aşkarlanma vaxtı əsasında aparılır.
-              </p>
-              <div className='mt-4 text-sm text-muted-foreground'>
-                Son 30 gündə yoxlanılan nəticə: {storyData.totalRows} ·
-                Qruplaşdırılan mövzu sayı: {storyData.groups.length}
+                <FileText className='h-4 w-4' />{t("İstifadəçi üçün izah")}</div>
+              <p className='mt-3 max-w-4xl text-muted-foreground'>{t("Bu bölmə eyni mövzu üzrə yayılan media materiallarını qruplaşdırır və xəbərin yayılma ardıcıllığını göstərir. Qruplaşdırma mövcud nəticələrin başlığı, mənbəsi, açar sözü və aşkarlanma vaxtı əsasında aparılır.")}</p>
+              <div className='mt-4 text-sm text-muted-foreground'>{t("Son 30 gündə yoxlanılan nəticə:")}{' '}{storyData.totalRows}{' '}{t("· Qruplaşdırılan mövzu sayı:")}{' '}{storyData.groups.length}
               </div>
             </section>
           </>

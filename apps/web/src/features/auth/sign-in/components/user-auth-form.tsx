@@ -19,16 +19,17 @@ import {
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
 import { getAuthErrorMessage } from '../../auth-messages'
+import { t } from '@/lib/i18n'
 
 const formSchema = z.object({
   email: z.email({
     error: (iss) =>
-      iss.input === '' ? 'Email ünvanınızı daxil edin.' : undefined,
+      iss.input === '' ? t("Email ünvanınızı daxil edin.") : undefined,
   }),
   password: z
     .string()
-    .min(1, 'Şifrənizi daxil edin.')
-    .min(7, 'Şifrə ən azı 7 simvol olmalıdır.'),
+    .min(1, t("Şifrənizi daxil edin."))
+    .min(7, t("Şifrə ən azı 7 simvol olmalıdır.")),
 })
 
 type AuthMode = 'customer' | 'admin'
@@ -151,8 +152,8 @@ export function UserAuthForm({
       setIsLoading(false)
       toast.error(
         mode === 'admin'
-          ? 'Admin icazəsi tapılmadı.'
-          : 'İstifadəçi profili tapılmadı. Adminlə əlaqə saxlayın.'
+          ? t("Admin icazəsi tapılmadı.")
+          : t("İstifadəçi profili tapılmadı. Adminlə əlaqə saxlayın.")
       )
       return
     }
@@ -160,7 +161,7 @@ export function UserAuthForm({
     if (profile.status === 'blocked' || profile.status === 'inactive') {
       await supabase.auth.signOut()
       setIsLoading(false)
-      toast.error('Hesab aktiv deyil.')
+      toast.error(t("Hesab aktiv deyil."))
       return
     }
 
@@ -169,14 +170,14 @@ export function UserAuthForm({
     if (mode === 'admin' && !isAdminRole(role)) {
       await supabase.auth.signOut()
       setIsLoading(false)
-      toast.error('Bu giriş yalnız admin hesabları üçündür.')
+      toast.error(t("Bu giriş yalnız admin hesabları üçündür."))
       return
     }
 
     const safeRedirect = getSafeRedirect(mode, redirectTo)
 
     setIsLoading(false)
-    toast.success('Giriş uğurludur.')
+    toast.success(t("Giriş uğurludur."))
     await navigate({
       to: safeRedirect,
       replace: true,
@@ -195,7 +196,7 @@ export function UserAuthForm({
           name='email'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>{t("Email")}</FormLabel>
               <FormControl>
                 <Input
                   inputMode='email'
@@ -213,7 +214,7 @@ export function UserAuthForm({
           name='password'
           render={({ field }) => (
             <FormItem className='relative'>
-              <FormLabel>Şifrə</FormLabel>
+              <FormLabel>{t("Şifrə")}</FormLabel>
               <FormControl>
                 <PasswordInput
                   placeholder='••••••••'
@@ -225,15 +226,13 @@ export function UserAuthForm({
               <Link
                 to='/forgot-password'
                 className='absolute inset-e-0 -top-0.5 text-sm font-medium text-muted-foreground hover:text-foreground'
-              >
-                Şifrəni unutmusunuz?
-              </Link>
+              >{t("Şifrəni unutmusunuz?")}</Link>
             </FormItem>
           )}
         />
         <Button className='mt-2 h-10 font-medium' disabled={isLoading}>
           {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
-          {isLoading ? 'Daxil olunur...' : 'Daxil ol'}
+          {isLoading ? t("Daxil olunur...") : t("Daxil ol")}
         </Button>
       </form>
     </Form>

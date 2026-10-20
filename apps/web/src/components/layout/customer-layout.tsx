@@ -14,6 +14,8 @@ import { CustomerNotifications } from '@/components/layout/customer-notification
 import { CustomerSidebar } from '@/components/layout/customer-sidebar'
 import { SignOutDialog } from '@/components/sign-out-dialog'
 import { SkipToMain } from '@/components/skip-to-main'
+import { LanguageSwitcher } from '@/components/language-switcher'
+import { t } from '@/lib/i18n'
 
 export function CustomerLayout() {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
@@ -36,26 +38,23 @@ export function CustomerLayout() {
                   className='size-11 shrink-0 bg-card'
                 />
                 <div className='min-w-0'>
-                  <div className='truncate text-sm font-semibold text-foreground'>
-                    İş masası
-                  </div>
-                  <div className='hidden truncate text-xs text-muted-foreground sm:block'>
-                    Monitorlar, nəticələr və bildirişlər
-                  </div>
+                  <div className='truncate text-sm font-semibold text-foreground'>{t("İş masası")}</div>
+                  <div className='hidden truncate text-xs text-muted-foreground sm:block'>{t("Monitorlar, nəticələr və bildirişlər")}</div>
                 </div>
               </div>
               <div className='flex shrink-0 items-center gap-2'>
+                <LanguageSwitcher className='h-11' />
                 <CustomerNotifications />
                 <Button
                   type='button'
                   variant='outline'
                   size='sm'
-                  aria-label='Çıxış'
+                  aria-label={t("Çıxış")}
                   className='size-11 gap-2 rounded-lg border-border bg-card sm:w-auto'
                   onClick={() => setOpenSignOut(true)}
                 >
                   <LogOut className='size-4' />
-                  <span className='hidden sm:inline'>Çıxış</span>
+                  <span className='hidden sm:inline'>{t("Çıxış")}</span>
                 </Button>
               </div>
             </header>

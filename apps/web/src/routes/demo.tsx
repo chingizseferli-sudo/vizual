@@ -10,6 +10,7 @@ import {
   PublicPageHero,
   PublicPageShell,
 } from '@/components/public-site/public-site-shell'
+import { t } from '@/lib/i18n'
 
 function DemoPage() {
   const [content, setContent] = useState(defaultPublicSiteContent)
@@ -55,9 +56,7 @@ function DemoPage() {
             </div>
           </PublicCard>
           <PublicCard>
-            <h2 className='text-xl font-extrabold text-slate-950'>
-              Demo iş axını
-            </h2>
+            <h2 className='text-xl font-extrabold text-slate-950'>{t("Demo iş axını")}</h2>
             <div className='mt-6 grid gap-3'>
               {content.demo.items.map((row) => (
                 <article

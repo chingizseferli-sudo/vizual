@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
+import { dateLocale, t } from '@/lib/i18n'
 
 const PAGE_SIZE = 12
 const ALL = 'all'
@@ -50,7 +51,7 @@ function decodeHtml(text: string) {
 function formatDate(value: string | null) {
   if (!value) return '-'
 
-  return new Date(value).toLocaleString('az-AZ', {
+  return new Date(value).toLocaleString(dateLocale(), {
     timeZone: 'Asia/Baku',
     day: '2-digit',
     month: '2-digit',
@@ -73,8 +74,8 @@ function getHost(url: string | undefined) {
 function getChannelLabel(channel: string | null) {
   const normalized = channel || 'web'
 
-  if (normalized === 'telegram') return 'Telegram'
-  if (normalized === 'email') return 'Email'
+  if (normalized === 'telegram') return t("Telegram")
+  if (normalized === 'email') return t("Email")
   if (normalized === 'web') return 'Panel'
   return normalized
 }
@@ -84,21 +85,21 @@ function getStatusInfo(status: string | null) {
 
   if (['sent', 'delivered', 'new'].includes(normalized)) {
     return {
-      label: normalized === 'new' ? 'Yeni' : 'Göndərildi',
+      label: normalized === 'new' ? t("Yeni") : t("Göndərildi"),
       className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     }
   }
 
   if (['pending', 'queued'].includes(normalized)) {
     return {
-      label: 'Gözləyir',
+      label: t("Gözləyir"),
       className: 'border-amber-200 bg-amber-50 text-amber-700',
     }
   }
 
   if (['failed', 'error'].includes(normalized)) {
     return {
-      label: 'Göndərilmədi',
+      label: t("Göndərilmədi"),
       className: 'border-destructive/30 bg-destructive/10 text-destructive',
     }
   }
@@ -144,7 +145,7 @@ function Pagination({
   return (
     <div className='flex flex-col gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between'>
       <div className='text-sm text-muted-foreground'>
-        {totalItems} bildiriş | səhifə {page} / {totalPages}
+        {t('{0} bildiriş | səhifə {1} / {2}', [totalItems, page, totalPages])}
       </div>
 
       <div className='flex gap-2'>
@@ -153,17 +154,13 @@ function Pagination({
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={page <= 1}
           className='rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50'
-        >
-          Əvvəlki
-        </button>
+        >{t("Əvvəlki")}</button>
         <button
           type='button'
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           disabled={page >= totalPages}
           className='rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50'
-        >
-          Növbəti
-        </button>
+        >{t("Növbəti")}</button>
       </div>
     </div>
   )
@@ -183,7 +180,7 @@ async function fetchAlertsData(): Promise<AlertsData> {
   if (userError || !user) {
     return {
       alerts: [],
-      errorMessage: 'Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun.',
+      errorMessage: t("Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun."),
     }
   }
 
@@ -196,7 +193,7 @@ async function fetchAlertsData(): Promise<AlertsData> {
     console.error('User monitor load error:', monitorsError)
     return {
       alerts: [],
-      errorMessage: 'Monitorlar yüklənmədi. Bir az sonra yenidən yoxlayın.',
+      errorMessage: t("Monitorlar yüklənmədi. Bir az sonra yenidən yoxlayın."),
     }
   }
 
@@ -211,7 +208,7 @@ async function fetchAlertsData(): Promise<AlertsData> {
 
   if (matchesError) {
     console.error('User alert match load error:', matchesError)
-    return { alerts: [], errorMessage: 'Bildiriş məlumatları yüklənmədi.' }
+    return { alerts: [], errorMessage: t("Bildiriş məlumatları yüklənmədi.") }
   }
 
   const matchIds = (matches || []).map((item) => item.id)
@@ -229,7 +226,7 @@ async function fetchAlertsData(): Promise<AlertsData> {
 
   if (error) {
     console.error('User alerts error:', error)
-    return { alerts: [], errorMessage: 'Bildirişləri yükləmək mümkün olmadı.' }
+    return { alerts: [], errorMessage: t("Bildirişləri yükləmək mümkün olmadı.") }
   }
 
   return { alerts: (data || []) as unknown as AlertRow[], errorMessage: '' }
@@ -279,7 +276,7 @@ function AlertsPage() {
       const channel = alert.channel || 'web'
       const status = alert.status || 'new'
       const monitorName =
-        alert.monitor_matches?.user_monitors?.name || 'Monitor'
+        alert.monitor_matches?.user_monitors?.name || t("Monitor")
 
       return (
         (channelFilter === ALL || channel === channelFilter) &&
@@ -314,22 +311,22 @@ function AlertsPage() {
   function exportAlerts() {
     downloadCsv('monitor-alerts.csv', [
       [
-        'Monitor',
-        'Açar söz',
-        'Başlıq',
-        'Mənbə',
-        'Link',
+        t("Monitor"),
+        t("Açar söz"),
+        t("Başlıq"),
+        t("Mənbə"),
+        t("Link"),
         'Kanal',
-        'Status',
-        'Göndərilmə vaxtı',
+        t("Status"),
+        t("Göndərilmə vaxtı"),
       ],
       ...filteredAlerts.map((alert) => {
         const match = alert.monitor_matches
         const item = match?.monitored_items
         return [
-          match?.user_monitors?.name || 'Monitor',
+          match?.user_monitors?.name || t("Monitor"),
           match?.matched_keyword || '-',
-          item?.title ? decodeHtml(item.title) : 'Xəbər tapılmadı',
+          item?.title ? decodeHtml(item.title) : t("Xəbər tapılmadı"),
           getHost(item?.url),
           item?.url || '',
           getChannelLabel(alert.channel),
@@ -344,7 +341,7 @@ function AlertsPage() {
     return (
       <div className='flex min-h-[360px] items-center justify-center p-6'>
         <Loader2 className='mr-2 h-5 w-5 animate-spin' />
-        <span>Bildirişlər yüklənir...</span>
+        <span>{t("Bildirişlər yüklənir...")}</span>
       </div>
     )
   }
@@ -353,11 +350,8 @@ function AlertsPage() {
     return (
       <div className='grid gap-4 p-4 md:p-6'>
         <div>
-          <h1 className='text-2xl font-bold tracking-tight'>Bildirişlər</h1>
-          <p className='text-muted-foreground'>
-            Vacib uyğunluqlar üzrə yaradılan və göndərilən bildirişlərin
-            tarixçəsi burada görünür.
-          </p>
+          <h1 className='text-2xl font-bold tracking-tight'>{t("Bildirişlər")}</h1>
+          <p className='text-muted-foreground'>{t("Vacib uyğunluqlar üzrə yaradılan və göndərilən bildirişlərin tarixçəsi burada görünür.")}</p>
         </div>
 
         <div className='rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-sm text-destructive'>
@@ -368,7 +362,7 @@ function AlertsPage() {
             disabled={isFetching}
             className='mt-4 inline-flex items-center justify-center rounded-lg border border-destructive/30 bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50'
           >
-            {isFetching ? 'Yüklənir...' : 'Yenidən cəhd et'}
+            {isFetching ? t("Yüklənir...") : t("Yenidən cəhd et")}
           </button>
         </div>
       </div>
@@ -379,11 +373,8 @@ function AlertsPage() {
     <div className='grid gap-4 p-4 md:p-6'>
       <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
         <div>
-          <h1 className='text-2xl font-bold tracking-tight'>Bildirişlər</h1>
-          <p className='text-muted-foreground'>
-            Vacib uyğunluqlar üzrə yaradılan və göndərilən bildirişlərin
-            tarixçəsi burada görünür.
-          </p>
+          <h1 className='text-2xl font-bold tracking-tight'>{t("Bildirişlər")}</h1>
+          <p className='text-muted-foreground'>{t("Vacib uyğunluqlar üzrə yaradılan və göndərilən bildirişlərin tarixçəsi burada görünür.")}</p>
         </div>
         <button
           type='button'
@@ -397,19 +388,15 @@ function AlertsPage() {
       </div>
 
       <section className='rounded-2xl border border-border bg-card p-4 shadow-sm'>
-        <h2 className='text-base font-semibold'>Bildirişlər necə yaranır?</h2>
-        <p className='mt-1 text-sm text-muted-foreground'>
-          Uyğun nəticə tapıldıqdan sonra sistem bildiriş yarada və seçilmiş
-          kanala göndərə bilər. Bəzən nəticə paneldə görünə bilər, amma bildiriş
-          hələ göndərilməmiş ola bilər.
-        </p>
+        <h2 className='text-base font-semibold'>{t("Bildirişlər necə yaranır?")}</h2>
+        <p className='mt-1 text-sm text-muted-foreground'>{t("Uyğun nəticə tapıldıqdan sonra sistem bildiriş yarada və seçilmiş kanala göndərə bilər. Bəzən nəticə paneldə görünə bilər, amma bildiriş hələ göndərilməmiş ola bilər.")}</p>
       </section>
 
       <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-5'>
         <div className='rounded-2xl border border-border bg-card p-4 shadow-sm'>
           <div className='flex items-center justify-between'>
             <div>
-              <div className='text-sm text-muted-foreground'>Hamısı</div>
+              <div className='text-sm text-muted-foreground'>{t("Hamısı")}</div>
               <div className='mt-1 text-2xl font-semibold'>{stats.all}</div>
             </div>
             <Bell className='h-5 w-5 text-muted-foreground' />
@@ -419,7 +406,7 @@ function AlertsPage() {
         <div className='rounded-2xl border border-border bg-card p-4 shadow-sm'>
           <div className='flex items-center justify-between'>
             <div>
-              <div className='text-sm text-muted-foreground'>Telegram</div>
+              <div className='text-sm text-muted-foreground'>{t("Telegram")}</div>
               <div className='mt-1 text-2xl font-semibold'>
                 {stats.telegram}
               </div>
@@ -441,7 +428,7 @@ function AlertsPage() {
         <div className='rounded-2xl border border-border bg-card p-4 shadow-sm'>
           <div className='flex items-center justify-between'>
             <div>
-              <div className='text-sm text-muted-foreground'>Göndərilən</div>
+              <div className='text-sm text-muted-foreground'>{t("Göndərilən")}</div>
               <div className='mt-1 text-2xl font-semibold'>{stats.sent}</div>
             </div>
             <CheckCircle2 className='h-5 w-5 text-muted-foreground' />
@@ -451,7 +438,7 @@ function AlertsPage() {
         <div className='rounded-2xl border border-border bg-card p-4 shadow-sm'>
           <div className='flex items-center justify-between'>
             <div>
-              <div className='text-sm text-muted-foreground'>Xətalı</div>
+              <div className='text-sm text-muted-foreground'>{t("Xətalı")}</div>
               <div className='mt-1 text-2xl font-semibold'>{stats.failed}</div>
             </div>
             <XCircle className='h-5 w-5 text-muted-foreground' />
@@ -461,24 +448,24 @@ function AlertsPage() {
 
       <div className='grid gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm md:grid-cols-3'>
         <select
-          aria-label='Bildiriş kanalı'
+          aria-label={t("Bildiriş kanalı")}
           value={channelFilter}
           onChange={(event) => setChannelFilter(event.target.value)}
           className='rounded-xl border border-border bg-card px-3 py-2 text-sm'
         >
-          <option value={ALL}>Bütün kanallar</option>
-          <option value='telegram'>Telegram</option>
+          <option value={ALL}>{t("Bütün kanallar")}</option>
+          <option value='telegram'>{t("Telegram")}</option>
           <option value='web'>Panel</option>
-          <option value='email'>Email</option>
+          <option value='email'>{t("Email")}</option>
         </select>
 
         <select
-          aria-label='İstifadəçi vəziyyəti'
+          aria-label={t("İstifadəçi vəziyyəti")}
           value={statusFilter}
           onChange={(event) => setStatusFilter(event.target.value)}
           className='rounded-xl border border-border bg-card px-3 py-2 text-sm'
         >
-          <option value={ALL}>Bütün statuslar</option>
+          <option value={ALL}>{t("Bütün statuslar")}</option>
           {statusOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -487,12 +474,12 @@ function AlertsPage() {
         </select>
 
         <select
-          aria-label='Monitor'
+          aria-label={t("Monitor")}
           value={monitorFilter}
           onChange={(event) => setMonitorFilter(event.target.value)}
           className='rounded-xl border border-border bg-card px-3 py-2 text-sm'
         >
-          <option value={ALL}>Bütün monitorlar</option>
+          <option value={ALL}>{t("Bütün monitorlar")}</option>
           {monitorOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -512,7 +499,7 @@ function AlertsPage() {
         {paginatedAlerts.map((alert) => {
           const match = alert.monitor_matches
           const item = match?.monitored_items
-          const title = item ? decodeHtml(item.title) : 'Xəbər tapılmadı'
+          const title = item ? decodeHtml(item.title) : t("Xəbər tapılmadı")
           const statusInfo = getStatusInfo(alert.status)
 
           return (
@@ -524,10 +511,10 @@ function AlertsPage() {
                 <div className='min-w-0 flex-1'>
                   <div className='mb-2 flex flex-wrap items-center gap-2'>
                     <span className='rounded-full border px-2 py-1 text-xs'>
-                      {match?.user_monitors?.name || 'Monitor'}
+                      {match?.user_monitors?.name || t("Monitor")}
                     </span>
                     <span className='rounded-full border px-2 py-1 text-xs'>
-                      {match?.matched_keyword || 'Açar söz yoxdur'}
+                      {match?.matched_keyword || t("Açar söz yoxdur")}
                     </span>
                     <span className='rounded-full border px-2 py-1 text-xs'>
                       {getChannelLabel(alert.channel)}
@@ -558,8 +545,7 @@ function AlertsPage() {
                     </div>
                   )}
 
-                  <div className='mt-2 text-sm text-muted-foreground'>
-                    Göndərilmə vaxtı: {formatDate(alert.sent_at)}
+                  <div className='mt-2 text-sm text-muted-foreground'>{t("Göndərilmə vaxtı:")}{' '}{formatDate(alert.sent_at)}
                   </div>
                 </div>
 
@@ -569,9 +555,7 @@ function AlertsPage() {
                     target='_blank'
                     rel='noreferrer'
                     className='inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted'
-                  >
-                    Aç
-                    <ExternalLink className='h-4 w-4' />
+                  >{t("Aç")}<ExternalLink className='h-4 w-4' />
                   </a>
                 ) : null}
               </div>
@@ -581,18 +565,12 @@ function AlertsPage() {
 
         {paginatedAlerts.length === 0 && (
           <div className='rounded-2xl border border-border bg-card p-8 text-center shadow-sm'>
-            <div className='font-medium'>Hələ bildiriş yoxdur</div>
-            <p className='mx-auto mt-1 max-w-md text-sm text-muted-foreground'>
-              Bildirişlər uyğun nəticə tapıldıqda və göndərildikdə burada
-              görünür. Nəticələr bölməsində material ola bilər, amma bildiriş
-              hələ yaranmamış və ya göndərilməmiş ola bilər.
-            </p>
+            <div className='font-medium'>{t("Hələ bildiriş yoxdur")}</div>
+            <p className='mx-auto mt-1 max-w-md text-sm text-muted-foreground'>{t("Bildirişlər uyğun nəticə tapıldıqda və göndərildikdə burada görünür. Nəticələr bölməsində material ola bilər, amma bildiriş hələ yaranmamış və ya göndərilməmiş ola bilər.")}</p>
             <Link
               to='/monitor/results'
               className='mt-3 inline-flex rounded-lg border px-3 py-2 text-sm hover:bg-muted'
-            >
-              Nəticələrə bax
-            </Link>
+            >{t("Nəticələrə bax")}</Link>
           </div>
         )}
       </div>

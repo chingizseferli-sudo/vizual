@@ -18,19 +18,20 @@ import {
 } from '@/components/ui/form'
 import { PasswordInput } from '@/components/password-input'
 import { getAuthErrorMessage } from '../../auth-messages'
+import { t } from '@/lib/i18n'
 
-const SUCCESS_MESSAGE = 'Şifrəniz uğurla yeniləndi.'
+const SUCCESS_MESSAGE = t("Şifrəniz uğurla yeniləndi.")
 
 const formSchema = z
   .object({
     password: z
       .string()
-      .min(1, 'Şifrənizi daxil edin.')
-      .min(7, 'Şifrə ən azı 7 simvol olmalıdır.'),
-    confirmPassword: z.string().min(1, 'Şifrənizi təsdiqləyin.'),
+      .min(1, t("Şifrənizi daxil edin."))
+      .min(7, t("Şifrə ən azı 7 simvol olmalıdır.")),
+    confirmPassword: z.string().min(1, t("Şifrənizi təsdiqləyin.")),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: 'Şifrələr uyğun gəlmir.',
+    message: t("Şifrələr uyğun gəlmir."),
     path: ['confirmPassword'],
   })
 
@@ -79,7 +80,7 @@ export function ResetPasswordForm({
           name='password'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Yeni şifrə</FormLabel>
+              <FormLabel>{t("Yeni şifrə")}</FormLabel>
               <FormControl>
                 <PasswordInput placeholder='********' {...field} />
               </FormControl>
@@ -92,7 +93,7 @@ export function ResetPasswordForm({
           name='confirmPassword'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Şifrəni təsdiqləyin</FormLabel>
+              <FormLabel>{t("Şifrəni təsdiqləyin")}</FormLabel>
               <FormControl>
                 <PasswordInput placeholder='********' {...field} />
               </FormControl>
@@ -102,7 +103,7 @@ export function ResetPasswordForm({
         />
         <Button className='mt-2' disabled={isLoading}>
           {isLoading ? <Loader2 className='animate-spin' /> : <KeyRound />}
-          {isLoading ? 'Şifrə yenilənir...' : 'Şifrəni yenilə'}
+          {isLoading ? t("Şifrə yenilənir...") : t("Şifrəni yenilə")}
         </Button>
       </form>
     </Form>

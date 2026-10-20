@@ -9,6 +9,7 @@ import {
   PublicPageHero,
   PublicPageShell,
 } from '@/components/public-site/public-site-shell'
+import { t } from '@/lib/i18n'
 
 function BlogPage() {
   const [content, setContent] = useState(defaultPublicSiteContent)
@@ -29,16 +30,12 @@ function BlogPage() {
           <div className='grid gap-5 md:grid-cols-3'>
             {content.blog.items.map((post, index) => (
               <PublicCard key={post} className='h-full'>
-                <span className='rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-[#1463ff]'>
-                  Mövzu {index + 1}
+                <span className='rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-[#1463ff]'>{t("Mövzu")}{' '}{index + 1}
                 </span>
                 <h2 className='mt-5 text-xl leading-7 font-extrabold text-slate-950'>
                   {post}
                 </h2>
-                <p className='mt-3 text-sm leading-6 text-slate-600'>
-                  Bu mövzu üzrə məqalə və ya izah mətni admin paneldən
-                  genişləndirilə bilər.
-                </p>
+                <p className='mt-3 text-sm leading-6 text-slate-600'>{t("Bu mövzu üzrə məqalə və ya izah mətni admin paneldən genişləndirilə bilər.")}</p>
               </PublicCard>
             ))}
           </div>

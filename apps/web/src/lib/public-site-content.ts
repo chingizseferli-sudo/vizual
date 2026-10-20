@@ -1,4 +1,5 @@
 import { fetchPublicRows } from '@/lib/supabase-lazy'
+import { getLang, t } from '@/lib/i18n'
 
 export type PublicService = {
   title: string
@@ -109,212 +110,212 @@ let pendingContent: Promise<PublicSiteContent> | null = null
 
 export const defaultPublicSiteContent: PublicSiteContent = {
   hero: {
-    badge: 'Kommunikasiya və Media Monitorinq Platforması',
+    badge: t("Kommunikasiya və Media Monitorinq Platforması"),
     brand: 'Vizual.Az',
-    tagline: 'İzləyin. Anlayın. Qərar verin.',
+    tagline: t("İzləyin. Anlayın. Qərar verin."),
     description:
-      'Media mənbələrində yayımlanan materialları, seçilmiş vebsaytlardakı dəyişiklikləri və təşkilatınız haqqında vacib məlumatları bir platformadan izləyin.',
-    primaryCta: '15 gün pulsuz sına',
-    secondaryCta: 'İstifadəçi girişi',
+      t("Media mənbələrində yayımlanan materialları, seçilmiş vebsaytlardakı dəyişiklikləri və təşkilatınız haqqında vacib məlumatları bir platformadan izləyin."),
+    primaryCta: t("15 gün pulsuz sına"),
+    secondaryCta: t("İstifadəçi girişi"),
   },
   services: {
-    eyebrow: 'Xidmətlər',
-    title: 'Vizual.Az nə edir?',
+    eyebrow: t("Xidmətlər"),
+    title: t("Vizual.Az nə edir?"),
     description:
-      'Media gündəmini, vebsayt dəyişikliklərini və təşkilatınız haqqında yayımlanan məlumatları bir platformadan izləyin.',
+      t("Media gündəmini, vebsayt dəyişikliklərini və təşkilatınız haqqında yayımlanan məlumatları bir platformadan izləyin."),
     items: [
       {
         title: 'Media monitorinqi',
         description:
-          'Təşkilatınız, layihəniz, məhsulunuz və ya seçdiyiniz açar sözlər haqqında yerli media mənbələrində yayımlanan materialları avtomatik izləyin.',
+          t("Təşkilatınız, layihəniz, məhsulunuz və ya seçdiyiniz açar sözlər haqqında yerli media mənbələrində yayımlanan materialları avtomatik izləyin."),
         icon: 'newspaper',
         status: 'Aktiv',
       },
       {
-        title: 'Vebsayt dəyişikliklərinin izlənməsi',
+        title: t("Vebsayt dəyişikliklərinin izlənməsi"),
         description:
-          'İzləmək istədiyiniz vebsəhifənin müəyyən hissəsini seçin və həmin hissədə baş verən dəyişikliklər barədə məlumat alın.',
+          t("İzləmək istədiyiniz vebsəhifənin müəyyən hissəsini seçin və həmin hissədə baş verən dəyişikliklər barədə məlumat alın."),
         icon: 'radio',
         status: 'Aktiv',
       },
       {
-        title: 'Kommunikasiya analitikası',
+        title: t("Kommunikasiya analitikası"),
         description:
-          'Media monitorinqi nəticələrinin ümumi mənzərəsini görmək və kommunikasiya fəaliyyətini qiymətləndirmək üçün nəzərdə tutulur.',
+          t("Media monitorinqi nəticələrinin ümumi mənzərəsini görmək və kommunikasiya fəaliyyətini qiymətləndirmək üçün nəzərdə tutulur."),
         icon: 'megaphone',
-        status: 'Tezliklə',
+        status: t("Tezliklə"),
       },
       {
-        title: 'Facebook və Instagram monitorinqi',
+        title: t("Facebook və Instagram monitorinqi"),
         description:
-          'Açar sözlərinizlə bağlı Facebook və Instagram paylaşımlarını izləyin və Telegram bildirişi alın.',
+          t("Açar sözlərinizlə bağlı Facebook və Instagram paylaşımlarını izləyin və Telegram bildirişi alın."),
         icon: 'file',
         status: 'Beta',
       },
       {
-        title: 'Qlobal xəbər axını',
+        title: t("Qlobal xəbər axını"),
         description:
-          'Beynəlxalq informasiya resurslarında yayımlanan xəbərləri seçdiyiniz mövzular üzrə izləmək üçün gələcək modul.',
+          t("Beynəlxalq informasiya resurslarında yayımlanan xəbərləri seçdiyiniz mövzular üzrə izləmək üçün gələcək modul."),
         icon: 'search',
-        status: 'Tezliklə',
+        status: t("Tezliklə"),
       },
     ],
   },
   audiences: {
-    eyebrow: 'Kimlər üçündür?',
-    title: 'Kommunikasiya gündəmini izləyən komandalar üçün',
+    eyebrow: t("Kimlər üçündür?"),
+    title: t("Kommunikasiya gündəmini izləyən komandalar üçün"),
     items: [
       {
-        title: 'Dövlət qurumları',
+        title: t("Dövlət qurumları"),
         description:
-          'Media görünürlüğü, rəsmi məlumatlar və gündəlik kommunikasiya nəzarəti üçün.',
+          t("Media görünürlüğü, rəsmi məlumatlar və gündəlik kommunikasiya nəzarəti üçün."),
       },
       {
-        title: 'Universitetlər',
+        title: t("Universitetlər"),
         description:
-          'Təhsil, qəbul, elm və universitet adı ilə bağlı media materiallarını izləmək üçün.',
+          t("Təhsil, qəbul, elm və universitet adı ilə bağlı media materiallarını izləmək üçün."),
       },
       {
-        title: 'Şirkətlər',
+        title: t("Şirkətlər"),
         description:
-          'Brend, məhsul, rəhbərlik və sektor xəbərlərini vaxtında görmək üçün.',
+          t("Brend, məhsul, rəhbərlik və sektor xəbərlərini vaxtında görmək üçün."),
       },
       {
         title: 'Banklar',
         description:
-          'Reputasiya, bazar xəbərləri və ictimai kommunikasiya siqnalları üçün.',
+          t("Reputasiya, bazar xəbərləri və ictimai kommunikasiya siqnalları üçün."),
       },
       {
-        title: 'PR və kommunikasiya komandaları',
+        title: t("PR və kommunikasiya komandaları"),
         description:
-          'Müştəri, kampaniya və media nəticələrini sistemli izləmək üçün.',
+          t("Müştəri, kampaniya və media nəticələrini sistemli izləmək üçün."),
       },
       {
-        title: 'Media nümayəndələri',
+        title: t("Media nümayəndələri"),
         description:
-          'Gündəmi, mənbələri və mövzu axınını daha ardıcıl izləmək üçün.',
+          t("Gündəmi, mənbələri və mövzu axınını daha ardıcıl izləmək üçün."),
       },
     ],
   },
   demo: {
-    eyebrow: 'Sınaq',
-    title: 'Vizual.Az-ı 15 gün sınaqdan keçirin',
+    eyebrow: t("Sınaq"),
+    title: t("Vizual.Az-ı 15 gün sınaqdan keçirin"),
     description:
-      'Sınaq müddətində monitor yaradın, açar sözləri yoxlayın, nəticələri və bildiriş axınını real iş prosesinizdə test edin.',
-    primaryCta: '15 gün pulsuz sına',
-    secondaryCta: 'Sınaq müraciəti',
-    placeholderTitle: 'Sınaq və məhsul təqdimatı',
+      t("Sınaq müddətində monitor yaradın, açar sözləri yoxlayın, nəticələri və bildiriş axınını real iş prosesinizdə test edin."),
+    primaryCta: t("15 gün pulsuz sına"),
+    secondaryCta: t("Sınaq müraciəti"),
+    placeholderTitle: t("Sınaq və məhsul təqdimatı"),
     placeholderDescription:
-      'Burada məhsul turu, qısa təqdimat videosu və ya iş masası nümunəsi yerləşdirilə bilər.',
+      t("Burada məhsul turu, qısa təqdimat videosu və ya iş masası nümunəsi yerləşdirilə bilər."),
     items: [
       {
-        title: 'Təşkilatınızla bağlı yeni media materialı tapıldı',
+        title: t("Təşkilatınızla bağlı yeni media materialı tapıldı"),
         source: 'azertag.az',
-        keyword: 'təşkilat adı',
+        keyword: t("təşkilat adı"),
         time: '09:12',
       },
       {
-        title: 'Seçilmiş vebsəhifədə yeni məlumat əlavə olundu',
-        source: 'rəsmi sayt',
-        keyword: 'veb izləmə',
+        title: t("Seçilmiş vebsəhifədə yeni məlumat əlavə olundu"),
+        source: t("rəsmi sayt"),
+        keyword: t("veb izləmə"),
         time: '08:47',
       },
       {
-        title: 'Vacib uyğunluq üzrə Telegram bildirişi göndərildi',
-        source: 'iş masası',
-        keyword: 'bildiriş',
+        title: t("Vacib uyğunluq üzrə Telegram bildirişi göndərildi"),
+        source: t("iş masası"),
+        keyword: t("bildiriş"),
         time: '08:21',
       },
     ],
   },
   pricing: {
-    eyebrow: 'Qiymətlər',
-    title: 'Sınaqdan başlayın, ehtiyacınıza uyğun böyüdün',
+    eyebrow: t("Qiymətlər"),
+    title: t("Sınaqdan başlayın, ehtiyacınıza uyğun böyüdün"),
     description:
-      'Planlar monitorinq ehtiyacına, bildiriş axınına və komanda ölçüsünə görə seçilir.',
+      t("Planlar monitorinq ehtiyacına, bildiriş axınına və komanda ölçüsünə görə seçilir."),
     plans: [
       {
-        name: 'Pulsuz sınaq',
-        price: '15 günlük sınaq',
-        description: 'Məhsulu tanımaq və ilk monitorinq axınını yoxlamaq üçün.',
-        features: ['Məhdud monitor sayı', 'Əsas nəticələr', 'Sınaq iş masası'],
+        name: t("Pulsuz sınaq"),
+        price: t("15 günlük sınaq"),
+        description: t("Məhsulu tanımaq və ilk monitorinq axınını yoxlamaq üçün."),
+        features: [t("Məhdud monitor sayı"), t("Əsas nəticələr"), t("Sınaq iş masası")],
       },
       {
-        name: 'Başlanğıc',
-        price: 'Sorğu əsasında',
-        description: 'Kiçik komandalar və ilkin media monitorinqi üçün.',
-        features: ['Açar söz izləmə', 'Telegram bildirişləri', 'CSV ixrac'],
+        name: t("Başlanğıc"),
+        price: t("Sorğu əsasında"),
+        description: t("Kiçik komandalar və ilkin media monitorinqi üçün."),
+        features: [t("Açar söz izləmə"), t("Telegram bildirişləri"), t('CSV ixrac')],
       },
       {
-        name: 'Peşəkar',
-        price: 'Sorğu əsasında',
-        description: 'Aktiv PR və kommunikasiya komandaları üçün.',
+        name: t("Peşəkar"),
+        price: t("Sorğu əsasında"),
+        description: t("Aktiv PR və kommunikasiya komandaları üçün."),
         features: [
-          'Geniş monitorinq',
-          'Vebsayt dəyişikliklərinin izlənməsi',
-          'Prioritet dəstək',
+          t("Geniş monitorinq"),
+          t("Vebsayt dəyişikliklərinin izlənməsi"),
+          t("Prioritet dəstək"),
         ],
       },
       {
         name: 'Korporativ',
-        price: 'Fərdi təklif',
-        description: 'Böyük təşkilatlar və xüsusi ehtiyaclar üçün.',
+        price: t("Fərdi təklif"),
+        description: t("Böyük təşkilatlar və xüsusi ehtiyaclar üçün."),
         features: [
-          'Fərdi limitlər',
-          'Xüsusi ilkin qurulum',
-          'Əməliyyat dəstəyi',
+          t("Fərdi limitlər"),
+          t("Xüsusi ilkin qurulum"),
+          t("Əməliyyat dəstəyi"),
         ],
       },
     ],
   },
   campaigns: {
     eyebrow: 'Kampaniyalar',
-    title: 'Yeni funksiyalar və kampaniyalar',
+    title: t("Yeni funksiyalar və kampaniyalar"),
     description:
-      'Yeni funksiyalar, sınaq imkanları və xüsusi təqdimat təklifləri bu bölmədə elan olunacaq.',
+      t("Yeni funksiyalar, sınaq imkanları və xüsusi təqdimat təklifləri bu bölmədə elan olunacaq."),
   },
   blog: {
     eyebrow: 'Bloq',
-    title: 'Media, PR, SEO və kommunikasiya',
+    title: t("Media, PR, SEO və kommunikasiya"),
     description:
-      'Vizual.Az bloqu kommunikasiya komandaları üçün praktik monitorinq, reputasiya və media görünürlüğü mövzularını izah edəcək.',
+      t("Vizual.Az bloqu kommunikasiya komandaları üçün praktik monitorinq, reputasiya və media görünürlüğü mövzularını izah edəcək."),
     items: [
-      'Media monitorinq nə üçün vacibdir?',
-      'PR komandaları gündəlik xəbər axınını necə idarə etməlidir?',
-      'SEO və kommunikasiya görünürlüğü arasında əlaqə',
+      t("Media monitorinq nə üçün vacibdir?"),
+      t("PR komandaları gündəlik xəbər axınını necə idarə etməlidir?"),
+      t("SEO və kommunikasiya görünürlüğü arasında əlaqə"),
     ],
   },
   about: {
-    eyebrow: 'Haqqımızda',
-    title: 'Vizual.Az nədir və nə üçün lazımdır?',
+    eyebrow: t("Haqqımızda"),
+    title: t("Vizual.Az nədir və nə üçün lazımdır?"),
     description:
-      'Vizual.Az təşkilatlar, universitetlər, şirkətlər, banklar, media və PR komandaları üçün kommunikasiya və media monitorinq platformasıdır. Məqsəd çox məlumat göstərmək deyil, vacib məlumatı vaxtında çatdırmaq və düzgün qərar verməyə kömək etməkdir.',
+      t("Vizual.Az təşkilatlar, universitetlər, şirkətlər, banklar, media və PR komandaları üçün kommunikasiya və media monitorinq platformasıdır. Məqsəd çox məlumat göstərmək deyil, vacib məlumatı vaxtında çatdırmaq və düzgün qərar verməyə kömək etməkdir."),
     principles: [
       {
-        title: 'Yerli bazar üçün',
+        title: t("Yerli bazar üçün"),
         description:
-          'Azərbaycan media mənbələri və təşkilatların real kommunikasiya ehtiyacları nəzərə alınır.',
+          t("Azərbaycan media mənbələri və təşkilatların real kommunikasiya ehtiyacları nəzərə alınır."),
       },
       {
-        title: 'Vaxtında xəbərdarlıq',
+        title: t("Vaxtında xəbərdarlıq"),
         description:
-          'Açar sözlər və seçilmiş vebsəhifələr üzrə vacib dəyişikliklər vaxtında görünür.',
+          t("Açar sözlər və seçilmiş vebsəhifələr üzrə vacib dəyişikliklər vaxtında görünür."),
       },
       {
-        title: 'Qərar üçün siqnal',
+        title: t("Qərar üçün siqnal"),
         description:
-          'Məqsəd məlumatı artırmaq yox, vacib siqnalı aydın və istifadəyə hazır formada göstərməkdir.',
+          t("Məqsəd məlumatı artırmaq yox, vacib siqnalı aydın və istifadəyə hazır formada göstərməkdir."),
       },
     ],
   },
   contact: {
-    eyebrow: 'Əlaqə',
-    title: 'Sınaq, əməkdaşlıq və dəstək üçün əlaqə saxlayın',
+    eyebrow: t("Əlaqə"),
+    title: t("Sınaq, əməkdaşlıq və dəstək üçün əlaqə saxlayın"),
     description:
-      'Vizual.Az-ı komandanızın media monitorinqi, vebsayt izləmə və bildiriş ehtiyaclarına görə necə istifadə edə biləcəyinizi birlikdə nəzərdən keçirək.',
-    cardTitle: 'Sınaq müraciəti',
+      t("Vizual.Az-ı komandanızın media monitorinqi, vebsayt izləmə və bildiriş ehtiyaclarına görə necə istifadə edə biləcəyinizi birlikdə nəzərdən keçirək."),
+    cardTitle: t("Sınaq müraciəti"),
     cardDescription:
-      'Hazırda public form aktiv deyil. Sınaq, əməkdaşlıq və texniki dəstək üçün email vasitəsilə əlaqə saxlayın.',
+      t("Hazırda public form aktiv deyil. Sınaq, əməkdaşlıq və texniki dəstək üçün email vasitəsilə əlaqə saxlayın."),
     email: 'info@vizual.az',
   },
 }
@@ -349,6 +350,10 @@ function mergeWithDefaults<T>(defaults: T, value: unknown): T {
 }
 
 export async function loadPublicSiteContent(): Promise<PublicSiteContent> {
+  // Sections edited in the admin panel are Azerbaijani only; Russian visitors
+  // get the translated built-in texts.
+  if (getLang() === 'ru') return defaultPublicSiteContent
+
   if (contentCache && contentCache.expiresAt > Date.now()) {
     return contentCache.value
   }

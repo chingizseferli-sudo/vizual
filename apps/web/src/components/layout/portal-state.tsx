@@ -1,6 +1,7 @@
 import { AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { t } from '@/lib/i18n'
 
 export function PortalLoading({ label }: { label: string }) {
   return (
@@ -31,11 +32,9 @@ export function PortalError({
           className='mb-3 size-6 text-destructive'
           aria-hidden='true'
         />
-        <h2 className='text-lg font-semibold'>Məlumat yüklənmədi</h2>
+        <h2 className='text-lg font-semibold'>{t("Məlumat yüklənmədi")}</h2>
         <p className='my-3 text-sm text-muted-foreground'>{message}</p>
-        <Button variant='outline' onClick={onRetry}>
-          Yenidən yoxla
-        </Button>
+        <Button variant='outline' onClick={onRetry}>{t("Yenidən yoxla")}</Button>
       </div>
     </div>
   )

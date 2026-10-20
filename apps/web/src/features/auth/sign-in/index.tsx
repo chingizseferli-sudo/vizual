@@ -13,6 +13,7 @@ import { BrandMark } from '@/components/brand-mark'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { AuthLayout } from '../auth-layout'
 import { UserAuthForm } from './components/user-auth-form'
+import { t } from '@/lib/i18n'
 
 type SignInProps = {
   mode?: 'customer' | 'admin'
@@ -51,29 +52,20 @@ function AdminSignIn({ redirectTo }: { redirectTo?: string }) {
               <ShieldCheck className='size-4' />
             </div>
             <div>
-              <CardTitle className='text-xl font-semibold tracking-tight'>
-                Admin panelə giriş
-              </CardTitle>
-              <CardDescription className='mt-2 leading-6'>
-                Bu giriş yalnız admin və superadmin hesabları üçündür.
-              </CardDescription>
+              <CardTitle className='text-xl font-semibold tracking-tight'>{t("Admin panelə giriş")}</CardTitle>
+              <CardDescription className='mt-2 leading-6'>{t("Bu giriş yalnız admin və superadmin hesabları üçündür.")}</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
             <UserAuthForm redirectTo={redirectTo} mode='admin' />
           </CardContent>
           <CardFooter>
-            <p className='w-full text-center text-xs leading-5 text-muted-foreground'>
-              Admin icazəsi ayrıca yoxlanılır. İstifadəçi iş masası üçün ayrıca
-              girişdən istifadə edin.
-            </p>
+            <p className='w-full text-center text-xs leading-5 text-muted-foreground'>{t("Admin icazəsi ayrıca yoxlanılır. İstifadəçi iş masası üçün ayrıca girişdən istifadə edin.")}</p>
           </CardFooter>
         </Card>
 
         <div className='mt-5 text-center text-sm text-muted-foreground'>
-          <Link to='/' className='font-medium hover:text-foreground'>
-            Sayta qayıt
-          </Link>
+          <Link to='/' className='font-medium hover:text-foreground'>{t("Sayta qayıt")}</Link>
         </div>
       </div>
     </main>
@@ -89,31 +81,20 @@ export function SignIn({ mode = 'customer', redirectTo }: SignInProps) {
     <AuthLayout>
       <Card className='gap-4 rounded-lg shadow-none'>
         <CardHeader className='space-y-3'>
-          <div className='text-xs font-medium text-muted-foreground'>
-            İstifadəçi iş masası
-          </div>
-          <CardTitle className='text-xl font-semibold tracking-tight text-foreground'>
-            Hesabınıza daxil olun
-          </CardTitle>
-          <CardDescription className='leading-6'>
-            Monitorlarınızı, nəticələri və bildirişləri görmək üçün email və
-            şifrənizi yazın. Hesabınız yoxdur?{' '}
+          <div className='text-xs font-medium text-muted-foreground'>{t("İstifadəçi iş masası")}</div>
+          <CardTitle className='text-xl font-semibold tracking-tight text-foreground'>{t("Hesabınıza daxil olun")}</CardTitle>
+          <CardDescription className='leading-6'>{t("Monitorlarınızı, nəticələri və bildirişləri görmək üçün email və şifrənizi yazın. Hesabınız yoxdur?")}{' '}
             <Link
               to='/sign-up'
               className='font-medium text-primary underline underline-offset-4 hover:opacity-80'
-            >
-              Hesab yaradın
-            </Link>
+            >{t("Hesab yaradın")}</Link>
           </CardDescription>
         </CardHeader>
         <CardContent>
           <UserAuthForm redirectTo={redirectTo} mode='customer' />
         </CardContent>
         <CardFooter>
-          <p className='px-2 text-center text-xs leading-5 text-muted-foreground'>
-            Bu giriş istifadəçi iş masası üçündür. Admin panelə ayrıca admin
-            girişindən daxil olun.
-          </p>
+          <p className='px-2 text-center text-xs leading-5 text-muted-foreground'>{t("Bu giriş istifadəçi iş masası üçündür. Admin panelə ayrıca admin girişindən daxil olun.")}</p>
         </CardFooter>
       </Card>
     </AuthLayout>

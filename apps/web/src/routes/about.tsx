@@ -11,6 +11,7 @@ import {
   PublicPageShell,
   SectionHeading,
 } from '@/components/public-site/public-site-shell'
+import { t } from '@/lib/i18n'
 
 const principleIcons = [Building2, ShieldCheck, Sparkles]
 
@@ -31,9 +32,9 @@ function AboutPage() {
         />
         <section className='mx-auto max-w-7xl px-5 pb-20 md:px-8'>
           <SectionHeading
-            eyebrow='Prinsiplər'
-            title='Public sayt tətbiqin özü deyil'
-            description='Vizual.Az-da public sayt, istifadəçi workspace-i və admin paneli ayrı məqsədlər üçün istifadə olunur.'
+            eyebrow={t("Prinsiplər")}
+            title={t("Public sayt tətbiqin özü deyil")}
+            description={t("Vizual.Az-da public sayt, istifadəçi workspace-i və admin paneli ayrı məqsədlər üçün istifadə olunur.")}
           />
           <div className='grid gap-5 md:grid-cols-3'>
             {content.about.principles.map((item, index) => {

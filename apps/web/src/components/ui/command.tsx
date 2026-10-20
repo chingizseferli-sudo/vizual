@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Command as CommandPrimitive } from 'cmdk'
 import { SearchIcon } from 'lucide-react'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
   Dialog,
@@ -27,8 +28,8 @@ function Command({
 }
 
 function CommandDialog({
-  title = 'Sürətli axtarış',
-  description = 'Açmaq üçün bölmə və ya əmr axtarın.',
+  title = t('Sürətli axtarış'),
+  description = t('Açmaq üçün bölmə və ya əmr axtarın.'),
   children,
   className,
   showCloseButton = true,

@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 function Table({ className, ...props }: React.ComponentProps<'table'>) {
@@ -7,7 +8,7 @@ function Table({ className, ...props }: React.ComponentProps<'table'>) {
       data-slot='table-container'
       className='relative w-full min-w-0 overflow-x-auto'
       role='region'
-      aria-label='Məlumat cədvəli'
+      aria-label={t('Məlumat cədvəli')}
       tabIndex={0}
     >
       <table

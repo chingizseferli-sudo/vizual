@@ -10,6 +10,7 @@ import {
   PublicPageHero,
   PublicPageShell,
 } from '@/components/public-site/public-site-shell'
+import { t } from '@/lib/i18n'
 
 function PricingPage() {
   const [content, setContent] = useState(defaultPublicSiteContent)
@@ -51,19 +52,12 @@ function PricingPage() {
             ))}
           </div>
           <div className='mt-10 rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-sm shadow-slate-200/40'>
-            <h2 className='text-xl font-extrabold text-slate-950'>
-              Xüsusi ehtiyacınız var?
-            </h2>
-            <p className='mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600'>
-              Fərdi mənbələr, yüksək limitlər və komanda onboarding-i üçün
-              bizimlə əlaqə saxlayın.
-            </p>
+            <h2 className='text-xl font-extrabold text-slate-950'>{t("Xüsusi ehtiyacınız var?")}</h2>
+            <p className='mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600'>{t("Fərdi mənbələr, yüksək limitlər və komanda onboarding-i üçün bizimlə əlaqə saxlayın.")}</p>
             <Link
               to='/contact'
               className='mt-6 inline-flex h-11 items-center rounded-lg bg-[#1463ff] px-5 text-sm font-bold text-white transition hover:bg-blue-700'
-            >
-              Əlaqə saxla
-            </Link>
+            >{t("Əlaqə saxla")}</Link>
           </div>
         </section>
       </main>

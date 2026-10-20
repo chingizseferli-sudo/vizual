@@ -19,6 +19,7 @@ import { customerQueryKeys } from '@/lib/query-keys'
 import { formatSocialInterval } from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
 import { openExternalUrl } from '@/lib/utils'
+import { dateLocale, t } from '@/lib/i18n'
 
 type ProfileRow = {
   user_id: string
@@ -57,7 +58,7 @@ type ProfileState = {
 function formatDate(value: string | null) {
   if (!value) return '-'
 
-  return new Date(value).toLocaleString('az-AZ', {
+  return new Date(value).toLocaleString(dateLocale(), {
     timeZone: 'Asia/Baku',
     day: '2-digit',
     month: '2-digit',
@@ -70,21 +71,21 @@ function formatDate(value: string | null) {
 function getRoleLabel(role: string | null) {
   if (role === 'superadmin') return 'Superadmin'
   if (role === 'admin') return 'Admin'
-  if (role === 'customer') return 'İstifadəçi'
-  return 'İstifadəçi'
+  if (role === 'customer') return t("İstifadəçi")
+  return t("İstifadəçi")
 }
 
 function getStatusLabel(status: string | null) {
-  if (status === 'active') return 'Aktiv'
-  if (status === 'blocked') return 'Bloklanıb'
-  if (status === 'inactive') return 'Passiv'
+  if (status === 'active') return t("Aktiv")
+  if (status === 'blocked') return t("Bloklanıb")
+  if (status === 'inactive') return t("Passiv")
   return status || '-'
 }
 
 function socialIntervalText(social: SocialAccess | null) {
   if (!social) return '-'
   if (!social.facebook_enabled && !social.instagram_enabled) {
-    return 'Hələ aktiv deyil'
+    return t("Hələ aktiv deyil")
   }
   return formatSocialInterval(social.interval_minutes)
 }
@@ -103,7 +104,7 @@ async function createTelegramLinkUrl() {
   const { data, error } = await supabase.rpc('create_telegram_link_token')
 
   if (error || typeof data !== 'string' || !data) {
-    throw new Error(error?.message || 'Telegram linki yaradılmadı.')
+    throw new Error(error?.message || t("Telegram linki yaradılmadı."))
   }
 
   return getTelegramBotUrl(data)
@@ -150,7 +151,7 @@ async function fetchProfileData(): Promise<{
   if (userError || !user) {
     return {
       profileState: null,
-      errorMessage: 'Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun.',
+      errorMessage: t("Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun."),
     }
   }
 
@@ -194,7 +195,7 @@ async function fetchProfileData(): Promise<{
       social: socialResult.error ? null : (socialResult.data as SocialAccess),
     },
     errorMessage: profileResult.error
-      ? 'Profil məlumatları tam yüklənmədi. Əsas hesab məlumatları göstərilir.'
+      ? t("Profil məlumatları tam yüklənmədi. Əsas hesab məlumatları göstərilir.")
       : '',
   }
 }
@@ -321,7 +322,7 @@ function ProfilePage() {
     return (
       <div className='flex min-h-[360px] items-center justify-center p-6'>
         <Loader2 className='mr-2 h-5 w-5 animate-spin' />
-        <span>Profil məlumatları yüklənir...</span>
+        <span>{t("Profil məlumatları yüklənir...")}</span>
       </div>
     )
   }
@@ -329,9 +330,9 @@ function ProfilePage() {
   if (!profileState) {
     return (
       <div className='grid gap-4 p-6'>
-        <h1 className='text-2xl font-bold tracking-tight'>Profil və ayarlar</h1>
+        <h1 className='text-2xl font-bold tracking-tight'>{t("Profil və ayarlar")}</h1>
         <div className='rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive'>
-          {errorMessage || 'Profil məlumatları yüklənmədi.'}
+          {errorMessage || t("Profil məlumatları yüklənmədi.")}
         </div>
       </div>
     )
@@ -347,11 +348,8 @@ function ProfilePage() {
   return (
     <div className='grid gap-4 p-4 md:p-6'>
       <div>
-        <h1 className='text-2xl font-bold tracking-tight'>Profil və ayarlar</h1>
-        <p className='text-muted-foreground'>
-          Hesab məlumatları, plan istifadəsi və bildiriş kanalları bu bölmədə
-          göstərilir.
-        </p>
+        <h1 className='text-2xl font-bold tracking-tight'>{t("Profil və ayarlar")}</h1>
+        <p className='text-muted-foreground'>{t("Hesab məlumatları, plan istifadəsi və bildiriş kanalları bu bölmədə göstərilir.")}</p>
       </div>
 
       {errorMessage ? (
@@ -364,19 +362,16 @@ function ProfilePage() {
         <section className='rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-2'>
           <div className='mb-4 flex items-center gap-2'>
             <ShieldCheck className='h-5 w-5 text-muted-foreground' />
-            <h2 className='text-lg font-semibold'>Hesab məlumatları</h2>
+            <h2 className='text-lg font-semibold'>{t("Hesab məlumatları")}</h2>
           </div>
-          <p className='mb-4 text-sm text-muted-foreground'>
-            Bu məlumatlar hesabınızın platformada hansı rol və statusla istifadə
-            olunduğunu göstərir.
-          </p>
+          <p className='mb-4 text-sm text-muted-foreground'>{t("Bu məlumatlar hesabınızın platformada hansı rol və statusla istifadə olunduğunu göstərir.")}</p>
 
           <div className='grid gap-3 sm:grid-cols-2'>
-            <InfoTile label='Email' value={profileState.email} icon={Mail} />
-            <InfoTile label='Hesab rolu' value={profileState.role} />
-            <InfoTile label='Hesab statusu' value={profileState.status} />
+            <InfoTile label={t("Email")} value={profileState.email} icon={Mail} />
+            <InfoTile label={t("Hesab rolu")} value={profileState.role} />
+            <InfoTile label={t("Hesab statusu")} value={profileState.status} />
             <InfoTile
-              label='Qeydiyyat tarixi'
+              label={t("Qeydiyyat tarixi")}
               value={formatDate(profileState.createdAt)}
               icon={CalendarDays}
             />
@@ -386,20 +381,18 @@ function ProfilePage() {
         <section className='rounded-2xl border border-border bg-card p-5 shadow-sm'>
           <div className='mb-4 flex items-center gap-2'>
             <Radio className='h-5 w-5 text-muted-foreground' />
-            <h2 className='text-lg font-semibold'>İstifadə</h2>
+            <h2 className='text-lg font-semibold'>{t("İstifadə")}</h2>
           </div>
 
           <div className='rounded-xl border border-border bg-card p-4'>
-            <div className='text-sm text-muted-foreground'>
-              Yaradılmış monitorlar
-            </div>
+            <div className='text-sm text-muted-foreground'>{t("Yaradılmış monitorlar")}</div>
             <div className='mt-2 text-2xl font-semibold'>
               {profileState.monitorCount}
             </div>
             <div className='mt-1 text-sm text-muted-foreground'>
               {planLimit
-                ? `${planLimit} monitor limitindən ${profileState.monitorCount} istifadə olunur`
-                : 'Monitor limiti haqqında məlumat yoxdur'}
+                ? t("{0} monitor limitindən {1} istifadə olunur", [planLimit, profileState.monitorCount])
+                : t("Monitor limiti haqqında məlumat yoxdur")}
             </div>
           </div>
         </section>
@@ -408,13 +401,13 @@ function ProfilePage() {
       <section className='rounded-2xl border border-border bg-card p-5 shadow-sm'>
         <div className='mb-4 flex items-center gap-2'>
           <Bell className='h-5 w-5 text-muted-foreground' />
-          <h2 className='text-lg font-semibold'>Bildiriş kanalları</h2>
+          <h2 className='text-lg font-semibold'>{t("Bildiriş kanalları")}</h2>
         </div>
 
         <div className='grid gap-3 xl:grid-cols-2'>
           <NotificationChannelCard
-            title='Telegram'
-            status={telegramActive ? 'Aktiv' : 'Aktiv deyil'}
+            title={t("Telegram")}
+            status={telegramActive ? t("Aktiv") : t("Aktiv deyil")}
             statusTone={telegramActive ? 'active' : 'soon'}
             icon={Send}
             href={telegramActive ? telegramBotUrl : undefined}
@@ -427,91 +420,77 @@ function ProfilePage() {
             actionLabel={
               telegramBotUrl
                 ? telegramActive
-                  ? 'Botu aç'
+                  ? t("Botu aç")
                   : telegramLink.isPending
-                    ? 'Link yaradılır...'
-                    : 'Telegram-ı qoş'
+                    ? t("Link yaradılır...")
+                    : t("Telegram-ı qoş")
                 : undefined
             }
           />
           <NotificationChannelCard
-            title='Email'
-            status={emailReady ? 'Hazır' : 'Aktiv deyil'}
+            title={t("Email")}
+            status={emailReady ? t("Hazır") : t("Aktiv deyil")}
             statusTone={emailReady ? 'ready' : 'soon'}
             icon={Mail}
           />
           <NotificationChannelCard
             title='Discord'
-            status='Hazırlanır'
+            status={t("Hazırlanır")}
             statusTone='soon'
             icon={MessageCircle}
           />
           <NotificationChannelCard
             title='WhatsApp'
-            status='Hazırlanır'
+            status={t("Hazırlanır")}
             statusTone='soon'
             icon={Smartphone}
           />
         </div>
 
         {telegramLink.data ? (
-          <p className='mt-3 text-sm text-muted-foreground'>
-            Link 15 dəqiqə etibarlıdır və bir dəfə istifadə olunur. Telegram
-            açılmadısa,{' '}
+          <p className='mt-3 text-sm text-muted-foreground'>{t("Link 15 dəqiqə etibarlıdır və bir dəfə istifadə olunur. Telegram açılmadısa,")}{' '}
             <a
               href={telegramLink.data}
               target='_blank'
               rel='noopener noreferrer'
               className='font-medium text-primary underline'
-            >
-              bu linkə keçin
-            </a>{' '}
-            və <span className='font-medium'>Start</span> düyməsini basın.
-          </p>
+            >{t("bu linkə keçin")}</a>{' '}{t("və")}{' '}<span className='font-medium'>Start</span>{t(' düyməsini basın.')}</p>
         ) : null}
         {telegramLink.isError ? (
-          <p className='mt-3 text-sm text-destructive' role='alert'>
-            Telegram linki yaradılmadı. Bir az sonra yenidən cəhd edin.
-          </p>
+          <p className='mt-3 text-sm text-destructive' role='alert'>{t("Telegram linki yaradılmadı. Bir az sonra yenidən cəhd edin.")}</p>
         ) : null}
         {telegramActive ? (
-          <p className='mt-3 text-sm text-muted-foreground'>
-            Bildirişləri dayandırmaq üçün botda /stop yazın.
-          </p>
+          <p className='mt-3 text-sm text-muted-foreground'>{t("Bildirişləri dayandırmaq üçün botda /stop yazın.")}</p>
         ) : null}
       </section>
 
       <section className='rounded-2xl border border-border bg-card p-5 shadow-sm'>
         <div className='mb-4 flex items-center gap-2'>
           <CreditCard className='h-5 w-5 text-muted-foreground' />
-          <h2 className='text-lg font-semibold'>Plan və limitlər</h2>
+          <h2 className='text-lg font-semibold'>{t("Plan və limitlər")}</h2>
         </div>
-        <p className='mb-4 text-sm text-muted-foreground'>
-          Planınız neçə monitor yarada biləcəyinizi və Facebook, Instagram
-          axtarışının tezliyini müəyyən edir. Xəbər saytları bütün planlarda
-          təxminən hər 5-20 dəqiqədən bir yoxlanır.
-        </p>
+        <p className='mb-4 text-sm text-muted-foreground'>{t("Planınız neçə monitor yarada biləcəyinizi və Facebook, Instagram axtarışının tezliyini müəyyən edir. Xəbər saytları bütün planlarda təxminən hər 5-20 dəqiqədən bir yoxlanır.")}</p>
 
         {profileState.planAvailable && profileState.plan ? (
           <div className='grid gap-3'>
             <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-4'>
               <InfoTile
-                label='Cari plan'
+                label={t("Cari plan")}
                 value={profileState.plan.name || '-'}
               />
               <InfoTile
-                label='Monitor limiti'
+                label={t("Monitor limiti")}
                 value={planLimit ?? 'Limitsiz'}
               />
               <InfoTile
-                label='Facebook və Instagram yoxlaması'
+                label={t("Facebook və Instagram yoxlaması")}
                 value={socialIntervalText(profileState.social)}
               />
               <InfoTile
-                label='Nəticə tarixçəsi'
+                label={t("Nəticə tarixçəsi")}
                 value={
                   profileState.plan.history_days
-                    ? `${profileState.plan.history_days} gün`
+                    ? t("{0} gün", [profileState.plan.history_days])
                     : '-'
                 }
               />
@@ -519,14 +498,12 @@ function ProfilePage() {
 
             <div className='rounded-2xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground'>
               {hasReachedPlanLimit
-                ? 'Monitor limitinə çatmısınız. Yeni monitor yaratmaq üçün mövcud monitorlardan birini silmək və ya planı genişləndirmək lazımdır.'
-                : 'Limitə çatmadığınız müddətdə yeni monitorlar yarada bilərsiniz. Limit dolduqda sistem yeni monitor yaradılmasına icazə verməyəcək.'}
+                ? t("Monitor limitinə çatmısınız. Yeni monitor yaratmaq üçün mövcud monitorlardan birini silmək və ya planı genişləndirmək lazımdır.")
+                : t("Limitə çatmadığınız müddətdə yeni monitorlar yarada bilərsiniz. Limit dolduqda sistem yeni monitor yaradılmasına icazə verməyəcək.")}
             </div>
           </div>
         ) : (
-          <div className='rounded-2xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground'>
-            Plan məlumatı hələ aktiv deyil.
-          </div>
+          <div className='rounded-2xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground'>{t("Plan məlumatı hələ aktiv deyil.")}</div>
         )}
       </section>
     </div>

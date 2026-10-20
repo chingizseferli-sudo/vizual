@@ -19,21 +19,22 @@ import {
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
 import { getAuthErrorMessage } from '../../auth-messages'
+import { t } from '@/lib/i18n'
 
 const formSchema = z
   .object({
     email: z.email({
       error: (iss) =>
-        iss.input === '' ? 'Email ünvanınızı daxil edin.' : undefined,
+        iss.input === '' ? t("Email ünvanınızı daxil edin.") : undefined,
     }),
     password: z
       .string()
-      .min(1, 'Şifrənizi daxil edin.')
-      .min(7, 'Şifrə ən azı 7 simvol olmalıdır.'),
-    confirmPassword: z.string().min(1, 'Şifrənizi təsdiqləyin.'),
+      .min(1, t("Şifrənizi daxil edin."))
+      .min(7, t("Şifrə ən azı 7 simvol olmalıdır.")),
+    confirmPassword: z.string().min(1, t("Şifrənizi təsdiqləyin.")),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: 'Şifrələr uyğun gəlmir.',
+    message: t("Şifrələr uyğun gəlmir."),
     path: ['confirmPassword'],
   })
 
@@ -73,13 +74,13 @@ export function SignUpForm({
     setIsLoading(false)
 
     if (signUpData.session) {
-      toast.success('Qeydiyyat uğurla tamamlandı.')
+      toast.success(t("Qeydiyyat uğurla tamamlandı."))
       await navigate({ to: '/monitor', replace: true })
       return
     }
 
     toast.success(
-      'Qeydiyyat yaradıldı. Emailinizi yoxlayın və hesabı təsdiqləyin.'
+      t("Qeydiyyat yaradıldı. Emailinizi yoxlayın və hesabı təsdiqləyin.")
     )
     await navigate({ to: '/sign-in', replace: true })
   }
@@ -96,7 +97,7 @@ export function SignUpForm({
           name='email'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>{t("Email")}</FormLabel>
               <FormControl>
                 <Input
                   placeholder='name@example.com'
@@ -113,7 +114,7 @@ export function SignUpForm({
           name='password'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Şifrə</FormLabel>
+              <FormLabel>{t("Şifrə")}</FormLabel>
               <FormControl>
                 <PasswordInput
                   placeholder='••••••••'
@@ -130,7 +131,7 @@ export function SignUpForm({
           name='confirmPassword'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Şifrəni təsdiqləyin</FormLabel>
+              <FormLabel>{t("Şifrəni təsdiqləyin")}</FormLabel>
               <FormControl>
                 <PasswordInput
                   placeholder='••••••••'
@@ -147,7 +148,7 @@ export function SignUpForm({
           disabled={isLoading}
         >
           {isLoading ? <Loader2 className='animate-spin' /> : <UserPlus />}
-          {isLoading ? 'Hesab yaradılır...' : 'İş masası hesabı yarat'}
+          {isLoading ? t("Hesab yaradılır...") : t("İş masası hesabı yarat")}
         </Button>
       </form>
     </Form>

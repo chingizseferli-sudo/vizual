@@ -1,28 +1,29 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Menu, X } from 'lucide-react'
+import { t } from '@/lib/i18n'
 import {
   defaultPublicSiteSettings,
   loadPublicSiteSettings,
   type PublicSiteSettings,
 } from '@/lib/public-site-settings'
 import { BrandMark } from '@/components/brand-mark'
+import { LanguageSwitcher } from '@/components/language-switcher'
 
 const label = {
-  services: 'Xidm\u0259tl\u0259r',
-  pricing: 'Qiym\u0259tl\u0259r',
-  about: 'Haqq\u0131m\u0131zda',
-  contact: '\u018flaq\u0259',
-  login: '\u0130stifad\u0259\u00e7i giri\u015fi',
-  register: 'Hesab yarat',
-  demoRequest: 'S\u0131naq m\u00fcraci\u0259ti',
-  demo: 'S\u0131naq',
-  blog: 'Bloq',
-  trial: '15 g\u00fcn pulsuz s\u0131na',
-  openMenu: 'Menyunu a\u00e7',
-  closeMenu: 'Menyunu ba\u011fla',
-  footer:
-    '\u00a9 2026 Vizual.Az. Kommunikasiya v\u0259 Media Monitorinq Platformas\u0131.',
+  services: t('Xidmətlər'),
+  pricing: t('Qiymətlər'),
+  about: t('Haqqımızda'),
+  contact: t('Əlaqə'),
+  login: t('İstifadəçi girişi'),
+  register: t('Hesab yarat'),
+  demoRequest: t('Sınaq müraciəti'),
+  demo: t('Sınaq'),
+  blog: t('Bloq'),
+  trial: t('15 gün pulsuz sına'),
+  openMenu: t('Menyunu aç'),
+  closeMenu: t('Menyunu bağla'),
+  footer: t('© 2026 Vizual.Az. Kommunikasiya və Media Monitorinq Platforması.'),
 }
 
 const mobileMenuLinks = [
@@ -78,6 +79,7 @@ export function PublicHeader() {
           <Link to='/contact'>{label.contact}</Link>
         </nav>
         <div className='flex items-center gap-2 sm:gap-3'>
+          <LanguageSwitcher className='hidden border-slate-200 bg-white sm:inline-flex' />
           <Link
             to='/sign-in'
             className='hidden h-10 items-center rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 sm:inline-flex'
@@ -126,6 +128,7 @@ export function PublicHeader() {
               </li>
             ))}
           </ul>
+          <LanguageSwitcher className='mt-4 border-slate-200 bg-white sm:hidden' />
         </nav>
       ) : null}
     </header>
