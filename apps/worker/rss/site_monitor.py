@@ -951,6 +951,23 @@ def merge_telegram_success_notes(existing_notes, sent_at):
     return "\n".join(line for line in lines if line.strip())
 
 
+# When the configured method keeps failing but a fallback keeps delivering articles,
+# the source row is switched to the method that works (after a short streak).
+ADOPTABLE_METHODS = {"selector": "selector", "xpath": "xpath_pattern", "latest_page": "latest_page", "fallback": "latest_page"}
+FALLBACK_ADOPT_STREAK = 3
+
+
+def method_worth_adopting(site, candidates, fallback_used):
+    if candidates <= 0 or not fallback_used:
+        return ""
+    target = ADOPTABLE_METHODS.get(clean_text(site.get("_method_succeeded") or ""))
+    configured = clean_text(site.get("monitor_method") or "").lower()
+    configured = {"xpath": "xpath_pattern", "rss_discovered": "rss"}.get(configured, configured)
+    if not target or target == configured or configured == "google_news_fallback":
+        return ""
+    return target
+
+
 def build_source_health_payload(site, result, now):
     result = result or {}
     reason = final_source_health_reason(site, result)
@@ -1025,6 +1042,19 @@ def build_source_health_payload(site, result, now):
         payload["last_article_found_at"] = now
 
     crawl_state = build_crawl_state(site, result, reason, now)
+    previous_state = parse_crawl_state(site.get("notes"))
+    adopt = method_worth_adopting(site, candidates, fallback_used)
+    streak = 0
+    if adopt:
+        same = previous_state.get("fallback_method") == adopt
+        streak = int(previous_state.get("fallback_streak") or 0) + 1 if same else 1
+        if streak >= FALLBACK_ADOPT_STREAK:
+            payload["monitor_method"] = adopt
+            print(f"Metod yeniləndi: {site.get('name')} | {site.get('monitor_method')} -> {adopt}", flush=True)
+            adopt, streak = "", 0
+    if adopt:
+        crawl_state["fallback_method"] = adopt
+        crawl_state["fallback_streak"] = streak
     payload["notes"] = merge_crawl_state_notes(payload.get("notes"), crawl_state)
 
     return payload, reason, hard_fail_reasons
