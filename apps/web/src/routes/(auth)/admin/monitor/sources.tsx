@@ -420,7 +420,7 @@ function SourcesPage() {
       { body: { source } }
     )
     setBusyId(null)
-    const bot = getSourceState(source, Date.now())
+    const bot = getSourceState(source, now)
     const botNote =
       bot.state === 'degraded' ? ` Botun gördüyü: ${bot.reason}` : ''
 
