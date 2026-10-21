@@ -4662,6 +4662,7 @@ def find_matching_user_monitors(title, monitor_keywords_cache=None):
             return []
         matched_monitors = []
         seen_matches = set()
+        seen_user_keywords = set()
         for row in keywords:
             monitor = row.get("user_monitors") or {}
             if not keyword_is_active(row):
@@ -4670,6 +4671,12 @@ def find_matching_user_monitors(title, monitor_keywords_cache=None):
             keyword = normalize_text(keyword_original)
             if not keyword_matches_title(keyword, title_text):
                 continue
+            # A user can own the same keyword on two monitors; one story must
+            # produce one match and one alert per user and keyword.
+            user_keyword = (monitor.get("user_id") or row.get("monitor_id"), keyword)
+            if user_keyword in seen_user_keywords:
+                continue
+            seen_user_keywords.add(user_keyword)
             match_key = (row.get("monitor_id"), keyword)
             if match_key in seen_matches:
                 continue
