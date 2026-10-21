@@ -361,14 +361,37 @@ def test_daily_cleanup_trims_log_tables(sm):
     assert len(fake.find("DELETE", "discovery_logs")) == 1
 
 
+def sent_row(source_id, hours_ago=0.1):
+    created = datetime.now(ZoneInfo("Asia/Baku")) - timedelta(hours=hours_ago)
+    return {"source_id": source_id, "created_at": created.isoformat()}
+
+
 def test_reserve_skips_same_headline_from_same_source(sm):
     fake = FakeRequests({("GET", "sent_news"): lambda kw: FakeResponse(
-        200, [{"link": "https://a.az/x"}] if "source_id" in kw["params"] else []
+        200, [sent_row("s1", 20)] if "title" in kw["params"] else []
     )})
     sm.requests = fake
     assert sm.reserve_news("https://a.az/y?id=2", "Eyni başlıq", {"name": "A"}, source_id="s1") is False
-    assert fake.find("GET", "sent_news")[1]["params"]["source_id"] == "eq.s1"
     assert not fake.find("POST", "sent_news")
+
+
+def test_reserve_skips_same_long_story_from_other_source(sm):
+    title = "Ordubada qar yağıb - FAKTİKİ HAVA"
+    fake = FakeRequests({("GET", "sent_news"): lambda kw: FakeResponse(
+        200, [sent_row("s2")] if "title" in kw["params"] else []
+    )})
+    sm.requests = fake
+    assert sm.reserve_news("https://b.az/qar", title, {"name": "B"}, source_id="s1") is False
+    assert not fake.find("POST", "sent_news")
+
+
+def test_reserve_keeps_short_generic_headline_from_other_source(sm):
+    fake = FakeRequests({
+        ("GET", "sent_news"): lambda kw: FakeResponse(200, [sent_row("s2")] if "title" in kw["params"] else []),
+        ("POST", "sent_news"): FakeResponse(201, []),
+    })
+    sm.requests = fake
+    assert sm.reserve_news("https://b.az/hava", "Hava proqnozu", {"name": "B"}, source_id="s1") is True
 
 
 def test_reserve_new_headline_is_written(sm):
