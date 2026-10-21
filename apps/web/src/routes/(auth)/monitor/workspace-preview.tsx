@@ -172,10 +172,12 @@ async function fetchWorkspaceData(): Promise<WorkspaceData> {
       )
       .in('monitor_id', monitorIds)
       .order('created_at', { ascending: false })
-      .limit(8),
+      .limit(40),
   ])
 
-  const recentMatches = (matchesRes.data || []) as unknown as MatchRow[]
+  const recentMatches = uniqueByArticle(
+    (matchesRes.data || []) as unknown as MatchRow[]
+  ).slice(0, 8)
   const matchIds = recentMatches.map((match) => match.id)
   let alertCount = 0
   let recentAlerts: AlertRow[] = []
@@ -210,6 +212,27 @@ async function fetchWorkspaceData(): Promise<WorkspaceData> {
       ? t("Son nəticələri yükləmək mümkün olmadı.")
       : '',
   }
+}
+
+// One article can match several keywords and is stored once per match.
+// Show it once and list every matched keyword.
+function uniqueByArticle(rows: MatchRow[]): MatchRow[] {
+  const byArticle = new Map<string, MatchRow>()
+  for (const row of rows) {
+    const item = row.monitored_items
+    const key = (item?.url || item?.title || row.id).trim().toLowerCase()
+    const seen = byArticle.get(key)
+    if (!seen) {
+      byArticle.set(key, { ...row })
+      continue
+    }
+    const keywords = (seen.matched_keyword || '').split(', ').filter(Boolean)
+    if (row.matched_keyword && !keywords.includes(row.matched_keyword)) {
+      keywords.push(row.matched_keyword)
+      seen.matched_keyword = keywords.join(', ')
+    }
+  }
+  return [...byArticle.values()]
 }
 
 function SectionShell({
