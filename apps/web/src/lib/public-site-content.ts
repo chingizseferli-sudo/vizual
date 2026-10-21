@@ -125,37 +125,32 @@ export const defaultPublicSiteContent: PublicSiteContent = {
       t("Media gündəmini, vebsayt dəyişikliklərini və təşkilatınız haqqında yayımlanan məlumatları bir platformadan izləyin."),
     items: [
       {
-        title: 'Media monitorinqi',
-        description:
-          t("Təşkilatınız, layihəniz, məhsulunuz və ya seçdiyiniz açar sözlər haqqında yerli media mənbələrində yayımlanan materialları avtomatik izləyin."),
+        title: t("Media monitorinqi"),
+        description: t("Açar sözlərinizlə bağlı yerli media xəbərlərini avtomatik toplayır."),
         icon: 'newspaper',
-        status: 'Aktiv',
+        status: t("Aktiv"),
       },
       {
-        title: t("Vebsayt dəyişikliklərinin izlənməsi"),
-        description:
-          t("İzləmək istədiyiniz vebsəhifənin müəyyən hissəsini seçin və həmin hissədə baş verən dəyişikliklər barədə məlumat alın."),
-        icon: 'radio',
-        status: 'Aktiv',
-      },
-      {
-        title: t("Kommunikasiya analitikası"),
-        description:
-          t("Media monitorinqi nəticələrinin ümumi mənzərəsini görmək və kommunikasiya fəaliyyətini qiymətləndirmək üçün nəzərdə tutulur."),
-        icon: 'megaphone',
-        status: t("Tezliklə"),
-      },
-      {
-        title: t("Facebook və Instagram monitorinqi"),
-        description:
-          t("Açar sözlərinizlə bağlı Facebook və Instagram paylaşımlarını izləyin və Telegram bildirişi alın."),
+        title: t("Facebook və Instagram"),
+        description: t("Açar sözlərinizlə bağlı paylaşımları izləyir və Telegram-a göndərir."),
         icon: 'file',
         status: 'Beta',
       },
       {
+        title: t("Vebsayt dəyişiklikləri"),
+        description: t("Seçdiyiniz səhifədə dəyişiklik olanda sizə xəbər verir."),
+        icon: 'radio',
+        status: t("Aktiv"),
+      },
+      {
+        title: t("Kommunikasiya analitikası"),
+        description: t("Nəticələrin ümumi mənzərəsi və kommunikasiyanın effektivliyi."),
+        icon: 'megaphone',
+        status: t("Tezliklə"),
+      },
+      {
         title: t("Qlobal xəbər axını"),
-        description:
-          t("Beynəlxalq informasiya resurslarında yayımlanan xəbərləri seçdiyiniz mövzular üzrə izləmək üçün gələcək modul."),
+        description: t("Beynəlxalq mənbələrdə seçdiyiniz mövzular üzrə xəbərlər."),
         icon: 'search',
         status: t("Tezliklə"),
       },
@@ -315,7 +310,7 @@ export const defaultPublicSiteContent: PublicSiteContent = {
       t("Vizual.Az-ı komandanızın media monitorinqi, vebsayt izləmə və bildiriş ehtiyaclarına görə necə istifadə edə biləcəyinizi birlikdə nəzərdən keçirək."),
     cardTitle: t("Sınaq müraciəti"),
     cardDescription:
-      t("Hazırda public form aktiv deyil. Sınaq, əməkdaşlıq və texniki dəstək üçün email vasitəsilə əlaqə saxlayın."),
+      t("Formu doldurun, komandamız sizinlə əlaqə saxlayacaq."),
     email: 'info@vizual.az',
   },
 }

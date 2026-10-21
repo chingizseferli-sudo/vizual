@@ -39,6 +39,9 @@ export async function initI18n() {
     }
   }
   document.documentElement.lang = lang
+  document
+    .querySelector('meta[http-equiv="Content-Language"]')
+    ?.setAttribute('content', lang)
 }
 
 export function getLang(): Lang {

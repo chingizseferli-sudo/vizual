@@ -2,6 +2,7 @@
   Calculator,
   CreditCard,
   FileText,
+  Inbox,
   Globe,
   LayoutDashboard,
   Send,
@@ -40,6 +41,11 @@ export const sidebarData: SidebarData = {
           title: 'İstifadəçilər',
           url: '/admin/users',
           icon: Users,
+        },
+        {
+          title: 'Demo müraciətləri',
+          url: '/admin/demo-requests',
+          icon: Inbox,
         },
         {
           title: 'Plan və abunəliklər',

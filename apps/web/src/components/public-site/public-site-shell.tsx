@@ -61,8 +61,8 @@ export function PublicHeader() {
 
   return (
     <header className='sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl'>
-      <div className='mx-auto flex max-w-7xl items-center justify-between px-5 py-4 md:px-8'>
-        <Link to='/' className='flex items-center gap-3'>
+      <div className='mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 md:px-8'>
+        <Link to='/' className='flex shrink-0 items-center gap-3'>
           <BrandMark
             logoUrl={logoUrl}
             iconUrl={settings.icon_url}
@@ -70,7 +70,7 @@ export function PublicHeader() {
             imageClassName='h-9 sm:h-11'
           />
         </Link>
-        <nav className='hidden items-center gap-7 text-sm font-semibold text-slate-600 lg:flex'>
+        <nav className='hidden items-center gap-5 text-sm font-semibold whitespace-nowrap text-slate-600 xl:flex 2xl:gap-7'>
           <Link to='/solutions'>{label.services}</Link>
           <Link to='/demo'>{label.demo}</Link>
           <Link to='/pricing'>{label.pricing}</Link>
@@ -78,17 +78,17 @@ export function PublicHeader() {
           <Link to='/about'>{label.about}</Link>
           <Link to='/contact'>{label.contact}</Link>
         </nav>
-        <div className='flex items-center gap-2 sm:gap-3'>
+        <div className='flex shrink-0 items-center gap-2 sm:gap-3'>
           <LanguageSwitcher className='hidden border-slate-200 bg-white sm:inline-flex' />
           <Link
             to='/sign-in'
-            className='hidden h-10 items-center rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 sm:inline-flex'
+            className='hidden h-10 items-center rounded-full border border-slate-200 px-4 text-sm font-semibold whitespace-nowrap text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 sm:inline-flex'
           >
             {label.login}
           </Link>
           <Link
             to='/sign-up'
-            className='hidden h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 md:inline-flex'
+            className='hidden h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold whitespace-nowrap text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 md:inline-flex'
           >
             {label.register}
           </Link>
@@ -100,7 +100,7 @@ export function PublicHeader() {
           </Link>
           <button
             type='button'
-            className='inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:bg-sky-50 lg:hidden'
+            className='inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:bg-sky-50 xl:hidden'
             aria-expanded={menuOpen}
             aria-controls='public-mobile-menu'
             aria-label={menuOpen ? label.closeMenu : label.openMenu}
@@ -113,7 +113,7 @@ export function PublicHeader() {
       {menuOpen ? (
         <nav
           id='public-mobile-menu'
-          className='border-t border-slate-200/80 px-5 pb-4 md:px-8 lg:hidden'
+          className='border-t border-slate-200/80 px-5 pb-4 md:px-8 xl:hidden'
         >
           <ul className='mx-auto grid max-w-7xl text-base font-semibold text-slate-700'>
             {mobileMenuLinks.map((link) => (

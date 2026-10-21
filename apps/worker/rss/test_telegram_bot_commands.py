@@ -464,6 +464,50 @@ def test_no_pending_signups_sends_nothing(sm):
     assert not fake.find("PATCH", "user_profiles")
 
 
+def demo_request_routes(rows):
+    return {
+        ("GET", "demo_requests"): FakeResponse(200, rows),
+        ("PATCH", "demo_requests"): FakeResponse(204, None, text=""),
+        ("GET", "user_profiles"): FakeResponse(200, [{"telegram_chat_id": CHAT_ID}]),  # admin's chat
+        ("POST", "sendMessage"): FakeResponse(200, {"ok": True}),
+        **ADMIN,
+    }
+
+
+def test_new_demo_request_is_sent_to_admins_and_marked(sm):
+    request_id = "99999999-0000-0000-0000-000000000001"
+    fake = FakeRequests(demo_request_routes([{
+        "id": request_id, "name": "Əli Məmmədov", "company": "ABB",
+        "email": "ali@abb.az", "phone": "+994501112233", "message": "Rəqibləri izləmək",
+    }]))
+    sm.requests = fake
+    sm.notify_admins_about_demo_requests()
+    assert fake.find("GET", "demo_requests")[0]["params"]["notified_at"] == "is.null"
+    text = fake.sent_texts()[0]
+    assert "Əli Məmmədov — ABB" in text
+    assert "ali@abb.az" in text and "+994501112233" in text and "Rəqibləri izləmək" in text
+    mark = fake.find("PATCH", "demo_requests")[0]
+    assert mark["params"] == {"id": f"in.({request_id})"}
+    assert "notified_at" in mark["json"]
+
+
+def test_no_demo_requests_sends_nothing(sm):
+    fake = FakeRequests(demo_request_routes([]))
+    sm.requests = fake
+    sm.notify_admins_about_demo_requests()
+    assert not fake.sent_texts()
+    assert not fake.find("PATCH", "demo_requests")
+
+
+def test_demo_request_stays_unmarked_when_telegram_fails(sm):
+    routes = demo_request_routes([{"id": "r1", "name": "A", "company": "B", "email": "a@b.az"}])
+    routes[("POST", "sendMessage")] = FakeResponse(500, {"ok": False, "description": "boom"})
+    fake = FakeRequests(routes)
+    sm.requests = fake
+    sm.notify_admins_about_demo_requests()
+    assert not fake.find("PATCH", "demo_requests")
+
+
 def test_monitor_keywords_of_inactive_owners_are_skipped(sm):
     def monitor(owner):
         return {"id": f"m-{owner}", "name": "M", "user_id": owner, "status": "active", "notify_telegram": True}

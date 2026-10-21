@@ -47,3 +47,49 @@ export async function fetchPublicRows<T>(
     return null
   }
 }
+
+export type DemoRequestInput = {
+  name: string
+  company: string
+  email: string
+  phone: string
+  message: string
+  lang: string
+  // Hidden from people; bots fill it, and the server then drops the request.
+  website: string
+}
+
+// Sends the public demo request form (submit_demo_request in SQL) without
+// loading supabase-js on the public pages.
+export async function submitDemoRequest(
+  input: DemoRequestInput
+): Promise<'ok' | 'rate_limited' | 'error'> {
+  if (!clientEnv.isConfigured) return 'error'
+  try {
+    const response = await fetch(
+      `${clientEnv.supabaseUrl}/rest/v1/rpc/submit_demo_request`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: clientEnv.supabaseAnonKey,
+          Authorization: `Bearer ${clientEnv.supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_name: input.name,
+          p_company: input.company,
+          p_email: input.email,
+          p_phone: input.phone,
+          p_message: input.message,
+          p_lang: input.lang,
+          p_website: input.website,
+        }),
+      }
+    )
+    if (response.ok) return 'ok'
+    const body = await response.text()
+    return body.includes('too_many_requests') ? 'rate_limited' : 'error'
+  } catch {
+    return 'error'
+  }
+}

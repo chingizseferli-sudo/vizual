@@ -4508,6 +4508,54 @@ def notify_admins_about_pending_signups():
         print(f"Yeni müraciət bildirişi istisnasi: {exc}", flush=True)
 
 
+def notify_admins_about_demo_requests():
+    """Every cycle: tell admins on Telegram about demo requests from the public site form."""
+    if not supabase_ready():
+        return
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/demo_requests",
+            headers=supabase_headers(),
+            params={
+                "select": "id,name,company,email,phone,message",
+                "notified_at": "is.null",
+                "order": "created_at.asc",
+                "limit": "10",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code != 200:
+            print(f"Demo müraciətləri oxuma xetasi: {response.status_code} | {response.text[:200]}", flush=True)
+            return
+        rows = response.json() or []
+        if not rows:
+            return
+        chat_ids = admin_chat_ids()
+        if not chat_ids:
+            return
+        blocks = []
+        for row in rows:
+            lines = [f"• {clean_text(row.get('name'))} — {clean_text(row.get('company'))}", f"  {clean_text(row.get('email'))}"]
+            if row.get("phone"):
+                lines.append(f"  {clean_text(row.get('phone'))}")
+            if row.get("message"):
+                lines.append(f"  {clean_text(row.get('message'))[:300]}")
+            blocks.append("\n".join(lines))
+        message = f"📩 Yeni demo müraciəti ({len(rows)}):\n" + "\n\n".join(blocks) + "\n\nAdmin paneldə Demo müraciətləri bölməsinə baxın."
+        if not any([send_telegram(message, chat_id=chat_id, bypass_pause=True) for chat_id in chat_ids]):
+            return
+        ids = ",".join(row["id"] for row in rows if row.get("id"))
+        requests.patch(
+            f"{SUPABASE_URL}/rest/v1/demo_requests",
+            headers=supabase_headers({"Prefer": "return=minimal"}),
+            params={"id": f"in.({ids})"},
+            json={"notified_at": datetime.now(BAKU_TZ).isoformat()},
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as exc:
+        print(f"Demo müraciəti bildirişi istisnasi: {exc}", flush=True)
+
+
 def log_retention_rules(now):
     """(table, timestamp column, cutoff) for rows that are logs, not customer data."""
     log_cutoff = now - timedelta(days=max(LOG_RETENTION_DAYS, 1))
@@ -5125,6 +5173,7 @@ def check_sites(poll_commands=True):
         connect_telegram_users_from_updates()
     cleanup_old_monitor_data_if_needed()
     account_housekeeping_if_needed()
+    notify_admins_about_demo_requests()
     # Long-running mode (RUN_ONCE=0) keeps module state between cycles; keep the
     # per-article title cache bounded instead of growing for the process lifetime.
     if len(ARTICLE_TITLE_INFO_CACHE) > 20000:

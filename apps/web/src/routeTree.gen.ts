@@ -46,6 +46,7 @@ import { Route as authAdminTelegramRouteImport } from './routes/(auth)/admin/tel
 import { Route as authAdminSubscriptionsRouteImport } from './routes/(auth)/admin/subscriptions'
 import { Route as authAdminSocialRouteImport } from './routes/(auth)/admin/social'
 import { Route as authAdminNewsRouteImport } from './routes/(auth)/admin/news'
+import { Route as authAdminDemoRequestsRouteImport } from './routes/(auth)/admin/demo-requests'
 import { Route as authAdminCalculatorRouteImport } from './routes/(auth)/admin/calculator'
 import { Route as authAdminSettingsRouteRouteImport } from './routes/(auth)/admin/settings/route'
 import { Route as authAdminMonitorRouteRouteImport } from './routes/(auth)/admin/monitor/route'
@@ -262,6 +263,11 @@ const authAdminNewsRoute = authAdminNewsRouteImport.update({
   path: '/news',
   getParentRoute: () => authAdminRouteRoute,
 } as any)
+const authAdminDemoRequestsRoute = authAdminDemoRequestsRouteImport.update({
+  id: '/demo-requests',
+  path: '/demo-requests',
+  getParentRoute: () => authAdminRouteRoute,
+} as any)
 const authAdminCalculatorRoute = authAdminCalculatorRouteImport.update({
   id: '/calculator',
   path: '/calculator',
@@ -428,6 +434,7 @@ export interface FileRoutesByFullPath {
   '/admin/monitor': typeof authAdminMonitorRouteRouteWithChildren
   '/admin/settings': typeof authAdminSettingsRouteRouteWithChildren
   '/admin/calculator': typeof authAdminCalculatorRoute
+  '/admin/demo-requests': typeof authAdminDemoRequestsRoute
   '/admin/news': typeof authAdminNewsRouteWithChildren
   '/admin/social': typeof authAdminSocialRoute
   '/admin/subscriptions': typeof authAdminSubscriptionsRoute
@@ -489,6 +496,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/admin/sign-in': typeof AdminSignInRoute
   '/admin/calculator': typeof authAdminCalculatorRoute
+  '/admin/demo-requests': typeof authAdminDemoRequestsRoute
   '/admin/social': typeof authAdminSocialRoute
   '/admin/subscriptions': typeof authAdminSubscriptionsRoute
   '/admin/telegram': typeof authAdminTelegramRoute
@@ -553,6 +561,7 @@ export interface FileRoutesById {
   '/(auth)/admin/monitor': typeof authAdminMonitorRouteRouteWithChildren
   '/(auth)/admin/settings': typeof authAdminSettingsRouteRouteWithChildren
   '/(auth)/admin/calculator': typeof authAdminCalculatorRoute
+  '/(auth)/admin/demo-requests': typeof authAdminDemoRequestsRoute
   '/(auth)/admin/news': typeof authAdminNewsRouteWithChildren
   '/(auth)/admin/social': typeof authAdminSocialRoute
   '/(auth)/admin/subscriptions': typeof authAdminSubscriptionsRoute
@@ -620,6 +629,7 @@ export interface FileRouteTypes {
     | '/admin/monitor'
     | '/admin/settings'
     | '/admin/calculator'
+    | '/admin/demo-requests'
     | '/admin/news'
     | '/admin/social'
     | '/admin/subscriptions'
@@ -681,6 +691,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/admin/sign-in'
     | '/admin/calculator'
+    | '/admin/demo-requests'
     | '/admin/social'
     | '/admin/subscriptions'
     | '/admin/telegram'
@@ -744,6 +755,7 @@ export interface FileRouteTypes {
     | '/(auth)/admin/monitor'
     | '/(auth)/admin/settings'
     | '/(auth)/admin/calculator'
+    | '/(auth)/admin/demo-requests'
     | '/(auth)/admin/news'
     | '/(auth)/admin/social'
     | '/(auth)/admin/subscriptions'
@@ -1070,6 +1082,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authAdminNewsRouteImport
       parentRoute: typeof authAdminRouteRoute
     }
+    '/(auth)/admin/demo-requests': {
+      id: '/(auth)/admin/demo-requests'
+      path: '/demo-requests'
+      fullPath: '/admin/demo-requests'
+      preLoaderRoute: typeof authAdminDemoRequestsRouteImport
+      parentRoute: typeof authAdminRouteRoute
+    }
     '/(auth)/admin/calculator': {
       id: '/(auth)/admin/calculator'
       path: '/calculator'
@@ -1345,6 +1364,7 @@ interface authAdminRouteRouteChildren {
   authAdminMonitorRouteRoute: typeof authAdminMonitorRouteRouteWithChildren
   authAdminSettingsRouteRoute: typeof authAdminSettingsRouteRouteWithChildren
   authAdminCalculatorRoute: typeof authAdminCalculatorRoute
+  authAdminDemoRequestsRoute: typeof authAdminDemoRequestsRoute
   authAdminNewsRoute: typeof authAdminNewsRouteWithChildren
   authAdminSocialRoute: typeof authAdminSocialRoute
   authAdminSubscriptionsRoute: typeof authAdminSubscriptionsRoute
@@ -1359,6 +1379,7 @@ const authAdminRouteRouteChildren: authAdminRouteRouteChildren = {
   authAdminMonitorRouteRoute: authAdminMonitorRouteRouteWithChildren,
   authAdminSettingsRouteRoute: authAdminSettingsRouteRouteWithChildren,
   authAdminCalculatorRoute: authAdminCalculatorRoute,
+  authAdminDemoRequestsRoute: authAdminDemoRequestsRoute,
   authAdminNewsRoute: authAdminNewsRouteWithChildren,
   authAdminSocialRoute: authAdminSocialRoute,
   authAdminSubscriptionsRoute: authAdminSubscriptionsRoute,

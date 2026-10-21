@@ -10,6 +10,7 @@ import {
   PublicPageHero,
   PublicPageShell,
 } from '@/components/public-site/public-site-shell'
+import { DemoRequestForm } from '@/components/public-site/demo-request-form'
 import { t } from '@/lib/i18n'
 
 function ContactPage() {
@@ -22,8 +23,8 @@ function ContactPage() {
   const contactItems = [
     { title: t("Email"), value: content.contact.email, icon: Mail },
     {
-      title: 'Demo',
-      value: content.contact.cardDescription,
+      title: t("Sınaq müraciəti"),
+      value: t("Formu doldurun, komandamız sizinlə əlaqə saxlayacaq."),
       icon: MessageCircle,
     },
     {
@@ -68,12 +69,9 @@ function ContactPage() {
             <p className='mt-3 max-w-2xl text-sm leading-6 text-slate-600'>
               {content.contact.cardDescription}
             </p>
-            <a
-              href={`mailto:${content.contact.email}`}
-              className='mt-6 inline-flex h-11 items-center rounded-lg bg-[#1463ff] px-5 text-sm font-bold text-white transition hover:bg-blue-700'
-            >
-              {content.contact.email}
-            </a>
+            <div className='mt-6'>
+              <DemoRequestForm email={content.contact.email} />
+            </div>
           </PublicCard>
         </section>
       </main>

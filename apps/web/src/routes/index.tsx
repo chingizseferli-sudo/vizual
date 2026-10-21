@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import {
-  ArrowRight,
   BadgeCheck,
   Building2,
   Check,
@@ -28,6 +27,7 @@ import {
   PublicHeader,
   SectionHeading,
 } from '@/components/public-site/public-site-shell'
+import { DemoRequestForm } from '@/components/public-site/demo-request-form'
 import { t } from '@/lib/i18n'
 
 const serviceIcons: Record<PublicService['icon'], typeof Newspaper> = {
@@ -153,27 +153,30 @@ function IndexPage() {
             title={content.services.title}
             description={content.services.description}
           />
-          <div className='grid gap-5 md:grid-cols-2 xl:grid-cols-5'>
-            {content.services.items.map((service) => {
+          <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-6'>
+            {content.services.items.map((service, index) => {
               const ServiceIcon = serviceIcons[service.icon] || Newspaper
 
               return (
                 <article
                   key={service.title}
-                  className='rounded-2xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40'
+                  // Five services: three on top, the last two centred below.
+                  className={`flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/40 lg:col-span-2 ${index === 3 && content.services.items.length === 5 ? 'lg:col-start-2' : ''}`}
                 >
-                  <div className='flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#1463ff]'>
-                    <ServiceIcon className='h-5 w-5' />
+                  <div className='flex items-center justify-between gap-3'>
+                    <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#1463ff]'>
+                      <ServiceIcon className='h-5 w-5' />
+                    </div>
+                    <span className='rounded-full border border-slate-200 px-2 py-0.5 text-xs font-bold whitespace-nowrap text-slate-600'>
+                      {service.status}
+                    </span>
                   </div>
-                  <h3 className='mt-5 font-extrabold text-slate-950'>
+                  <h3 className='mt-4 text-base font-extrabold text-slate-950'>
                     {service.title}
                   </h3>
-                  <p className='mt-3 text-sm leading-6 text-slate-600'>
+                  <p className='mt-1.5 text-sm leading-6 text-slate-600'>
                     {service.description}
                   </p>
-                  <span className='mt-4 inline-flex rounded-full border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600'>
-                    {service.status}
-                  </span>
                 </article>
               )
             })}
@@ -329,7 +332,7 @@ function IndexPage() {
 
         <section id='contact' className='mx-auto max-w-7xl px-5 py-20 md:px-8'>
           <div className='rounded-[28px] bg-gradient-to-br from-slate-950 via-blue-900 to-cyan-700 p-6 text-white md:p-10'>
-            <div className='grid gap-8 lg:grid-cols-[1fr_0.8fr] lg:items-center'>
+            <div className='grid gap-8 lg:grid-cols-2 lg:items-center'>
               <div>
                 <p className='text-sm font-extrabold tracking-wide text-cyan-100 uppercase'>
                   {content.contact.eyebrow}
@@ -341,7 +344,7 @@ function IndexPage() {
                   {content.contact.description}
                 </p>
               </div>
-              <div className='rounded-2xl bg-white p-5 text-slate-950'>
+              <div className='rounded-2xl bg-white p-5 text-slate-950 md:p-6'>
                 <Contact className='h-6 w-6 text-[#1463ff]' />
                 <h3 className='mt-4 text-xl font-extrabold'>
                   {content.contact.cardTitle}
@@ -349,13 +352,9 @@ function IndexPage() {
                 <p className='mt-2 text-sm leading-6 text-slate-600'>
                   {content.contact.cardDescription}
                 </p>
-                <a
-                  href={`mailto:${content.contact.email}`}
-                  className='mt-5 inline-flex h-11 items-center gap-2 rounded-lg bg-[#1463ff] px-4 text-sm font-bold text-white hover:bg-blue-700'
-                >
-                  {content.contact.email}
-                  <ArrowRight className='h-4 w-4' />
-                </a>
+                <div className='mt-5'>
+                  <DemoRequestForm email={content.contact.email} />
+                </div>
               </div>
             </div>
           </div>
