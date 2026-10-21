@@ -220,7 +220,12 @@ function uniqueByArticle(rows: MatchRow[]): MatchRow[] {
   const byArticle = new Map<string, MatchRow>()
   for (const row of rows) {
     const item = row.monitored_items
-    const key = (item?.url || item?.title || row.id).trim().toLowerCase()
+    // Same site + same headline is one story even when the URL differs
+    // (query string, http/https, trailing slash).
+    const title = (item?.title || '').trim().toLowerCase().replace(/\s+/g, ' ')
+    const key = title
+      ? `${getHost(item?.url)}|${title}`
+      : (item?.url || row.id).trim().toLowerCase()
     const seen = byArticle.get(key)
     if (!seen) {
       byArticle.set(key, { ...row })

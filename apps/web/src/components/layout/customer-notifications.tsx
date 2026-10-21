@@ -130,7 +130,19 @@ export function CustomerNotifications() {
       ? readState.ids
       : readStorage(storageKey)
 
-  const alerts = data?.alerts || []
+  const alerts = useMemo(() => {
+    // Same site + headline + keyword is one notification, however many rows exist.
+    const seen = new Set<string>()
+    return (data?.alerts || []).filter((alert) => {
+      const item = alert.monitor_matches?.monitored_items
+      const title = (item?.title || '').trim().toLowerCase().replace(/\s+/g, ' ')
+      if (!title) return true
+      const key = `${getHost(item?.url)}|${title}|${alert.monitor_matches?.matched_keyword || ''}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [data?.alerts])
   const readSet = useMemo(() => new Set(readIds), [readIds])
   const unreadCount = alerts.filter((alert) => !readSet.has(alert.id)).length
 
