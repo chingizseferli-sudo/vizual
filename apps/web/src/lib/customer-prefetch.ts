@@ -3,6 +3,7 @@ import {
   fetchAllMonitorIds,
   fetchDashboardData,
 } from '@/features/keywords/dashboard'
+import { fetchCustomerAlerts } from '@/features/keywords/alerts'
 import { fetchKeywordsData } from '@/features/keywords/data'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
@@ -74,45 +75,6 @@ async function prefetchResultsData() {
   }
 
   return { rows: data || [], errorMessage: '' }
-}
-
-async function prefetchAlertsData() {
-  const userId = await getCurrentUserId()
-  if (!userId) {
-    return {
-      alerts: [],
-      errorMessage: 'Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun.',
-    }
-  }
-
-  const monitorIds = await fetchAllMonitorIds(userId)
-  if (monitorIds.length === 0) return { alerts: [], errorMessage: '' }
-
-  const { data: matches, error: matchesError } = await supabase
-    .from('monitor_matches')
-    .select('id')
-    .in('monitor_id', monitorIds)
-
-  if (matchesError)
-    return { alerts: [], errorMessage: 'Bildiriş məlumatları yüklənmədi.' }
-
-  const matchIds = (matches || []).map((item) => item.id)
-  if (matchIds.length === 0) return { alerts: [], errorMessage: '' }
-
-  const { data, error } = await supabase
-    .from('monitor_alerts')
-    .select(
-      'id,match_id,channel,recipient,status,sent_at,monitor_matches(id,matched_keyword,monitored_items(title,url))'
-    )
-    .in('match_id', matchIds)
-    .order('sent_at', { ascending: false })
-    .limit(300)
-
-  if (error) {
-    return { alerts: [], errorMessage: 'Bildirişləri yükləmək mümkün olmadı.' }
-  }
-
-  return { alerts: data || [], errorMessage: '' }
 }
 
 async function prefetchProfileData() {
@@ -229,7 +191,7 @@ export function prefetchCustomerRoute(queryClient: QueryClient, url: string) {
   if (url === '/monitor/alerts') {
     void queryClient.prefetchQuery({
       queryKey: customerQueryKeys.alerts(),
-      queryFn: prefetchAlertsData,
+      queryFn: fetchCustomerAlerts,
       staleTime: 30 * 1000,
     })
     return

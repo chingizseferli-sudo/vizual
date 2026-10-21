@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Loader2, LogIn } from 'lucide-react'
 import { toast } from 'sonner'
@@ -118,6 +119,7 @@ export function UserAuthForm({
 }: UserAuthFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -183,6 +185,9 @@ export function UserAuthForm({
 
     const safeRedirect = getSafeRedirect(mode, redirectTo)
 
+    // Anything cached before this sign-in (an empty or failed load from the
+    // signed-out page, or another account's data) must not be shown now.
+    queryClient.clear()
     setIsLoading(false)
     toast.success(t("Giriş uğurludur."))
     await navigate({

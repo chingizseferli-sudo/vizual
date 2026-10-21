@@ -6,6 +6,12 @@ import { SignOutDialog } from './sign-out-dialog'
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   signOut: vi.fn(),
+  clearCache: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-query', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-query')>()),
+  useQueryClient: () => ({ clear: mocks.clearCache }),
 }))
 
 const MOCK_HREF = 'https://app.test/dashboard?tab=1'
@@ -41,6 +47,7 @@ describe('SignOutDialog', () => {
     await userEvent.click(getByRole('button', { name: /^Çıxış$/i }))
 
     await vi.waitFor(() => expect(mocks.signOut).toHaveBeenCalledOnce())
+    expect(mocks.clearCache).toHaveBeenCalledOnce()
     expect(mocks.navigate).toHaveBeenCalledWith({
       to: '/sign-in',
       search: { redirect: MOCK_HREF },

@@ -69,7 +69,7 @@ describe('ThemeProvider', () => {
       media as unknown as MediaQueryList
     )
     const screen = await render(
-      <ThemeProvider storageKey='ui-test-theme'>
+      <ThemeProvider storageKey='ui-test-theme' defaultTheme='system'>
         <Probe />
       </ThemeProvider>
     )

@@ -82,7 +82,11 @@ let queryClient: QueryClient
 const realDateNow = Date.now.bind(Date)
 
 async function openRoute(path: string, waitForData = true) {
-  portalFixture.role = path.startsWith('/admin') ? 'admin' : 'customer'
+  // Web watch is admin-only, even under /monitor.
+  portalFixture.role =
+    path.startsWith('/admin') || path === '/monitor/watch-monitor'
+      ? 'admin'
+      : 'customer'
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   })
@@ -200,7 +204,7 @@ it.each(['customer', 'admin'])(
     await expect.element(drawer).toBeVisible()
     await userEvent.click(
       drawer.getByRole('link', {
-        name: role === 'admin' ? 'İstifadəçilər' : 'Monitorlar',
+        name: role === 'admin' ? 'İstifadəçilər' : 'Açar sözlər',
         exact: true,
       })
     )
@@ -312,11 +316,16 @@ it('mobile keyword form retains keyword entry and filtering', async () => {
       page.getByRole('textbox', { name: 'Yeni açar sözlər', exact: true })
     )
     .toBeVisible()
-  const search = page.getByRole('textbox', { name: 'Açar söz axtar...' })
-  await userEvent.fill(search, 'unmatched-fixture')
   await expect
     .element(page.getByText('Bakı Dövlət Universiteti', { exact: true }))
-    .not.toBeInTheDocument()
+    .toBeVisible()
+  // Search appears only for longer lists; typing in the add field must stick.
+  const draft = page.getByRole('textbox', {
+    name: 'Yeni açar sözlər',
+    exact: true,
+  })
+  await userEvent.fill(draft, 'Yeni söz')
+  await expect.element(draft).toHaveValue('Yeni söz')
 })
 
 it('desktop navigation collapses and expands', async () => {

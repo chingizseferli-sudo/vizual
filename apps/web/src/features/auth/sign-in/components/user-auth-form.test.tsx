@@ -17,6 +17,12 @@ const mocks = vi.hoisted(() => ({
   maybeSingle: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
+  clearCache: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-query', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-query')>()),
+  useQueryClient: () => ({ clear: mocks.clearCache }),
 }))
 
 vi.mock('@/lib/supabase', () => ({
@@ -173,6 +179,7 @@ describe('UserAuthForm', () => {
         replace: true,
       })
     )
+    expect(mocks.clearCache).toHaveBeenCalled()
   })
 
   it('shows an error and does not navigate when password is wrong', async () => {

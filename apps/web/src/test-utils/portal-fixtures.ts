@@ -185,6 +185,9 @@ export const fixtureSupabase = {
       const result = { data: { max_watches: 15, max_keywords: 300 }, error: null }
       return { maybeSingle: async () => result }
     }
+    if (name === 'current_user_account_state') {
+      return Promise.resolve({ data: [{ status: 'active' }], error: null })
+    }
     throw new Error(`Unexpected fixture RPC: ${name}`)
   },
   functions: {

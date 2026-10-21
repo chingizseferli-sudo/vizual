@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import { ProtectedRoute } from '@/features/auth/components/protected-route'
 import { toast } from 'sonner'
 import { getCurrentSupabaseProfile } from '@/lib/auth-session'
 import {
@@ -4096,5 +4097,17 @@ function KpiCard({
 }
 
 export const Route = createFileRoute('/(auth)/monitor/watch-monitor')({
-  component: ChangeMonitorPage,
+  component: AdminChangeMonitorPage,
 })
+
+// Web page-change watch is an admin tool; customers are sent to their panel.
+function AdminChangeMonitorPage() {
+  return (
+    <ProtectedRoute
+      allowedRoles={['admin', 'superadmin']}
+      unauthorizedRedirect='/monitor'
+    >
+      <ChangeMonitorPage />
+    </ProtectedRoute>
+  )
+}

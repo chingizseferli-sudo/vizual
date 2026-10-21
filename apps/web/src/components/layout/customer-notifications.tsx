@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bell, CheckCheck, ExternalLink, Loader2 } from 'lucide-react'
 import { customerQueryKeys } from '@/lib/query-keys'
+import { customerAlertsQuery } from '@/features/keywords/alerts'
 import { supabase } from '@/lib/supabase'
 import { cn, openExternalUrl } from '@/lib/utils'
 import {
@@ -88,17 +89,7 @@ async function fetchCustomerNotifications(): Promise<NotificationData> {
 
   if (userError || !user) return { alerts: [], userId: null }
 
-  // Single round-trip: filter alerts by monitor owner through inner joins
-  // instead of fetching every monitor and every match id first (the old
-  // 3-query waterfall built an unbounded `in (...)` list of match ids).
-  const { data, error } = await supabase
-    .from('monitor_alerts')
-    .select(
-      'id,channel,status,sent_at,monitor_matches!inner(matched_keyword,user_monitors!inner(user_id),monitored_items(title,url))'
-    )
-    .eq('monitor_matches.user_monitors.user_id', user.id)
-    .order('sent_at', { ascending: false })
-    .limit(20)
+  const { data, error } = await customerAlertsQuery(user.id, 20)
 
   if (error) throw error
 

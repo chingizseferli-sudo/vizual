@@ -10,30 +10,12 @@ import {
   Send,
   XCircle,
 } from 'lucide-react'
-import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
+import { fetchCustomerAlerts } from '@/features/keywords/alerts'
 import { customerQueryKeys } from '@/lib/query-keys'
-import { supabase } from '@/lib/supabase'
 import { dateLocale, t } from '@/lib/i18n'
 
 const PAGE_SIZE = 12
 const ALL = 'all'
-
-type AlertRow = {
-  id: string
-  match_id: string | null
-  channel: string | null
-  recipient: string | null
-  status: string | null
-  sent_at: string | null
-  monitor_matches: {
-    id: string
-    matched_keyword: string | null
-    monitored_items: {
-      title: string
-      url: string
-    } | null
-  } | null
-}
 
 type FilterOption = {
   value: string
@@ -59,7 +41,7 @@ function formatDate(value: string | null) {
   })
 }
 
-function getHost(url: string | undefined) {
+function getHost(url: string | null | undefined) {
   if (!url) return '-'
 
   try {
@@ -164,69 +146,10 @@ function Pagination({
   )
 }
 
-type AlertsData = {
-  alerts: AlertRow[]
-  errorMessage: string
-}
-
-async function fetchAlertsData(): Promise<AlertsData> {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
-
-  if (userError || !user) {
-    return {
-      alerts: [],
-      errorMessage: t("Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun."),
-    }
-  }
-
-  let monitorIds: string[]
-  try {
-    monitorIds = await fetchAllMonitorIds(user.id)
-  } catch (error) {
-    console.error('User monitor load error:', error)
-    return { alerts: [], errorMessage: t("Bildiriş məlumatları yüklənmədi.") }
-  }
-
-  if (monitorIds.length === 0) return { alerts: [], errorMessage: '' }
-
-  const { data: matches, error: matchesError } = await supabase
-    .from('monitor_matches')
-    .select('id')
-    .in('monitor_id', monitorIds)
-
-  if (matchesError) {
-    console.error('User alert match load error:', matchesError)
-    return { alerts: [], errorMessage: t("Bildiriş məlumatları yüklənmədi.") }
-  }
-
-  const matchIds = (matches || []).map((item) => item.id)
-
-  if (matchIds.length === 0) return { alerts: [], errorMessage: '' }
-
-  const { data, error } = await supabase
-    .from('monitor_alerts')
-    .select(
-      'id,match_id,channel,recipient,status,sent_at,monitor_matches(id,matched_keyword,monitored_items(title,url))'
-    )
-    .in('match_id', matchIds)
-    .order('sent_at', { ascending: false })
-    .limit(300)
-
-  if (error) {
-    console.error('User alerts error:', error)
-    return { alerts: [], errorMessage: t("Bildirişləri yükləmək mümkün olmadı.") }
-  }
-
-  return { alerts: (data || []) as unknown as AlertRow[], errorMessage: '' }
-}
-
 function AlertsPage() {
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: customerQueryKeys.alerts(),
-    queryFn: fetchAlertsData,
+    queryFn: fetchCustomerAlerts,
     staleTime: 30 * 1000,
     placeholderData: keepPreviousData,
   })
@@ -486,7 +409,7 @@ function AlertsPage() {
         {paginatedAlerts.map((alert) => {
           const match = alert.monitor_matches
           const item = match?.monitored_items
-          const title = item ? decodeHtml(item.title) : t("Xəbər tapılmadı")
+          const title = item?.title ? decodeHtml(item.title) : t("Xəbər tapılmadı")
           const statusInfo = getStatusInfo(alert.status)
 
           return (
@@ -516,7 +439,7 @@ function AlertsPage() {
 
                   {item ? (
                     <a
-                      href={item.url}
+                      href={item.url || undefined}
                       target='_blank'
                       rel='noreferrer'
                       className='mt-2 line-clamp-2 text-base leading-snug font-semibold hover:underline'
@@ -535,7 +458,7 @@ function AlertsPage() {
 
                 {item ? (
                   <a
-                    href={item.url}
+                    href={item.url || undefined}
                     target='_blank'
                     rel='noreferrer'
                     className='inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted'

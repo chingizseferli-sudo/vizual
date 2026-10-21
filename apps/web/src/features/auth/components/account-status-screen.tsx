@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { Clock, Hourglass } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -13,10 +14,12 @@ type AccountStatusScreenProps = {
 // admin approval, or after the demo ran out without a paid plan.
 export function AccountStatusScreen({ status, email }: AccountStatusScreenProps) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const Icon = status === 'pending' ? Clock : Hourglass
 
   const signOut = async () => {
     await supabase.auth.signOut()
+    queryClient.clear()
     void navigate({ to: '/sign-in', replace: true })
   }
 

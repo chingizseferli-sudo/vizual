@@ -151,7 +151,7 @@ function CalculatorPage() {
   const quote = [
     'Vizual təklifi',
     `Platformalar: ${platforms.join(', ')}`,
-    `Monitor: ${input.monitors}, xəbər açar sözü: ${input.newsKeywords}`,
+    `Xəbər açar sözü: ${input.newsKeywords}`,
     social
       ? `Sosial açar söz: ${input.socialKeywords}, yoxlama: ${input.intervalHours} saatdan bir`
       : null,
@@ -193,7 +193,6 @@ function CalculatorPage() {
             <CheckboxField label='Instagram' checked={input.instagram} onChange={(v) => set('instagram', v)} />
           </div>
           <div className='grid gap-3 sm:grid-cols-2'>
-            <NumberField label='Monitor sayı' value={input.monitors} onChange={(v) => set('monitors', v)} />
             <NumberField label='Xəbər açar sözü' value={input.newsKeywords} onChange={(v) => set('newsKeywords', v)} />
             {social ? (
               <>

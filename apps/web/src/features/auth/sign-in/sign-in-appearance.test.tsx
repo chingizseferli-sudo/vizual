@@ -4,6 +4,10 @@ import { render } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
 import { SignIn } from './index'
 
+vi.mock('@tanstack/react-query', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-query')>()),
+  useQueryClient: () => ({ clear: vi.fn() }),
+}))
 vi.mock('@/hooks/use-public-site-brand', () => ({
   usePublicSiteBrand: () => ({ siteName: 'UI test', logoUrl: '', iconUrl: '' }),
 }))

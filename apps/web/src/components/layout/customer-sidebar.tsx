@@ -17,6 +17,7 @@ import {
   getCurrentSupabaseProfile,
 } from '@/lib/auth-session'
 import { prefetchCustomerRoute } from '@/lib/customer-prefetch'
+import { t } from '@/lib/i18n'
 import useDialogState from '@/hooks/use-dialog-state'
 import { usePublicSiteBrand } from '@/hooks/use-public-site-brand'
 import {
@@ -34,7 +35,6 @@ import {
 } from '@/components/ui/sidebar'
 import { BrandMark } from '@/components/brand-mark'
 import { SignOutDialog } from '@/components/sign-out-dialog'
-import { t } from '@/lib/i18n'
 
 const customerNavItems = [
   {
@@ -43,37 +43,39 @@ const customerNavItems = [
     icon: LayoutDashboard,
   },
   {
-    title: t("Açar sözlər"),
+    title: t('Açar sözlər'),
     url: '/monitor/keywords',
     icon: Radio,
   },
   {
-    title: t("İş masası"),
+    title: t('İş masası'),
     url: '/monitor/workspace-preview',
     icon: ShieldCheck,
   },
   {
-    title: t("Veb izləmə"),
+    // Web page-change watch is admin-only; customers never see it.
+    title: t('Veb izləmə'),
     url: '/monitor/watch-monitor',
     icon: Eye,
+    adminOnly: true,
   },
   {
-    title: t("Xəbər xəritəsi"),
+    title: t('Xəbər xəritəsi'),
     url: '/monitor/story-intelligence',
     icon: MapPinned,
   },
   {
-    title: t("Nəticələr"),
+    title: t('Nəticələr'),
     url: '/monitor/results',
     icon: BarChart3,
   },
   {
-    title: t("Bildirişlər"),
+    title: t('Bildirişlər'),
     url: '/monitor/alerts',
     icon: Bell,
   },
   {
-    title: t("Profil"),
+    title: t('Profil'),
     url: '/monitor/profile',
     icon: UserRound,
   },
@@ -99,7 +101,7 @@ function getDisplayRole(session: CurrentProfile | null) {
   if (role === 'superadmin') return 'Superadmin'
   if (role === 'admin') return 'Admin'
 
-  return t("İstifadəçi")
+  return t('İstifadəçi')
 }
 
 export function CustomerSidebar() {
@@ -143,7 +145,9 @@ export function CustomerSidebar() {
               <span className='truncate text-sm font-semibold text-foreground'>
                 {siteName}
               </span>
-              <span className='truncate text-xs text-muted-foreground'>{t("İstifadəçi iş masası")}</span>
+              <span className='truncate text-xs text-muted-foreground'>
+                {t('İstifadəçi iş masası')}
+              </span>
             </div>
           </div>
         </SidebarHeader>
@@ -154,34 +158,38 @@ export function CustomerSidebar() {
               Monitorinq
             </SidebarGroupLabel>
             <SidebarMenu>
-              {customerNavItems.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActivePath(href, item.url)}
-                    tooltip={item.title}
-                    className='rounded-xl'
-                  >
-                    <Link
-                      to={item.url}
-                      aria-current={
-                        isActivePath(href, item.url) ? 'page' : undefined
-                      }
-                      preload='intent'
-                      onMouseEnter={() =>
-                        prefetchCustomerRoute(queryClient, item.url)
-                      }
-                      onFocus={() =>
-                        prefetchCustomerRoute(queryClient, item.url)
-                      }
-                      onClick={() => setOpenMobile(false)}
+              {customerNavItems
+                .filter(
+                  (item) => !('adminOnly' in item) || sessionProfile?.isAdmin
+                )
+                .map((item) => (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActivePath(href, item.url)}
+                      tooltip={item.title}
+                      className='rounded-xl'
                     >
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+                      <Link
+                        to={item.url}
+                        aria-current={
+                          isActivePath(href, item.url) ? 'page' : undefined
+                        }
+                        preload='intent'
+                        onMouseEnter={() =>
+                          prefetchCustomerRoute(queryClient, item.url)
+                        }
+                        onFocus={() =>
+                          prefetchCustomerRoute(queryClient, item.url)
+                        }
+                        onClick={() => setOpenMobile(false)}
+                      >
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
             </SidebarMenu>
           </SidebarGroup>
         </SidebarContent>
@@ -201,16 +209,18 @@ export function CustomerSidebar() {
               onClick={() => setOpenSignOut(true)}
               className='inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted/50'
             >
-              <LogOut className='size-4' />{t("Çıxış")}</button>
+              <LogOut className='size-4' />
+              {t('Çıxış')}
+            </button>
           </div>
           <SidebarMenu className='hidden group-data-[collapsible=icon]:flex'>
             <SidebarMenuItem>
               <SidebarMenuButton
-                tooltip={t("Çıxış")}
+                tooltip={t('Çıxış')}
                 onClick={() => setOpenSignOut(true)}
               >
                 <LogOut />
-                <span>{t("Çıxış")}</span>
+                <span>{t('Çıxış')}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

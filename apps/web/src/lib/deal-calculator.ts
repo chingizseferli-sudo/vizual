@@ -1,6 +1,6 @@
 // Deal pricing for the admin calculator. Same model as vizual-review/qiymet_hesab.py
 // and vizual-xerc-modeli.xlsx: 30-day month, Facebook billed per new post
-// (monitorMode), Instagram billed per request, prices include VAT.
+// (Apify "only new posts" mode), Instagram billed per request, prices include VAT.
 
 export type CalculatorAssumptions = {
   usdToAzn: number
@@ -23,7 +23,6 @@ export type CalculatorInput = {
   facebook: boolean
   instagram: boolean
   newsKeywords: number
-  monitors: number
   socialKeywords: number
   intervalHours: number
   fbNewPostsPerKeywordPerDay: number
@@ -55,7 +54,6 @@ export const DEFAULT_INPUT: CalculatorInput = {
   facebook: true,
   instagram: true,
   newsKeywords: 20,
-  monitors: 5,
   socialKeywords: 10,
   intervalHours: 6,
   fbNewPostsPerKeywordPerDay: 15,
@@ -106,7 +104,7 @@ export function calculateDeal(
   const socialKeywords = positive(input.socialKeywords)
   const customers = Math.max(1, positive(input.payingCustomers))
 
-  // monitorMode pays only for new posts, at most maxPostsPerCheck per check.
+  // "Only new posts" mode pays only for new posts, at most maxPostsPerCheck per check.
   const fbPostsPerKeywordPerDay = Math.min(
     positive(input.fbNewPostsPerKeywordPerDay),
     checksPerDay * positive(a.fbMaxPostsPerCheck)

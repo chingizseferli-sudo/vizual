@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation } from '@tanstack/react-router'
 import { supabase } from '@/lib/supabase'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -10,12 +11,14 @@ interface SignOutDialogProps {
 export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
   const navigate = useNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut()
 
     if (error) {
       return
     }
+    queryClient.clear()
 
     const currentPath = location.href
     const isAdminArea = currentPath.startsWith('/admin')

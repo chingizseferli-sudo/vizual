@@ -148,7 +148,7 @@ export function SignUpForm({
           )}
         />
         <Button
-          className='mt-2 h-11 bg-[#1463ff] font-bold hover:bg-blue-700'
+          className='mt-2 h-11'
           disabled={isLoading}
         >
           {isLoading ? <Loader2 className='animate-spin' /> : <UserPlus />}
