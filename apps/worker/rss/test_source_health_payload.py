@@ -318,5 +318,29 @@ class MethodAdoptionTests(unittest.TestCase):
         self.assertNotIn("monitor_method", self.build(streak=2, succeeded="rss"))
 
 
+class StoryDuplicateTests(unittest.TestCase):
+    NOW = site_monitor.datetime(2026, 10, 21, 11, 0, tzinfo=site_monitor.BAKU_TZ)
+    LONG = "ordubada qar yagib faktiki hava"
+
+    def row(self, source_id, hours_ago):
+        created = (self.NOW - site_monitor.timedelta(hours=hours_ago)).isoformat()
+        return {"source_id": source_id, "created_at": created}
+
+    def test_same_source_within_day_is_duplicate_even_for_short_title(self):
+        self.assertTrue(site_monitor.is_story_duplicate([self.row("a", 20)], "a", "qisa", self.NOW))
+
+    def test_other_source_same_long_story_is_duplicate(self):
+        self.assertTrue(site_monitor.is_story_duplicate([self.row("a", 0.1)], "b", self.LONG, self.NOW))
+
+    def test_other_source_after_window_is_new_alert(self):
+        self.assertFalse(site_monitor.is_story_duplicate([self.row("a", 13)], "b", self.LONG, self.NOW))
+
+    def test_short_generic_title_from_other_source_is_not_merged(self):
+        self.assertFalse(site_monitor.is_story_duplicate([self.row("a", 0.1)], "b", "hava proqnozu", self.NOW))
+
+    def test_no_rows_is_not_duplicate(self):
+        self.assertFalse(site_monitor.is_story_duplicate([], "b", self.LONG, self.NOW))
+
+
 if __name__ == "__main__":
     unittest.main()
