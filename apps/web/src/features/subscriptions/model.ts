@@ -59,6 +59,7 @@ export type PlanFormValues = {
   isPublic: boolean
   features: string
   socialIntervalMinutes: string
+  reportFrequencies: ReportFrequency[]
 }
 
 export type PlanWritePayload = {
@@ -103,6 +104,25 @@ export const emptyPlanForm: PlanFormValues = {
   isPublic: true,
   features: '',
   socialIntervalMinutes: '',
+  reportFrequencies: [],
+}
+
+export const REPORT_FREQUENCIES = ['daily', 'weekly', 'monthly'] as const
+export type ReportFrequency = (typeof REPORT_FREQUENCIES)[number]
+export const REPORT_FREQUENCY_LABELS: Record<ReportFrequency, string> = {
+  daily: 'Gündəlik',
+  weekly: 'Həftəlik',
+  monthly: 'Aylıq',
+}
+
+// Email reports the plan includes (limits.report_frequencies); the rss worker
+// sends them. Unknown values are ignored.
+export function planReportFrequencies(
+  plan: Pick<SubscriptionPlan, 'limits'> | undefined
+): ReportFrequency[] {
+  const value = plan?.limits?.report_frequencies
+  if (!Array.isArray(value)) return []
+  return REPORT_FREQUENCIES.filter((frequency) => value.includes(frequency))
 }
 
 const SOCIAL_INTERVAL_MINUTES = [60, 120, 180, 360, 720, 1440]
@@ -240,6 +260,11 @@ export function buildPlanPayload(
   if (socialInterval !== null) limits.social_interval_minutes = socialInterval
   delete limits.max_keywords
   if (maxKeywords.value !== null) limits.max_keywords = maxKeywords.value
+  const reportFrequencies = REPORT_FREQUENCIES.filter((frequency) =>
+    values.reportFrequencies.includes(frequency)
+  )
+  delete limits.report_frequencies
+  if (reportFrequencies.length) limits.report_frequencies = reportFrequencies
 
   const features = Array.from(
     new Set(
@@ -292,6 +317,7 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     isPublic: plan.is_public,
     features: plan.features.join('\n'),
     socialIntervalMinutes: String(planSocialIntervalMinutes(plan) ?? ''),
+    reportFrequencies: planReportFrequencies(plan),
   }
 }
 

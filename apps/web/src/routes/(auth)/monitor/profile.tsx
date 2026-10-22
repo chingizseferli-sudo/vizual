@@ -16,6 +16,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { fetchKeywordsData } from '@/features/keywords/data'
+import { EmailReportPreferences } from '@/features/email-reports/report-preferences'
+import { planReportFrequencies } from '@/features/subscriptions/model'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { formatSocialInterval } from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
@@ -34,6 +36,7 @@ type PlanInfo = {
   name: string | null
   history_days: number | null
   telegram_enabled: boolean | null
+  limits: Record<string, unknown> | null
 }
 
 type SocialAccess = {
@@ -129,7 +132,7 @@ async function loadOptionalPlan(
 
   const planResult = await supabase
     .from('subscription_plans')
-    .select('name,history_days,telegram_enabled')
+    .select('name,history_days,telegram_enabled,limits')
     .eq('id', planId)
     .maybeSingle()
 
@@ -458,6 +461,16 @@ function ProfilePage() {
           <p className='mt-3 text-sm text-muted-foreground'>{t("Bildirişləri dayandırmaq üçün botda /stop yazın.")}</p>
         ) : null}
       </section>
+
+      {emailReady ? (
+        <EmailReportPreferences
+          userId={profileState.userId}
+          email={profileState.email}
+          planFrequencies={planReportFrequencies({
+            limits: profileState.plan?.limits ?? {},
+          })}
+        />
+      ) : null}
 
       <section className='rounded-2xl border border-border bg-card p-5 shadow-sm'>
         <div className='mb-4 flex items-center gap-2'>

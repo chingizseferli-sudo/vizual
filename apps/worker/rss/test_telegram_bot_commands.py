@@ -338,6 +338,7 @@ def test_daily_cleanup_trims_log_tables(sm):
         ("DELETE", "sent_news"): ok,
         ("DELETE", "telegram_link_tokens"): ok,
         ("DELETE", "edge_rate_limits"): ok,
+        ("DELETE", "email_report_deliveries"): ok,
     })
     fake.delete = lambda url, **kwargs: fake._call("DELETE", url, **kwargs)
     sm.requests = fake
@@ -346,7 +347,7 @@ def test_daily_cleanup_trims_log_tables(sm):
     sm.cleanup_old_monitor_data_if_needed()
 
     cutoffs = {c["name"]: next(iter(c["params"].items())) for c in fake.calls if c["method"] == "DELETE"}
-    assert set(cutoffs) == {"discovery_logs", "sent_news", "telegram_link_tokens", "edge_rate_limits"}
+    assert set(cutoffs) == {"discovery_logs", "sent_news", "telegram_link_tokens", "edge_rate_limits", "email_report_deliveries"}
     now = datetime.now(ZoneInfo("Asia/Baku"))
 
     def days_kept(value):
@@ -355,6 +356,7 @@ def test_daily_cleanup_trims_log_tables(sm):
     assert cutoffs["discovery_logs"][0] == "created_at" and days_kept(cutoffs["discovery_logs"][1]) == 14
     assert days_kept(cutoffs["sent_news"][1]) == 30
     assert cutoffs["telegram_link_tokens"][0] == "expires_at"
+    assert days_kept(cutoffs["email_report_deliveries"][1]) == 90
 
     # Runs once a day.
     sm.cleanup_old_monitor_data_if_needed()

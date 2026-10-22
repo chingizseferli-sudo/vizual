@@ -4,6 +4,7 @@ import { Check, Pencil, Plus, RefreshCw, Users } from 'lucide-react'
 import { SOCIAL_INTERVAL_OPTIONS } from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
 import { ResponsiveTable } from '@/components/ui/responsive-table'
+import { EmailReportDeliveries } from '@/features/email-reports/admin-deliveries'
 import {
   BILLING_INTERVALS,
   buildPlanPayload,
@@ -11,7 +12,10 @@ import {
   formatPlanPrice,
   normalizePlanRow,
   planKeywordLimit,
+  planReportFrequencies,
   planSocialIntervalMinutes,
+  REPORT_FREQUENCIES,
+  REPORT_FREQUENCY_LABELS,
   planToFormValues,
   type PlanFormValues,
   type SubscriptionPlan,
@@ -518,6 +522,29 @@ function SubscriptionPlansPage() {
           </label>
         </div>
 
+        <fieldset className='mt-4 flex flex-wrap items-center gap-5'>
+          <legend className='mb-2 text-sm font-medium'>Email hesabatları</legend>
+          {REPORT_FREQUENCIES.map((frequency) => (
+            <label key={frequency} className='flex items-center gap-2 text-sm'>
+              <input
+                type='checkbox'
+                checked={form.reportFrequencies.includes(frequency)}
+                onChange={(event) =>
+                  updateForm(
+                    'reportFrequencies',
+                    event.target.checked
+                      ? [...form.reportFrequencies, frequency]
+                      : form.reportFrequencies.filter(
+                          (item) => item !== frequency
+                        )
+                  )
+                }
+              />
+              {REPORT_FREQUENCY_LABELS[frequency]}
+            </label>
+          ))}
+        </fieldset>
+
         <button
           type='submit'
           disabled={saving}
@@ -628,6 +655,16 @@ function SubscriptionPlansPage() {
                   </div>
                 </div>
                 <div className='rounded-lg bg-muted/50 p-2'>
+                  <div className='text-xs text-muted-foreground'>
+                    Email hesabat
+                  </div>
+                  <div className='font-semibold'>
+                    {planReportFrequencies(plan)
+                      .map((frequency) => REPORT_FREQUENCY_LABELS[frequency])
+                      .join(', ') || 'Yox'}
+                  </div>
+                </div>
+                <div className='rounded-lg bg-muted/50 p-2'>
                   <div className='text-xs text-muted-foreground'>Tarixçə</div>
                   <div className='font-semibold'>
                     {plan.history_days !== null
@@ -640,6 +677,8 @@ function SubscriptionPlansPage() {
           ))}
         </div>
       </section>
+
+      <EmailReportDeliveries />
 
       <section className='rounded-lg border bg-card'>
         <div className='flex flex-wrap items-center justify-between gap-3 border-b p-4'>

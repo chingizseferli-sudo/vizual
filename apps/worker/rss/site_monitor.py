@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 from dateutil import parser
 from lxml import html
 
+import email_reports
 import source_lifecycle as lifecycle
 from domain_policy import is_excluded_domain
 
@@ -4567,6 +4568,8 @@ def log_retention_rules(now):
         ("sent_news", "created_at", dedupe_cutoff),
         ("telegram_link_tokens", "expires_at", day_cutoff),
         ("edge_rate_limits", "window_start", day_cutoff),
+        # Only stops a report going out twice; old periods are never due again.
+        ("email_report_deliveries", "created_at", now - timedelta(days=90)),
     ]
 
 
@@ -5174,6 +5177,10 @@ def check_sites(poll_commands=True):
     cleanup_old_monitor_data_if_needed()
     account_housekeeping_if_needed()
     notify_admins_about_demo_requests()
+    try:
+        email_reports.send_due_reports(requests, SUPABASE_URL if supabase_ready() else "", supabase_headers(), REQUEST_TIMEOUT)
+    except Exception as exc:
+        print(f"Email hesabatları istisnasi: {redact_secrets(exc)}", flush=True)
     # Long-running mode (RUN_ONCE=0) keeps module state between cycles; keep the
     # per-article title cache bounded instead of growing for the process lifetime.
     if len(ARTICLE_TITLE_INFO_CACHE) > 20000:

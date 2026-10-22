@@ -5,6 +5,9 @@ import {
   formatPlanPrice,
   normalizePlanCode,
   planKeywordLimit,
+  planReportFrequencies,
+  planToFormValues,
+  normalizePlanRow,
 } from './model'
 
 describe('subscription plan model', () => {
@@ -82,6 +85,50 @@ describe('subscription plan model', () => {
     expect(cleared.limits).toEqual({})
     expect(planKeywordLimit(cleared)).toBe(60)
     expect(planKeywordLimit({ limits: {}, max_watches: null })).toBeNull()
+  })
+
+  it('stores the email reports a plan includes in a fixed order', () => {
+    const plan = buildPlanPayload(
+      {
+        ...emptyPlanForm,
+        name: 'Biznes',
+        reportFrequencies: ['monthly', 'daily'],
+      },
+      { report_frequencies: ['weekly'], other: 1 }
+    ).data!
+    expect(plan.limits).toEqual({
+      other: 1,
+      report_frequencies: ['daily', 'monthly'],
+    })
+    expect(planReportFrequencies(plan)).toEqual(['daily', 'monthly'])
+
+    const none = buildPlanPayload(
+      { ...emptyPlanForm, name: 'Demo' },
+      { report_frequencies: ['weekly'] }
+    ).data!
+    expect(none.limits).toEqual({})
+    expect(planReportFrequencies({ limits: { report_frequencies: 'x' } })).toEqual([])
+
+    const row = normalizePlanRow({
+      id: 'p',
+      code: 'pro',
+      name: 'Pro',
+      description: null,
+      is_active: true,
+      is_custom: false,
+      is_public: true,
+      price_amount: 119,
+      currency: 'AZN',
+      billing_interval: 'month',
+      display_order: 1,
+      max_watches: null,
+      minimum_interval_minutes: null,
+      history_days: 30,
+      telegram_enabled: true,
+      features: [],
+      limits: { report_frequencies: ['weekly', 'daily', 'hourly'] },
+    })
+    expect(planToFormValues(row).reportFrequencies).toEqual(['daily', 'weekly'])
   })
 
   it('formats recurring and custom prices', () => {
