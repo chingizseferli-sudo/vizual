@@ -16,6 +16,7 @@ import {
   type SubscriptionPlan,
   type UserSubscription,
 } from '@/features/subscriptions/model'
+import { friendlyError } from '@/lib/friendly-error'
 
 type UserProfile = {
   user_id: string
@@ -214,16 +215,16 @@ function AdminUserDetailsPage() {
     }
 
     if (profileRes.error) {
-      setMessage(profileRes.error.message)
+      setMessage(friendlyError(profileRes.error))
     }
     if (monitorsRes.error) {
-      setMessage(monitorsRes.error.message)
+      setMessage(friendlyError(monitorsRes.error))
     }
     if (plansRes.error) {
-      setMessage(plansRes.error.message)
+      setMessage(friendlyError(plansRes.error))
     }
     if (subscriptionsRes.error) {
-      setMessage(subscriptionsRes.error.message)
+      setMessage(friendlyError(subscriptionsRes.error))
     }
 
     const profileData = profileRes.data as UserProfile | null
@@ -336,17 +337,7 @@ function AdminUserDetailsPage() {
     setAssigningPlan(false)
 
     if (error) {
-      const knownErrors: Record<string, string> = {
-        USER_PROFILE_NOT_FOUND:
-          'Bu Auth istifadəçisi üçün user_profiles qeydi yoxdur. Əvvəlcə müştəri profilini yaradın.',
-        ACTIVE_PLAN_NOT_FOUND:
-          'Seçilmiş plan aktiv deyil və təyin edilə bilməz.',
-        SUBSCRIPTION_END_MUST_BE_FUTURE:
-          'Abunəliyin bitmə tarixi gələcəkdə olmalıdır.',
-        ADMIN_ACCESS_REQUIRED:
-          'Bu əməliyyat üçün aktiv admin icazəsi tələb olunur.',
-      }
-      setMessage(knownErrors[error.message] || error.message)
+      setMessage(friendlyError(error))
       return
     }
 
@@ -374,7 +365,7 @@ function AdminUserDetailsPage() {
     setReviewingSignup(false)
 
     if (error) {
-      setMessage(error.message)
+      setMessage(friendlyError(error))
       return
     }
 
@@ -394,7 +385,7 @@ function AdminUserDetailsPage() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage(error.message)
+      setMessage(friendlyError(error))
       return
     }
 
@@ -415,7 +406,7 @@ function AdminUserDetailsPage() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage(error.message)
+      setMessage(friendlyError(error))
       return
     }
 
@@ -442,7 +433,7 @@ function AdminUserDetailsPage() {
 
     if (profileError || monitorError) {
       setMessage(
-        profileError?.message || monitorError?.message || 'Xəta baş verdi'
+        friendlyError(profileError || monitorError)
       )
       return
     }
@@ -473,7 +464,7 @@ function AdminUserDetailsPage() {
 
     if (profileError || monitorError) {
       setMessage(
-        profileError?.message || monitorError?.message || 'Xəta baş verdi'
+        friendlyError(profileError || monitorError)
       )
       return
     }
@@ -500,7 +491,7 @@ function AdminUserDetailsPage() {
         .select('id')
         .single()
       if (error) {
-        setMessage(error.message)
+        setMessage(friendlyError(error))
         return
       }
       monitorId = data.id as string
@@ -513,7 +504,7 @@ function AdminUserDetailsPage() {
     })
 
     if (error) {
-      setMessage(error.message)
+      setMessage(friendlyError(error))
       return
     }
 
@@ -528,7 +519,7 @@ function AdminUserDetailsPage() {
       .eq('id', keyword.id)
 
     if (error) {
-      setMessage(error.message)
+      setMessage(friendlyError(error))
       return
     }
 
@@ -545,7 +536,7 @@ function AdminUserDetailsPage() {
       .eq('id', keyword.id)
 
     if (error) {
-      setMessage(error.message)
+      setMessage(friendlyError(error))
       return
     }
 

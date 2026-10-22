@@ -2,7 +2,6 @@
   Calculator,
   CreditCard,
   Eye,
-  FileText,
   Inbox,
   Globe,
   LayoutDashboard,
@@ -62,11 +61,6 @@ export const sidebarData: SidebarData = {
           title: 'Veb izləmə',
           url: '/monitor/watch-monitor',
           icon: Eye,
-        },
-        {
-          title: 'Bot logları',
-          url: '/admin/monitor/logs',
-          icon: FileText,
         },
         {
           title: 'Telegram bot',

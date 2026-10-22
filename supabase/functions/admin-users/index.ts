@@ -225,7 +225,8 @@ Deno.serve(withCors(async (req) => {
     try {
       await updateAuthUserPassword(supabaseUrl, serviceRoleKey, targetUserId, temporaryPassword);
     } catch (error) {
-      return json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      console.error("admin-users failed", error);
+    return json({ error: "Xəta baş verdi. Bir az sonra yenidən cəhd edin." }, 500);
     }
 
     return json({ ok: true, temporary_password: temporaryPassword });
@@ -250,7 +251,8 @@ Deno.serve(withCors(async (req) => {
       await deleteUserData(supabaseUrl, serviceRoleKey, targetUserId);
       await deleteAuthUser(supabaseUrl, serviceRoleKey, targetUserId);
     } catch (error) {
-      return json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      console.error("admin-users failed", error);
+    return json({ error: "Xəta baş verdi. Bir az sonra yenidən cəhd edin." }, 500);
     }
 
     return json({ ok: true });
@@ -269,7 +271,8 @@ Deno.serve(withCors(async (req) => {
     });
 
     if (!response.ok) {
-      return json({ error: `Auth users could not be read: ${response.status}`, detail: await response.text() }, 500);
+      console.error("admin-users: auth users could not be read", response.status, await response.text());
+      return json({ error: "Xəta baş verdi. Bir az sonra yenidən cəhd edin." }, 500);
     }
 
     const payload = await response.json();

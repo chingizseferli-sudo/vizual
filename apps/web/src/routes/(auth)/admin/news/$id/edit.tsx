@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { supabase } from '@/lib/supabase'
+import { friendlyError } from '@/lib/friendly-error'
 
 type NewsItem = {
   id: number
@@ -88,7 +89,7 @@ function RouteComponent() {
     setSaving(false)
 
     if (error) {
-      alert('Xəta: ' + error.message)
+      alert('Xəta: ' + friendlyError(error))
       return
     }
 

@@ -17,7 +17,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { PasswordInput } from '@/components/password-input'
-import { getAuthErrorMessage } from '../../auth-messages'
+import { friendlyError } from '@/lib/friendly-error'
 import { t } from '@/lib/i18n'
 
 const SUCCESS_MESSAGE = t("Şifrəniz uğurla yeniləndi.")
@@ -60,7 +60,7 @@ export function ResetPasswordForm({
     setIsLoading(false)
 
     if (error) {
-      toast.error(getAuthErrorMessage(error.message))
+      toast.error(friendlyError(error))
       return
     }
 

@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { getStatusBadgeClass, getStatusLabel } from '@/lib/status-ui'
 import { supabase } from '@/lib/supabase'
 import { ResponsiveTable } from '@/components/ui/responsive-table'
+import { friendlyError } from '@/lib/friendly-error'
 
 type Monitor = {
   id: string
@@ -78,21 +79,21 @@ function MonitorsPage() {
     ])
 
     if (monitorsRes.error) {
-      alert('Monitorlar oxunmadı: ' + monitorsRes.error.message)
+      alert('Monitorlar oxunmadı: ' + friendlyError(monitorsRes.error))
       setMonitors([])
     } else {
       setMonitors(monitorsRes.data || [])
     }
 
     if (keywordsRes.error) {
-      alert('Açar sözlər oxunmadı: ' + keywordsRes.error.message)
+      alert('Açar sözlər oxunmadı: ' + friendlyError(keywordsRes.error))
       setKeywords([])
     } else {
       setKeywords(keywordsRes.data || [])
     }
 
     if (matchesRes.error) {
-      alert('Nəticələr oxunmadı: ' + matchesRes.error.message)
+      alert('Nəticələr oxunmadı: ' + friendlyError(matchesRes.error))
       setMatches([])
     } else {
       setMatches(matchesRes.data || [])
@@ -132,7 +133,7 @@ function MonitorsPage() {
       .single()
 
     if (error || !createdMonitor) {
-      alert('Monitor yaradılmadı: ' + (error?.message || 'Naməlum xəta'))
+      alert('Monitor yaradılmadı: ' + (friendlyError(error)))
       return
     }
 
@@ -155,7 +156,7 @@ function MonitorsPage() {
       if (keywordError) {
         alert(
           'Monitor yaradıldı, amma açar sözlər əlavə olunmadı: ' +
-            keywordError.message
+            friendlyError(keywordError)
         )
       }
     }
@@ -177,7 +178,7 @@ function MonitorsPage() {
       .eq('id', monitor.id)
 
     if (error) {
-      alert('Status dəyişmədi: ' + error.message)
+      alert('Status dəyişmədi: ' + friendlyError(error))
       return
     }
 
@@ -202,7 +203,7 @@ function MonitorsPage() {
       .eq('id', monitor.id)
 
     if (error) {
-      alert('Monitor silinmədi: ' + error.message)
+      alert('Monitor silinmədi: ' + friendlyError(error))
       return
     }
 

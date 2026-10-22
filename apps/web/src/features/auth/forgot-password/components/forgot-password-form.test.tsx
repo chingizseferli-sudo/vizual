@@ -87,7 +87,9 @@ describe('ForgotPasswordForm', () => {
     await userEvent.click(continueButton)
 
     await vi.waitFor(() => {
-      expect(mocks.toastError).toHaveBeenCalledWith('Email rate limit exceeded')
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        'Çox sayda email göndərildi. Bir neçə dəqiqədən sonra yenidən cəhd edin.'
+      )
       expect(mocks.navigate).not.toHaveBeenCalled()
     })
   })

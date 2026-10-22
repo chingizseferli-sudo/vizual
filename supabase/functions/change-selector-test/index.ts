@@ -182,8 +182,8 @@ Deno.serve(withCors(async (req) => {
       error: null,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     const isAbort = error instanceof DOMException && error.name === "AbortError";
-    return fail(isAbort ? "Sorğu vaxt limitini keçdi." : message);
+    if (!isAbort) console.error("change-selector-test failed", error);
+    return fail(isAbort ? "Sorğu vaxt limitini keçdi." : "Səhifə oxunmadı. Bir az sonra yenidən cəhd edin.");
   }
 }));

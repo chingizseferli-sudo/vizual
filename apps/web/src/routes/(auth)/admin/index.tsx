@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { supabase } from '@/lib/supabase'
 import { PortalLoading } from '@/components/layout/portal-state'
+import { friendlyError } from '@/lib/friendly-error'
 
 type SourceRow = {
   id: string
@@ -770,7 +771,7 @@ function DashboardPage() {
 
     return {
       count: result.error ? null : result.count || 0,
-      error: result.error?.message || null,
+      error: result.error ? friendlyError(result.error) : null,
     }
   }
 
@@ -825,15 +826,17 @@ function DashboardPage() {
     ])
 
     const errors = [
-      sourcesResult.error?.message,
-      items24hResult.error?.message,
-      itemsTodayResult.error?.message,
-      matches24hResult.error?.message,
-      matchesTodayResult.error?.message,
+      sourcesResult.error,
+      items24hResult.error,
+      itemsTodayResult.error,
+      matches24hResult.error,
+      matchesTodayResult.error,
       alertsTodayResult.error,
-      itemsFlowResult.error?.message,
-      matches7dResult.error?.message,
-    ].filter(Boolean)
+      itemsFlowResult.error,
+      matches7dResult.error,
+    ]
+      .filter(Boolean)
+      .map((error) => (typeof error === 'string' ? error : friendlyError(error)))
 
     if (errors.length > 0) {
       setMessage(errors.join(' | '))

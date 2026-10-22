@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { AlertTriangle, Loader2, RefreshCw, Send, Users } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { friendlyError } from '@/lib/friendly-error'
 
 const STALE_POLL_MS = 10 * 60 * 1000
 // Delivery reasons written to sources.last_result by the rss worker.
@@ -86,12 +87,12 @@ async function fetchTelegramAdminData(): Promise<TelegramAdminData> {
     ])
 
   const errors = [
-    stateResult.error && `Bot vəziyyəti: ${stateResult.error.message}`,
-    settingsResult.error && `Tənzimləmələr: ${settingsResult.error.message}`,
+    stateResult.error && `Bot vəziyyəti: ${friendlyError(stateResult.error)}`,
+    settingsResult.error && `Tənzimləmələr: ${friendlyError(settingsResult.error)}`,
     linkedResult.error &&
-      `Qoşulmuş istifadəçilər: ${linkedResult.error.message}`,
+      `Qoşulmuş istifadəçilər: ${friendlyError(linkedResult.error)}`,
     failuresResult.error &&
-      `Göndərmə xətaları: ${failuresResult.error.message}`,
+      `Göndərmə xətaları: ${friendlyError(failuresResult.error)}`,
   ].filter(Boolean) as string[]
 
   const state = stateResult.data as {
@@ -122,7 +123,7 @@ async function setNotificationsPaused(paused: boolean) {
     .eq('id', 1)
     .select('notifications_paused')
 
-  if (error) throw new Error(error.message)
+  if (error) throw error
   if (!data || data.length === 0) {
     throw new Error('bot_settings sətri tapılmadı və ya icazə yoxdur.')
   }
@@ -366,7 +367,7 @@ function TelegramAdminPage() {
             </div>
             {pauseMutation.isError ? (
               <p className='mt-2 text-sm text-destructive' role='alert'>
-                Dəyişmədi: {pauseMutation.error.message}
+                Dəyişmədi: {friendlyError(pauseMutation.error)}
               </p>
             ) : null}
             <p className='mt-2 text-xs text-muted-foreground'>

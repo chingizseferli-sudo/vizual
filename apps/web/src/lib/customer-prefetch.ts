@@ -29,7 +29,7 @@ async function prefetchWatchMonitorData() {
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
 
-  if (watchesError) throw new Error(watchesError.message)
+  if (watchesError) throw watchesError
 
   const watchRows = watches || []
   const watchIds = watchRows.map((watch) => watch.id)
@@ -42,7 +42,7 @@ async function prefetchWatchMonitorData() {
     .order('created_at', { ascending: false })
     .limit(150)
 
-  if (eventsError) throw new Error(eventsError.message)
+  if (eventsError) throw eventsError
 
   return { userId, watches: watchRows, events: events || [] }
 }

@@ -5,6 +5,7 @@ import {
   type PixelPickedElement,
 } from '@/lib/selector-picker'
 import { supabase } from '@/lib/supabase'
+import { friendlyError } from '@/lib/friendly-error'
 
 type Source = {
   id: string
@@ -99,7 +100,7 @@ function SelectorPickerPage() {
       .single()
 
     if (error) {
-      setMessage('Mənbə oxunmadı: ' + error.message)
+      setMessage('Mənbə oxunmadı: ' + friendlyError(error))
       setLoading(false)
       return
     }
@@ -122,7 +123,7 @@ function SelectorPickerPage() {
 
     if (error) {
       setMessage(
-        `Proxy xətası: ${error.message}. Sayt pəncərədə açılmırsa, real brauzerdə açıb extension ilə selector seçin.`
+        `Proxy xətası: ${friendlyError(error)}. Sayt pəncərədə açılmırsa, real brauzerdə açıb extension ilə selector seçin.`
       )
       setHtml('')
       setLoadingPage(false)
@@ -178,10 +179,10 @@ function SelectorPickerPage() {
         ok: false,
         matchedCount: 0,
         previewText: '',
-        error: error.message,
+        error: friendlyError(error),
       }
       setTestResult(result)
-      setMessage('Selector test edilmədi: ' + error.message)
+      setMessage('Selector test edilmədi: ' + friendlyError(error))
       return result
     }
 
@@ -241,7 +242,7 @@ function SelectorPickerPage() {
     setSaving(false)
 
     if (error) {
-      setMessage('Selector saxlanmadı: ' + error.message)
+      setMessage('Selector saxlanmadı: ' + friendlyError(error))
       return
     }
 

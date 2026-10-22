@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Check, Loader2, Mail, Phone, RefreshCw, RotateCcw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { friendlyError } from '@/lib/friendly-error'
 
 type DemoRequest = {
   id: string
@@ -46,7 +47,7 @@ async function fetchDemoRequests(filter: Filter) {
     .limit(200)
   if (filter === 'new') query = query.eq('status', 'new')
   const { data, error } = await query
-  if (error) throw new Error(error.message)
+  if (error) throw error
   return (data || []) as DemoRequest[]
 }
 
@@ -64,7 +65,7 @@ async function setRequestStatus({
       handled_at: status === 'handled' ? new Date().toISOString() : null,
     })
     .eq('id', id)
-  if (error) throw new Error(error.message)
+  if (error) throw error
 }
 
 function DemoRequestsPage() {
@@ -134,7 +135,7 @@ function DemoRequestsPage() {
           role='alert'
           className='rounded-lg border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive'
         >
-          Müraciətlər yüklənmədi: {error.message}
+          Müraciətlər yüklənmədi: {friendlyError(error)}
           <div className='mt-1 text-xs'>
             Migrasiya (20261021000001_demo_requests_and_site_copy) tətbiq
             olunmayıbsa, cədvəl hələ mövcud deyil.
@@ -146,7 +147,7 @@ function DemoRequestsPage() {
           role='alert'
           className='rounded-lg border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive'
         >
-          Status dəyişmədi: {statusMutation.error.message}
+          Status dəyişmədi: {friendlyError(statusMutation.error)}
         </div>
       ) : null}
 

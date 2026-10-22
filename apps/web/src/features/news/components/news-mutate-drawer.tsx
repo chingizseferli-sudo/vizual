@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/sheet'
 import { SelectDropdown } from '@/components/select-dropdown'
 import { NewsEditor } from './news-editor'
+import { friendlyError } from '@/lib/friendly-error'
 
 export type NewsItem = {
   id: number
@@ -119,7 +120,7 @@ export function NewsMutateDrawer({
         .eq('id', currentRow.id)
 
       if (error) {
-        alert('Xəta: ' + error.message)
+        alert('Xəta: ' + friendlyError(error))
         return
       }
     } else {
@@ -147,7 +148,7 @@ export function NewsMutateDrawer({
       })
 
       if (error) {
-        alert('Xəta: ' + error.message)
+        alert('Xəta: ' + friendlyError(error))
         return
       }
     }
@@ -284,7 +285,7 @@ export function NewsMutateDrawer({
                             .upload(fileName, file)
 
                           if (error) {
-                            alert(error.message)
+                            alert(friendlyError(error))
                             return
                           }
 

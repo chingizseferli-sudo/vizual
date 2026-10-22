@@ -23,6 +23,7 @@ import {
   type SubscriptionPlan,
   type UserSubscription,
 } from '@/features/subscriptions/model'
+import { friendlyError } from '@/lib/friendly-error'
 
 type ProfileRow = {
   user_id: string
@@ -96,7 +97,7 @@ function SubscriptionPlansPage() {
 
     if (error) {
       setMessageTone('error')
-      setMessage(`Məlumatlar yüklənmədi: ${error.message}`)
+      setMessage(`Məlumatlar yüklənmədi: ${friendlyError(error)}`)
     }
 
     setPlans(
@@ -193,7 +194,7 @@ function SubscriptionPlansPage() {
 
     if (response.error) {
       setMessageTone('error')
-      setMessage(`Plan saxlanmadı: ${response.error.message}`)
+      setMessage(`Plan saxlanmadı: ${friendlyError(response.error)}`)
       return
     }
 
@@ -220,7 +221,7 @@ function SubscriptionPlansPage() {
 
     if (error) {
       setMessageTone('error')
-      setMessage(`Plan statusu dəyişmədi: ${error.message}`)
+      setMessage(`Plan statusu dəyişmədi: ${friendlyError(error)}`)
       return
     }
 

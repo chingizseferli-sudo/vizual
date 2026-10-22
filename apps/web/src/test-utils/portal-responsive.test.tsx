@@ -52,7 +52,6 @@ const routes = [
   '/admin/monitor/sources',
   '/admin/monitor/results',
   '/admin/monitor/alerts',
-  '/admin/monitor/logs',
   '/admin/monitor/problems',
   '/admin/monitor/picker',
   '/admin/news',
@@ -154,7 +153,7 @@ describe.each(widths)('Portal at %ipx', (width) => {
     )!
     if (!path.includes('/errors/'))
       expect(inset.textContent).not.toMatch(
-        /Something went wrong|Səhifə tapılmadı/
+        /Xəta baş verdi|Səhifə tapılmadı/
       )
     expect(window.innerWidth).toBe(width)
     expect(document.querySelectorAll('main, [role=main]')).toHaveLength(1)

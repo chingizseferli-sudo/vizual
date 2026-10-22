@@ -23,6 +23,7 @@ import { formatSocialInterval } from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
 import { openExternalUrl } from '@/lib/utils'
 import { dateLocale, t } from '@/lib/i18n'
+import { friendlyError } from '@/lib/friendly-error'
 
 type ProfileRow = {
   user_id: string
@@ -108,7 +109,7 @@ async function createTelegramLinkUrl() {
   const { data, error } = await supabase.rpc('create_telegram_link_token')
 
   if (error || typeof data !== 'string' || !data) {
-    throw new Error(error?.message || t("Telegram linki yaradılmadı."))
+    throw new Error(friendlyError(error, t("Telegram linki yaradılmadı.")))
   }
 
   return getTelegramBotUrl(data)

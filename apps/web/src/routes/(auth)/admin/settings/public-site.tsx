@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { friendlyError } from '@/lib/friendly-error'
 
 type SectionRow = {
   section_key: string
@@ -209,7 +210,7 @@ function PublicSiteSettingsPage() {
     setSaving(false)
 
     if (error) {
-      toast.error(`Məzmun yadda saxlanmadı: ${error.message}`)
+      toast.error(`Məzmun yadda saxlanmadı: ${friendlyError(error)}`)
       return
     }
 

@@ -36,6 +36,7 @@ import {
   toneShares,
   updateCompetitor,
 } from '@/features/competitors/data'
+import { friendlyError } from '@/lib/friendly-error'
 
 const HEADLINES_PER_COMPETITOR = 5
 const PERIODS = [7, 30] as const
@@ -581,7 +582,7 @@ function CompetitorsPage() {
         {query.error ? (
           <div className='rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive'>
             {query.error instanceof Error
-              ? query.error.message
+              ? friendlyError(query.error)
               : t('Rəqiblər yüklənmədi.')}
           </div>
         ) : null}

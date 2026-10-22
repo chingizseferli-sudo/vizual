@@ -4,6 +4,7 @@ import { Download } from 'lucide-react'
 import { getStatusBadgeClass, getStatusLabel } from '@/lib/status-ui'
 import { supabase } from '@/lib/supabase'
 import { ResponsiveTable } from '@/components/ui/responsive-table'
+import { friendlyError } from '@/lib/friendly-error'
 
 type Monitor = {
   id: string
@@ -93,7 +94,7 @@ function ResultsPage() {
       .limit(500)
 
     if (matchError) {
-      alert('Monitor nəticələri oxunmadı: ' + matchError.message)
+      alert('Monitor nəticələri oxunmadı: ' + friendlyError(matchError))
       setMatches([])
       setItems([])
       setMonitors([])
@@ -123,7 +124,7 @@ function ResultsPage() {
         .in('id', itemIds)
 
       if (error) {
-        alert('Xəbərlər oxunmadı: ' + error.message)
+        alert('Xəbərlər oxunmadı: ' + friendlyError(error))
       } else {
         itemData = data || []
       }
@@ -136,7 +137,7 @@ function ResultsPage() {
         .in('id', monitorIds)
 
       if (error) {
-        alert('Monitor adları oxunmadı: ' + error.message)
+        alert('Monitor adları oxunmadı: ' + friendlyError(error))
       } else {
         monitorData = data || []
       }
@@ -153,7 +154,7 @@ function ResultsPage() {
         .in('id', sourceIds)
 
       if (error) {
-        alert('Mənbələr oxunmadı: ' + error.message)
+        alert('Mənbələr oxunmadı: ' + friendlyError(error))
       } else {
         sourceData = data || []
       }

@@ -7,6 +7,7 @@ import {
   isMissingTableError,
 } from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
+import { friendlyError } from '@/lib/friendly-error'
 
 const socialAdminQueryKey = ['admin', 'social'] as const
 
@@ -86,10 +87,10 @@ async function fetchSocialAdminData(): Promise<SocialAdminData> {
       ]
     : ([
         settingsResult.error &&
-          `Tənzimləmələr yüklənmədi: ${settingsResult.error.message}`,
+          `Tənzimləmələr yüklənmədi: ${friendlyError(settingsResult.error)}`,
         keywordsResult.error &&
-          `Açar sözlər yüklənmədi: ${keywordsResult.error.message}`,
-        usageResult.error && `Xərc yüklənmədi: ${usageResult.error.message}`,
+          `Açar sözlər yüklənmədi: ${friendlyError(keywordsResult.error)}`,
+        usageResult.error && `Xərc yüklənmədi: ${friendlyError(usageResult.error)}`,
       ].filter(Boolean) as string[])
 
   return {
@@ -109,7 +110,7 @@ async function updateSocialSettings(patch: Partial<SocialSettings>) {
     .eq('id', 1)
     .select('id')
 
-  if (error) throw new Error(error.message)
+  if (error) throw error
   if (!data || data.length === 0) {
     throw new Error('social_settings sətri tapılmadı və ya icazə yoxdur.')
   }
@@ -226,7 +227,7 @@ function SocialAdminPage() {
 
       {mutation.isError ? (
         <p className='text-sm text-destructive' role='alert'>
-          Dəyişmədi: {mutation.error.message}
+          Dəyişmədi: {friendlyError(mutation.error)}
         </p>
       ) : null}
 

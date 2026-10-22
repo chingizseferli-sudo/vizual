@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { t } from '@/lib/i18n'
+import { friendlyError } from '@/lib/friendly-error'
 
 // Customers manage a flat list of keywords. user_monitors stays as a hidden
 // container (one non-archived monitor per customer since migration
@@ -60,7 +61,7 @@ async function loadMonitors(userId: string) {
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: true })
-  if (error) throw new Error(t("Açar sözlər oxunmadı: {0}", [error.message]))
+  if (error) throw new Error(t("Açar sözlər oxunmadı: {0}", [friendlyError(error)]))
   return ((data || []) as MonitorRow[]).filter(
     (monitor) => monitor.status !== 'archived'
   )
@@ -95,7 +96,7 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
     .select('*')
     .in('monitor_id', [...monitorStatus.keys()])
     .order('created_at', { ascending: true })
-  if (error) throw new Error(t("Açar sözlər oxunmadı: {0}", [error.message]))
+  if (error) throw new Error(t("Açar sözlər oxunmadı: {0}", [friendlyError(error)]))
 
   const rows = (data || []) as KeywordRow[]
   const statusSupported = rows.length === 0 || 'status' in rows[0]
@@ -144,7 +145,7 @@ export function keywordErrorMessage(error: { message: string }) {
   if (message.includes('KEYWORD_LENGTH_INVALID')) {
     return t("Açar söz 1-200 simvol olmalıdır.")
   }
-  return message || t("Naməlum xəta")
+  return friendlyError(error)
 }
 
 function isMissingFunction(error: RpcError) {

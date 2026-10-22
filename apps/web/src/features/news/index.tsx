@@ -6,6 +6,7 @@ import { ResponsiveTable } from '@/components/ui/responsive-table'
 import { NewsDialogs } from './components/news-dialogs'
 import { NewsProvider, useNews } from './components/news-provider'
 import { NewsRowActions } from './components/news-row-actions'
+import { friendlyError } from '@/lib/friendly-error'
 
 type NewsItem = {
   id: number
@@ -68,7 +69,7 @@ function NewsPageContent({
       .eq('id', id)
 
     if (error) {
-      alert('Xəta: ' + error.message)
+      alert('Xəta: ' + friendlyError(error))
       return
     }
 
@@ -84,7 +85,7 @@ function NewsPageContent({
       .eq('id', id)
 
     if (error) {
-      alert('Xəta: ' + error.message)
+      alert('Xəta: ' + friendlyError(error))
       return
     }
 

@@ -125,7 +125,7 @@ describe('ResetPasswordForm', () => {
 
     await vi.waitFor(() => {
       expect(mocks.toastError).toHaveBeenCalledWith(
-        'Linkin vaxtı bitib və ya etibarsızdır. Zəhmət olmasa yenidən link istəyin.'
+        'Linkin və ya kodun vaxtı bitib. Zəhmət olmasa yenisini istəyin.'
       )
       expect(mocks.navigate).not.toHaveBeenCalled()
     })

@@ -85,7 +85,8 @@ export async function requireAuthenticated(req: Request, json: JsonResponder): P
     supabaseUrl = env("SUPABASE_URL").replace(/\/$/, "");
     serviceRoleKey = env("SUPABASE_SERVICE_ROLE_KEY");
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    console.error("auth failed", error);
+    return json({ error: "Xəta baş verdi. Bir az sonra yenidən cəhd edin." }, 500);
   }
 
   const user = await getUserFromJwt(supabaseUrl, serviceRoleKey, token);
@@ -115,7 +116,8 @@ export async function requireAdmin(req: Request, json: JsonResponder): Promise<A
     supabaseUrl = env("SUPABASE_URL").replace(/\/$/, "");
     serviceRoleKey = env("SUPABASE_SERVICE_ROLE_KEY");
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    console.error("auth failed", error);
+    return json({ error: "Xəta baş verdi. Bir az sonra yenidən cəhd edin." }, 500);
   }
 
   const user = await getUserFromJwt(supabaseUrl, serviceRoleKey, token);

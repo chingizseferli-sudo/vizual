@@ -56,6 +56,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { dateLocale, t } from '@/lib/i18n'
+import { friendlyError } from '@/lib/friendly-error'
 
 type ChangeSourceStatus = 'active' | 'inactive' | 'paused'
 
@@ -1496,7 +1497,7 @@ function ChangeMonitorPage() {
       const sourcesRes = await sourcesQuery
 
       if (sourcesRes.error) {
-        setError(t("İzləmələr oxunmadı: {0}", [sourcesRes.error.message]))
+        setError(t("İzləmələr oxunmadı: {0}", [friendlyError(sourcesRes.error)]))
         return
       }
 
@@ -1539,15 +1540,15 @@ function ChangeMonitorPage() {
       ])
 
       if (eventsRes.error) {
-        setError(t("Dəyişiklik tarixçəsi oxunmadı: {0}", [eventsRes.error.message]))
+        setError(t("Dəyişiklik tarixçəsi oxunmadı: {0}", [friendlyError(eventsRes.error)]))
         return
       }
       if (recentEventsRes.error) {
-        setError(t("Son nəticələr oxunmadı: {0}", [recentEventsRes.error.message]))
+        setError(t("Son nəticələr oxunmadı: {0}", [friendlyError(recentEventsRes.error)]))
         return
       }
       if (alertsRes.error) {
-        setError(t("Bildirişlər oxunmadı: {0}", [alertsRes.error.message]))
+        setError(t("Bildirişlər oxunmadı: {0}", [friendlyError(alertsRes.error)]))
         return
       }
 
@@ -1555,7 +1556,7 @@ function ChangeMonitorPage() {
       setRecentEvents((recentEventsRes.data || []) as ChangeEvent[])
       setAlerts((alertsRes.data || []) as ChangeAlert[])
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("İzləmələr oxunmadı."))
+      setError(friendlyError(err, t("İzləmələr oxunmadı.")))
     } finally {
       setLoading(false)
     }
@@ -1681,9 +1682,7 @@ function ChangeMonitorPage() {
       access = await requireChangeMonitorAccess()
     } catch (err) {
       const message =
-        err instanceof Error
-          ? err.message
-          : t("Sessiya tapılmadı. Yenidən daxil olun.")
+        friendlyError(err, t("Sessiya tapılmadı. Yenidən daxil olun."))
       toast.error(message)
       publishExtensionSaveResult(payload, 'error', message)
       return
@@ -1704,7 +1703,7 @@ function ChangeMonitorPage() {
     const { data: existing, error: existingError } = await existingQuery
 
     if (existingError) {
-      const message = t("İzləmə yoxlanmadı: {0}", [existingError.message])
+      const message = t("İzləmə yoxlanmadı: {0}", [friendlyError(existingError)])
       toast.error(message)
       publishExtensionSaveResult(payload, 'error', message)
       return
@@ -1737,7 +1736,7 @@ function ChangeMonitorPage() {
       })
 
     if (insertError) {
-      const message = t("İzləmə əlavə edilmədi: {0}", [insertError.message])
+      const message = t("İzləmə əlavə edilmədi: {0}", [friendlyError(insertError)])
       toast.error(message)
       publishExtensionSaveResult(payload, 'error', message)
       return
@@ -1789,7 +1788,7 @@ function ChangeMonitorPage() {
     if (invokeError) {
       setVisualHtml('')
       setVisualMessage(
-        t("Proxy xətası: {0}. Sayt pəncərədə açılmırsa, \"Saytı ayrıca aç\" düyməsi ilə brauzer extension-dan selector seçin.", [invokeError.message])
+        t("Proxy xətası: {0}. Sayt pəncərədə açılmırsa, \"Saytı ayrıca aç\" düyməsi ilə brauzer extension-dan selector seçin.", [friendlyError(invokeError)])
       )
       setVisualLoading(false)
       return
@@ -1829,9 +1828,7 @@ function ChangeMonitorPage() {
       access = await requireChangeMonitorAccess()
     } catch (err) {
       const message =
-        err instanceof Error
-          ? err.message
-          : t("Sessiya tapılmadı. Yenidən daxil olun.")
+        friendlyError(err, t("Sessiya tapılmadı. Yenidən daxil olun."))
       setSaving(false)
       setFormError(message)
       toast.error(message)
@@ -1866,8 +1863,8 @@ function ChangeMonitorPage() {
 
     if (response.error) {
       const message = editingSource
-        ? t("İzləmə yenilənmədi: {0}", [response.error.message])
-        : t("İzləmə əlavə edilmədi: {0}", [response.error.message])
+        ? t("İzləmə yenilənmədi: {0}", [friendlyError(response.error)])
+        : t("İzləmə əlavə edilmədi: {0}", [friendlyError(response.error)])
       setFormError(message)
       toast.error(message)
       return false
@@ -1915,7 +1912,11 @@ function ChangeMonitorPage() {
       ok: Boolean(data?.ok) && Number(data?.matchedCount || 0) > 0,
       matchedCount: Number(data?.matchedCount || 0),
       previewText: String(data?.previewText || ''),
-      error: invokeError?.message || data?.error || null,
+      error: invokeError
+        ? friendlyError(invokeError)
+        : data?.error
+          ? friendlyError({ message: data.error }, t("Seçilmiş hissə oxunmadı. Daha dəqiq element seçin."))
+          : null,
     }
 
     setSelectorTesting(false)
@@ -2031,9 +2032,7 @@ function ChangeMonitorPage() {
       access = await requireChangeMonitorAccess()
     } catch (err) {
       const message =
-        err instanceof Error
-          ? err.message
-          : t("Sessiya tapılmadı. Yenidən daxil olun.")
+        friendlyError(err, t("Sessiya tapılmadı. Yenidən daxil olun."))
       toast.error(message)
       setError(message)
       return
@@ -2044,11 +2043,11 @@ function ChangeMonitorPage() {
     try {
       for (const id of ids) {
         const error = await deleteSourceWithFallback(id, access.userId)
-        if (error) deleteErrors.push(error.message)
+        if (error) deleteErrors.push(friendlyError(error))
       }
     } catch (err) {
       deleteErrors.push(
-        err instanceof Error ? err.message : t("İzləmə silinmədi.")
+        friendlyError(err, t("İzləmə silinmədi."))
       )
     } finally {
       setDeleting(false)
@@ -2077,9 +2076,7 @@ function ChangeMonitorPage() {
       access = await requireChangeMonitorAccess()
     } catch (err) {
       const message =
-        err instanceof Error
-          ? err.message
-          : t("Sessiya tapılmadı. Yenidən daxil olun.")
+        friendlyError(err, t("Sessiya tapılmadı. Yenidən daxil olun."))
       toast.error(message)
       setError(message)
       return
@@ -2094,7 +2091,7 @@ function ChangeMonitorPage() {
     const { error: statusError } = await statusQuery
 
     if (statusError) {
-      const message = t("Status dəyişmədi: {0}", [statusError.message])
+      const message = t("Status dəyişmədi: {0}", [friendlyError(statusError)])
       toast.error(message)
       setError(message)
       return
@@ -2140,7 +2137,7 @@ function ChangeMonitorPage() {
       .in('id', snapshotIds)
 
     if (snapshotError) {
-      setDetailError(t("Snapshot məlumatı oxunmadı: {0}", [snapshotError.message]))
+      setDetailError(t("Snapshot məlumatı oxunmadı: {0}", [friendlyError(snapshotError)]))
       setDetailLoading(false)
       return
     }
@@ -2178,7 +2175,7 @@ function ChangeMonitorPage() {
         .limit(10)
 
       if (eventError)
-        throw new Error(t("Dəyişiklik nəticəsi oxunmadı: {0}", [eventError.message]))
+        throw new Error(t("Dəyişiklik nəticəsi oxunmadı: {0}", [friendlyError(eventError)]))
 
       const events = (eventData || []) as ChangeEvent[]
       const snapshotIds = Array.from(
@@ -2199,7 +2196,7 @@ function ChangeMonitorPage() {
 
         if (snapshotError)
           throw new Error(
-            t("Snapshot məlumatı oxunmadı: {0}", [snapshotError.message])
+            t("Snapshot məlumatı oxunmadı: {0}", [friendlyError(snapshotError)])
           )
 
         for (const snapshot of (snapshotData || []) as ChangeSnapshot[]) {
@@ -2226,7 +2223,7 @@ function ChangeMonitorPage() {
 
       if (latestSnapshotError)
         throw new Error(
-          t("Son snapshot məlumatı oxunmadı: {0}", [latestSnapshotError.message])
+          t("Son snapshot məlumatı oxunmadı: {0}", [friendlyError(latestSnapshotError)])
         )
 
       latestSnapshots = (latestSnapshotData || []) as ChangeSnapshot[]
@@ -2244,7 +2241,7 @@ function ChangeMonitorPage() {
         .maybeSingle()
 
       if (alertError)
-        throw new Error(t("Bildiriş məlumatı oxunmadı: {0}", [alertError.message]))
+        throw new Error(t("Bildiriş məlumatı oxunmadı: {0}", [friendlyError(alertError)]))
 
       setExpandedDetails((current) => ({
         ...current,
@@ -2258,7 +2255,7 @@ function ChangeMonitorPage() {
     } catch (detailLoadError) {
       const message =
         detailLoadError instanceof Error
-          ? detailLoadError.message
+          ? friendlyError(detailLoadError)
           : t("Məlumat oxunmadı.")
       setExpandedErrors((current) => ({ ...current, [source.id]: message }))
     } finally {
@@ -2312,7 +2309,7 @@ function ChangeMonitorPage() {
       .maybeSingle()
 
     if (eventError) {
-      setDetailError(t("Dəyişiklik hadisəsi oxunmadı: {0}", [eventError.message]))
+      setDetailError(t("Dəyişiklik hadisəsi oxunmadı: {0}", [friendlyError(eventError)]))
       setDetailLoading(false)
       return
     }
@@ -2341,7 +2338,7 @@ function ChangeMonitorPage() {
       .in('id', snapshotIds)
 
     if (snapshotError) {
-      setDetailError(t("Snapshot məlumatı oxunmadı: {0}", [snapshotError.message]))
+      setDetailError(t("Snapshot məlumatı oxunmadı: {0}", [friendlyError(snapshotError)]))
       setDetailLoading(false)
       return
     }

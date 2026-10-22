@@ -34,7 +34,7 @@ export async function fetchAllMonitorIds(userId: string) {
     .from('user_monitors')
     .select('id')
     .eq('user_id', userId)
-  if (error) throw new Error(error.message)
+  if (error) throw error
   return (data || []).map((item) => item.id as string)
 }
 

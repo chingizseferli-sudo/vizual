@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ResponsiveTable } from '@/components/ui/responsive-table'
+import { friendlyError } from '@/lib/friendly-error'
 
 type UserProfile = {
   user_id: string
@@ -151,7 +152,7 @@ function UsersPage() {
       plansRes.error,
     ]
       .filter(Boolean)
-      .map((error) => error?.message)
+      .map((error) => friendlyError(error))
 
     if (errors.length > 0) {
       setMessage(errors.join(' | '))
@@ -308,7 +309,7 @@ function UsersPage() {
 
     if (error) {
       setMessage(
-        `${approve ? 'Təsdiqlənmədi' : 'Rədd edilmədi'}: ${error.message}`
+        `${approve ? 'Təsdiqlənmədi' : 'Rədd edilmədi'}: ${friendlyError(error)}`
       )
       return
     }
@@ -340,7 +341,7 @@ function UsersPage() {
     })
 
     if (error) {
-      setMessage(`İstifadəçi silinmədi: ${error.message}`)
+      setMessage(`İstifadəçi silinmədi: ${friendlyError(error)}`)
       setDeletingUserId(null)
       return
     }
@@ -373,7 +374,7 @@ function UsersPage() {
 
     if (error || !data?.temporary_password) {
       setMessage(
-        `Müvəqqəti parol yaradılmadı: ${error?.message || 'Naməlum xəta'}`
+        `Müvəqqəti parol yaradılmadı: ${friendlyError(error)}`
       )
       setResettingUserId(null)
       return

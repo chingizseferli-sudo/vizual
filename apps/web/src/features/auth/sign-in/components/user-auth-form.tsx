@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
-import { getAuthErrorMessage } from '../../auth-messages'
+import { friendlyError } from '@/lib/friendly-error'
 import { t } from '@/lib/i18n'
 
 const formSchema = z.object({
@@ -149,7 +149,7 @@ export function UserAuthForm({
 
     if (signInError || !authData.user) {
       setIsLoading(false)
-      toast.error(getAuthErrorMessage(signInError?.message))
+      toast.error(friendlyError(signInError))
       return
     }
 

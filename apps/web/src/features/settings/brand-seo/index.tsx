@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ContentSection } from '../components/content-section'
+import { friendlyError } from '@/lib/friendly-error'
 
 const text = {
   title: 'Brend v\u0259 SEO',
@@ -101,7 +102,7 @@ export function SettingsBrandSeo() {
       applyPublicSiteMetadata(settings)
       toast.success(text.saved)
     } catch (error) {
-      const message = error instanceof Error ? error.message : text.saveError
+      const message = friendlyError(error, text.saveError)
       toast.error(message)
     } finally {
       setIsSaving(false)
@@ -145,7 +146,7 @@ export function SettingsBrandSeo() {
       updateField(field, data.publicUrl)
       toast.success(text.uploadSuccess)
     } catch (error) {
-      const message = error instanceof Error ? error.message : text.uploadError
+      const message = friendlyError(error, text.uploadError)
       toast.error(message)
     } finally {
       setUploadingField(null)

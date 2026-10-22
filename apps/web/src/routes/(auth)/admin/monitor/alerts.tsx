@@ -8,6 +8,7 @@ import {
 } from '@/lib/status-ui'
 import { supabase } from '@/lib/supabase'
 import { ResponsiveTable } from '@/components/ui/responsive-table'
+import { friendlyError } from '@/lib/friendly-error'
 
 type AlertRow = {
   id: string
@@ -95,7 +96,7 @@ function AlertsPage() {
       .limit(300)
 
     if (error) {
-      alert('Bildirişlər oxunmadı: ' + error.message)
+      alert('Bildirişlər oxunmadı: ' + friendlyError(error))
       setAlerts([])
     } else {
       setAlerts((data || []) as unknown as AlertRow[])
@@ -111,7 +112,7 @@ function AlertsPage() {
       .eq('id', alertId)
 
     if (error) {
-      alert('Status dəyişmədi: ' + error.message)
+      alert('Status dəyişmədi: ' + friendlyError(error))
       return
     }
 
@@ -134,7 +135,7 @@ function AlertsPage() {
       .in('id', ids)
 
     if (error) {
-      alert('Bildirişlər oxunmuş edilmədi: ' + error.message)
+      alert('Bildirişlər oxunmuş edilmədi: ' + friendlyError(error))
       return
     }
 
@@ -152,7 +153,7 @@ function AlertsPage() {
       .eq('id', alertId)
 
     if (error) {
-      alert('Bildiriş silinmədi: ' + error.message)
+      alert('Bildiriş silinmədi: ' + friendlyError(error))
       return
     }
 

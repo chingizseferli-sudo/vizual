@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { NewsMutateDrawer } from './news-mutate-drawer'
 import { useNews } from './news-provider'
+import { friendlyError } from '@/lib/friendly-error'
 
 export function NewsDialogs() {
   const { open, setOpen, currentRow, setCurrentRow, reload } = useNews()
@@ -15,7 +16,7 @@ export function NewsDialogs() {
       .eq('id', currentRow.id)
 
     if (error) {
-      alert('Xəta: ' + error.message)
+      alert('Xəta: ' + friendlyError(error))
       return
     }
 

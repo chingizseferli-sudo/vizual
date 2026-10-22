@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Pencil, Power, RefreshCw, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { ResponsiveTable } from '@/components/ui/responsive-table'
+import { friendlyError } from '@/lib/friendly-error'
 
 // One source = one state. The worker keeps the health fields up to date
 // (consecutive_fail_count, last_article_found_at, trial tag in notes); this
@@ -345,7 +346,7 @@ function SourcesPage() {
       .order('name', { ascending: true })
 
     if (error) {
-      setMessage(`Mənbələr oxunmadı: ${error.message}`)
+      setMessage(`Mənbələr oxunmadı: ${friendlyError(error)}`)
       setSources([])
     } else {
       setSources(
@@ -424,7 +425,7 @@ function SourcesPage() {
 
     setBusyId(null)
     if (error) {
-      setMessage(`Status dəyişmədi: ${error.message}`)
+      setMessage(`Status dəyişmədi: ${friendlyError(error)}`)
       return
     }
     setMessage('')
@@ -445,7 +446,7 @@ function SourcesPage() {
 
     if (error || !data) {
       setMessage(
-        `${sourceTitle(source)}: yoxlama cavab vermədi (${error?.message || 'boş cavab'}).`
+        `${sourceTitle(source)}: yoxlama cavab vermədi (${(error ? friendlyError(error) : 'boş cavab')}).`
       )
       return
     }
@@ -481,7 +482,7 @@ function SourcesPage() {
           .eq('id', source.id)
         setMessage(
           fixError
-            ? `${sourceTitle(source)}: düzgün üsul tapıldı, amma saxlanmadı (${fixError.message})`
+            ? `${sourceTitle(source)}: düzgün üsul tapıldı, amma saxlanmadı (${friendlyError(fixError)})`
             : `${sourceTitle(source)}: düzgün üsul tapıldı və saxlandı: ${formatMethod(found.monitor_method)}, ${data.candidateCount} link.${bot.state === 'review' ? ' Sınağa qoyuldu.' : ''}`
         )
         await loadSources()
@@ -514,7 +515,7 @@ function SourcesPage() {
       .eq('id', source.id)
     setMessage(
       trialError
-        ? `${sourceTitle(source)}: sınağa qoyulmadı (${trialError.message})`
+        ? `${sourceTitle(source)}: sınağa qoyulmadı (${friendlyError(trialError)})`
         : `${sourceTitle(source)}: Edge oxuya bilmədi (${reason}). Sınağa qoyuldu, Railway botu gizli yoxlayıb özü qərar verəcək.`
     )
     await loadSources()
@@ -531,7 +532,7 @@ function SourcesPage() {
       .delete()
       .eq('id', source.id)
     if (error) {
-      setMessage(`Silinmədi: ${error.message}`)
+      setMessage(`Silinmədi: ${friendlyError(error)}`)
       return
     }
     await loadSources()
@@ -555,7 +556,7 @@ function SourcesPage() {
       .eq('id', editing.id)
 
     if (error) {
-      setMessage(`Yadda saxlanmadı: ${error.message}`)
+      setMessage(`Yadda saxlanmadı: ${friendlyError(error)}`)
       return
     }
     setEditing(null)
@@ -591,7 +592,7 @@ function SourcesPage() {
     const repair: RepairResponse = data ?? {
       ok: false,
       method: 'latest_page',
-      reason: error?.message || 'boş cavab',
+      reason: (error ? friendlyError(error) : 'boş cavab'),
       candidateCount: 0,
       update: {},
     }
@@ -626,7 +627,7 @@ function SourcesPage() {
       ),
     })
 
-    if (insertError) return `${host}: yazılmadı (${insertError.message})`
+    if (insertError) return `${host}: yazılmadı (${friendlyError(insertError)})`
     known.add(host)
     return repair.ok
       ? `${host}: sınaqa qoyuldu (${formatMethod(repair.method)}). Bot gizli oxuyub avtomatik aktivləşdirəcək.`

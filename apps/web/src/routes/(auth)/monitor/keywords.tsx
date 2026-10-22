@@ -33,6 +33,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { t } from '@/lib/i18n'
+import { friendlyError } from '@/lib/friendly-error'
 
 // The list gets a search box once it is longer than this.
 const SEARCH_THRESHOLD = 6
@@ -169,7 +170,7 @@ function KeywordsPage() {
     setBusyId(null)
     setDeleteCandidate(null)
     if (error) {
-      setMessage(t("Açar söz silinmədi: {0}", [error.message]))
+      setMessage(t("Açar söz silinmədi: {0}", [friendlyError(error)]))
       return
     }
     await refresh()
@@ -254,7 +255,7 @@ function KeywordsPage() {
         {query.error ? (
           <div className='rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive'>
             {query.error instanceof Error
-              ? query.error.message
+              ? friendlyError(query.error)
               : t("Açar sözlər yüklənmədi.")}
           </div>
         ) : null}

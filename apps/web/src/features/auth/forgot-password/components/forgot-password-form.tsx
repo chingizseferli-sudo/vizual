@@ -17,7 +17,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { getAuthErrorMessage } from '../../auth-messages'
+import { friendlyError } from '@/lib/friendly-error'
 import { t } from '@/lib/i18n'
 
 const formSchema = z.object({
@@ -55,7 +55,7 @@ export function ForgotPasswordForm({
     captcha.reset()
 
     if (error) {
-      toast.error(getAuthErrorMessage(error.message))
+      toast.error(friendlyError(error))
       return
     }
 

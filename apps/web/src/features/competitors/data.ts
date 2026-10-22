@@ -1,5 +1,6 @@
 import { t } from '@/lib/i18n'
 import { supabase } from '@/lib/supabase'
+import { friendlyError } from '@/lib/friendly-error'
 
 // Rəqiblər: competitors a customer tracks on news sites (migration
 // 20261022000003). Writes go through add_competitor / update_competitor /
@@ -64,7 +65,7 @@ type MatchRow = {
 const HEADLINE_ROWS = 100
 
 function failed(error: { message: string }) {
-  return new Error(t('Rəqiblər oxunmadı: {0}', [error.message]))
+  return new Error(t('Rəqiblər oxunmadı: {0}', [friendlyError(error)]))
 }
 
 export async function fetchCompetitorsData(): Promise<CompetitorsData> {
@@ -190,7 +191,7 @@ export function competitorErrorMessage(error: { message: string }) {
       'Hesabınız aktiv deyil. Rəqib əlavə etmək üçün hesabın aktiv olması lazımdır.'
     )
   }
-  return message || t('Naməlum xəta')
+  return friendlyError(error)
 }
 
 // Share of each tone among labelled and unlabelled mentions, in percent.

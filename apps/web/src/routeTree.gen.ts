@@ -68,7 +68,6 @@ import { Route as authAdminMonitorResultsRouteImport } from './routes/(auth)/adm
 import { Route as authAdminMonitorProblemsRouteImport } from './routes/(auth)/admin/monitor/problems'
 import { Route as authAdminMonitorPickerRouteImport } from './routes/(auth)/admin/monitor/picker'
 import { Route as authAdminMonitorMonitorsRouteImport } from './routes/(auth)/admin/monitor/monitors'
-import { Route as authAdminMonitorLogsRouteImport } from './routes/(auth)/admin/monitor/logs'
 import { Route as authAdminMonitorAlertsRouteImport } from './routes/(auth)/admin/monitor/alerts'
 import { Route as authAdminErrorsErrorRouteImport } from './routes/(auth)/admin/errors/$error'
 import { Route as authAdminNewsIdIndexRouteImport } from './routes/(auth)/admin/news/$id/index'
@@ -383,11 +382,6 @@ const authAdminMonitorMonitorsRoute =
     path: '/monitors',
     getParentRoute: () => authAdminMonitorRouteRoute,
   } as any)
-const authAdminMonitorLogsRoute = authAdminMonitorLogsRouteImport.update({
-  id: '/logs',
-  path: '/logs',
-  getParentRoute: () => authAdminMonitorRouteRoute,
-} as any)
 const authAdminMonitorAlertsRoute = authAdminMonitorAlertsRouteImport.update({
   id: '/alerts',
   path: '/alerts',
@@ -467,7 +461,6 @@ export interface FileRoutesByFullPath {
   '/monitor/': typeof authMonitorIndexRoute
   '/admin/errors/$error': typeof authAdminErrorsErrorRoute
   '/admin/monitor/alerts': typeof authAdminMonitorAlertsRoute
-  '/admin/monitor/logs': typeof authAdminMonitorLogsRoute
   '/admin/monitor/monitors': typeof authAdminMonitorMonitorsRouteWithChildren
   '/admin/monitor/picker': typeof authAdminMonitorPickerRoute
   '/admin/monitor/problems': typeof authAdminMonitorProblemsRoute
@@ -530,7 +523,6 @@ export interface FileRoutesByTo {
   '/monitor': typeof authMonitorIndexRoute
   '/admin/errors/$error': typeof authAdminErrorsErrorRoute
   '/admin/monitor/alerts': typeof authAdminMonitorAlertsRoute
-  '/admin/monitor/logs': typeof authAdminMonitorLogsRoute
   '/admin/monitor/picker': typeof authAdminMonitorPickerRoute
   '/admin/monitor/problems': typeof authAdminMonitorProblemsRoute
   '/admin/monitor/results': typeof authAdminMonitorResultsRoute
@@ -598,7 +590,6 @@ export interface FileRoutesById {
   '/(auth)/monitor/': typeof authMonitorIndexRoute
   '/(auth)/admin/errors/$error': typeof authAdminErrorsErrorRoute
   '/(auth)/admin/monitor/alerts': typeof authAdminMonitorAlertsRoute
-  '/(auth)/admin/monitor/logs': typeof authAdminMonitorLogsRoute
   '/(auth)/admin/monitor/monitors': typeof authAdminMonitorMonitorsRouteWithChildren
   '/(auth)/admin/monitor/picker': typeof authAdminMonitorPickerRoute
   '/(auth)/admin/monitor/problems': typeof authAdminMonitorProblemsRoute
@@ -668,7 +659,6 @@ export interface FileRouteTypes {
     | '/monitor/'
     | '/admin/errors/$error'
     | '/admin/monitor/alerts'
-    | '/admin/monitor/logs'
     | '/admin/monitor/monitors'
     | '/admin/monitor/picker'
     | '/admin/monitor/problems'
@@ -731,7 +721,6 @@ export interface FileRouteTypes {
     | '/monitor'
     | '/admin/errors/$error'
     | '/admin/monitor/alerts'
-    | '/admin/monitor/logs'
     | '/admin/monitor/picker'
     | '/admin/monitor/problems'
     | '/admin/monitor/results'
@@ -798,7 +787,6 @@ export interface FileRouteTypes {
     | '/(auth)/monitor/'
     | '/(auth)/admin/errors/$error'
     | '/(auth)/admin/monitor/alerts'
-    | '/(auth)/admin/monitor/logs'
     | '/(auth)/admin/monitor/monitors'
     | '/(auth)/admin/monitor/picker'
     | '/(auth)/admin/monitor/problems'
@@ -1261,13 +1249,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authAdminMonitorMonitorsRouteImport
       parentRoute: typeof authAdminMonitorRouteRoute
     }
-    '/(auth)/admin/monitor/logs': {
-      id: '/(auth)/admin/monitor/logs'
-      path: '/logs'
-      fullPath: '/admin/monitor/logs'
-      preLoaderRoute: typeof authAdminMonitorLogsRouteImport
-      parentRoute: typeof authAdminMonitorRouteRoute
-    }
     '/(auth)/admin/monitor/alerts': {
       id: '/(auth)/admin/monitor/alerts'
       path: '/alerts'
@@ -1332,7 +1313,6 @@ const authAdminMonitorMonitorsRouteWithChildren =
 
 interface authAdminMonitorRouteRouteChildren {
   authAdminMonitorAlertsRoute: typeof authAdminMonitorAlertsRoute
-  authAdminMonitorLogsRoute: typeof authAdminMonitorLogsRoute
   authAdminMonitorMonitorsRoute: typeof authAdminMonitorMonitorsRouteWithChildren
   authAdminMonitorPickerRoute: typeof authAdminMonitorPickerRoute
   authAdminMonitorProblemsRoute: typeof authAdminMonitorProblemsRoute
@@ -1343,7 +1323,6 @@ interface authAdminMonitorRouteRouteChildren {
 
 const authAdminMonitorRouteRouteChildren: authAdminMonitorRouteRouteChildren = {
   authAdminMonitorAlertsRoute: authAdminMonitorAlertsRoute,
-  authAdminMonitorLogsRoute: authAdminMonitorLogsRoute,
   authAdminMonitorMonitorsRoute: authAdminMonitorMonitorsRouteWithChildren,
   authAdminMonitorPickerRoute: authAdminMonitorPickerRoute,
   authAdminMonitorProblemsRoute: authAdminMonitorProblemsRoute,

@@ -30,6 +30,8 @@ describe('competitors data helpers', () => {
     expect(competitorErrorMessage({ message: 'COMPETITOR_EXISTS' })).toContain(
       'artıq əlavə edilib'
     )
-    expect(competitorErrorMessage({ message: 'boom' })).toBe('boom')
+    expect(competitorErrorMessage({ message: 'boom' })).toBe(
+      'Xəta baş verdi. Bir az sonra yenidən cəhd edin.'
+    )
   })
 })

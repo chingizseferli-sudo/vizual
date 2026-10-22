@@ -3,9 +3,6 @@ type ErrorLike = {
   status?: unknown
   response?: {
     status?: unknown
-    data?: {
-      title?: unknown
-    }
   }
 }
 
@@ -21,9 +18,4 @@ export function getErrorStatus(error: unknown): number | null {
   const parsed = Number(status)
 
   return Number.isInteger(parsed) ? parsed : null
-}
-
-export function getErrorTitle(error: unknown): string | null {
-  const title = asErrorLike(error)?.response?.data?.title
-  return typeof title === 'string' && title.trim() ? title.trim() : null
 }

@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 
@@ -8,15 +9,15 @@ export function NotFoundError() {
     <div className='h-svh'>
       <div className='m-auto flex h-full w-full flex-col items-center justify-center gap-2'>
         <h1 className='text-[7rem] leading-tight font-bold'>404</h1>
-        <span className='font-medium'>Səhifə tapılmadı</span>
+        <span className='font-medium'>{t('Səhifə tapılmadı')}</span>
         <p className='text-center text-muted-foreground'>
-          Axtardığınız səhifə mövcud deyil və ya silinib.
+          {t('Axtardığınız səhifə mövcud deyil və ya silinib.')}
         </p>
         <div className='mt-6 flex gap-4'>
           <Button variant='outline' onClick={() => history.go(-1)}>
-            Geri qayıt
+            {t('Geri qayıt')}
           </Button>
-          <Button onClick={() => navigate({ to: '/' })}>Ana səhifə</Button>
+          <Button onClick={() => navigate({ to: '/' })}>{t('Ana səhifə')}</Button>
         </div>
       </div>
     </div>

@@ -1254,6 +1254,7 @@ Deno.serve(withCors(async (req) => {
     const result = await repairSource(source);
     return json(result);
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    console.error("source-repair failed", error);
+    return json({ error: "Xəta baş verdi. Bir az sonra yenidən cəhd edin." }, 500);
   }
 }));

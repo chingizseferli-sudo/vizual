@@ -1,14 +1,6 @@
 import { toast } from 'sonner'
-import { getErrorStatus, getErrorTitle } from '@/lib/errors'
+import { friendlyError } from '@/lib/friendly-error'
 
 export function handleServerError(error: unknown) {
-  let errMsg = 'Something went wrong!'
-
-  if (getErrorStatus(error) === 204) {
-    errMsg = 'No content.'
-  }
-
-  errMsg = getErrorTitle(error) ?? errMsg
-
-  toast.error(errMsg)
+  toast.error(friendlyError(error))
 }
