@@ -124,6 +124,13 @@ export function SignIn({ mode = 'customer', redirectTo }: SignInProps) {
         <CardContent>
           <UserAuthForm redirectTo={redirectTo} mode='customer' />
         </CardContent>
+        <CardFooter className='flex-col gap-2 border-t pt-4'>
+          <p className='text-sm text-muted-foreground'>{t("Hesabınız yoxdur?")}</p>
+          <Link
+            to='/sign-up'
+            className='inline-flex h-10 w-full items-center justify-center rounded-md border border-input bg-background text-sm font-medium text-foreground transition-colors hover:bg-muted'
+          >{t("Qeydiyyatdan keçin")}</Link>
+        </CardFooter>
       </Card>
     </AuthLayout>
   )

@@ -15,6 +15,10 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
   return (
     <main className='relative min-h-svh bg-muted/30 text-foreground'>
+      <Link
+        to='/'
+        className='absolute top-4 left-4 z-10 inline-flex h-9 items-center rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground'
+      >{t("← Sayta qayıt")}</Link>
       <div className='absolute top-4 right-4 z-10 flex items-center gap-2'>
         <LanguageSwitcher />
         <ThemeSwitch />
@@ -61,7 +65,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
         <section className='flex min-h-[calc(100svh-3rem)] items-center justify-center lg:min-h-0'>
           <div className='w-full max-w-md'>
-            <div className='mb-6 flex items-center justify-center gap-3 lg:hidden'>
+            <Link to='/' className='mb-6 flex items-center justify-center gap-3 lg:hidden'>
               <BrandMark
                 logoUrl={logoUrl}
                 iconUrl={iconUrl}
@@ -74,7 +78,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
                 <div className='font-semibold text-foreground'>{siteName}</div>
                 <div className='text-xs text-muted-foreground'>{t("İstifadəçi girişi")}</div>
               </div>
-            </div>
+            </Link>
             {children}
           </div>
         </section>

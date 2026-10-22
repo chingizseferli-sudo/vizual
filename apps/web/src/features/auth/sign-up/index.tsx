@@ -28,8 +28,12 @@ export function SignUp() {
         <CardContent>
           <SignUpForm />
         </CardContent>
-        <CardFooter>
-          <p className='px-2 text-center text-xs leading-5 text-muted-foreground'>{t("Qeydiyyatdan sonra hesabınız email təsdiqi və profil statusuna uyğun aktivləşir. Plan və limitlər iş masasında göstərilir.")}</p>
+        <CardFooter className='flex-col gap-2 border-t pt-4'>
+          <p className='text-sm text-muted-foreground'>{t("Artıq hesabınız var?")}</p>
+          <Link
+            to='/sign-in'
+            className='inline-flex h-10 w-full items-center justify-center rounded-md border border-input bg-background text-sm font-medium text-foreground transition-colors hover:bg-muted'
+          >{t("Daxil olun")}</Link>
         </CardFooter>
       </Card>
     </AuthLayout>
