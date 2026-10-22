@@ -7,6 +7,7 @@ import {
   planCompetitorLimit,
   planKeywordLimit,
   planReportFrequencies,
+  planSocialKeywordLimit,
   planToFormValues,
   normalizePlanRow,
 } from './model'
@@ -149,6 +150,26 @@ describe('subscription plan model', () => {
     expect(
       buildPlanPayload({ ...emptyPlanForm, name: 'Pro', maxCompetitors: '-1' }).error
     ).toContain('Rəqib limiti')
+  })
+
+  it('stores the social keyword limit; 0 is kept, empty means unlimited', () => {
+    const none = buildPlanPayload(
+      { ...emptyPlanForm, name: 'Başlanğıc', maxSocialKeywords: '0' },
+      { max_social_keywords: 10 }
+    ).data!
+    expect(none.limits).toEqual({ max_social_keywords: 0 })
+    expect(planSocialKeywordLimit(none)).toBe(0)
+    expect(planToFormValues(normalizePlanRow({ ...none, id: 'p', is_active: true })).maxSocialKeywords).toBe('0')
+
+    const unlimited = buildPlanPayload(
+      { ...emptyPlanForm, name: 'Korporativ' },
+      { max_social_keywords: 10 }
+    ).data!
+    expect(unlimited.limits).toEqual({})
+    expect(planSocialKeywordLimit(unlimited)).toBeNull()
+    expect(
+      buildPlanPayload({ ...emptyPlanForm, name: 'Pro', maxSocialKeywords: '2.5' }).error
+    ).toContain('Sosial açar söz limiti')
   })
 
   it('formats recurring and custom prices', () => {

@@ -53,6 +53,7 @@ export type PlanFormValues = {
   maxWatches: string
   maxKeywords: string
   maxCompetitors: string
+  maxSocialKeywords: string
   minimumIntervalMinutes: string
   historyDays: string
   telegramEnabled: boolean
@@ -99,6 +100,7 @@ export const emptyPlanForm: PlanFormValues = {
   maxWatches: '',
   maxKeywords: '',
   maxCompetitors: '',
+  maxSocialKeywords: '',
   minimumIntervalMinutes: '',
   historyDays: '',
   telegramEnabled: true,
@@ -158,6 +160,18 @@ export function planCompetitorLimit(
   return typeof value === 'number' && Number.isInteger(value) && value >= 0
     ? value
     : 0
+}
+
+// Keywords a plan searches on Facebook/Instagram; mirrors
+// social_keyword_limit_for_user() in SQL: limits.max_social_keywords, else
+// unlimited (null). 0 means the plan has no FB/IG search.
+export function planSocialKeywordLimit(
+  plan: Pick<SubscriptionPlan, 'limits'> | undefined
+) {
+  const value = plan?.limits?.max_social_keywords
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : null
 }
 
 export function normalizePlanCode(value: string) {
@@ -247,6 +261,13 @@ export function buildPlanPayload(
   })
   if (maxCompetitors.error) return { error: maxCompetitors.error }
 
+  const maxSocialKeywords = parseOptionalNumber(
+    values.maxSocialKeywords,
+    'Sosial açar söz limiti',
+    { integer: true }
+  )
+  if (maxSocialKeywords.error) return { error: maxSocialKeywords.error }
+
   const minimumInterval = parseOptionalNumber(
     values.minimumIntervalMinutes,
     'Minimum interval',
@@ -285,6 +306,10 @@ export function buildPlanPayload(
   if (reportFrequencies.length) limits.report_frequencies = reportFrequencies
   delete limits.max_competitors
   if (maxCompetitors.value !== null) limits.max_competitors = maxCompetitors.value
+  delete limits.max_social_keywords
+  if (maxSocialKeywords.value !== null) {
+    limits.max_social_keywords = maxSocialKeywords.value
+  }
 
   const features = Array.from(
     new Set(
@@ -334,6 +359,7 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
       typeof plan.limits.max_competitors === 'number'
         ? String(plan.limits.max_competitors)
         : '',
+    maxSocialKeywords: String(planSocialKeywordLimit(plan) ?? ''),
     minimumIntervalMinutes: plan.minimum_interval_minutes?.toString() || '',
     historyDays: plan.history_days?.toString() || '',
     telegramEnabled: plan.telegram_enabled,

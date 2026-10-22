@@ -12,6 +12,7 @@ import {
   normalizePlanRow,
   planKeywordLimit,
   planSocialIntervalMinutes,
+  planSocialKeywordLimit,
   type SubscriptionPlan,
   type UserSubscription,
 } from '@/features/subscriptions/model'
@@ -23,6 +24,8 @@ type UserProfile = {
   plan_id: string | null
   status: string | null
   social_interval_minutes: number | null
+  // Exists after migration 20261022000006.
+  social_keyword_limit?: number | null
   created_at?: string | null
   updated_at?: string | null
 }
@@ -108,6 +111,7 @@ function AdminUserDetailsPage() {
   const [subscriptions, setSubscriptions] = useState<UserSubscription[]>([])
   const [telegramChatId, setTelegramChatId] = useState('')
   const [socialInterval, setSocialInterval] = useState('')
+  const [socialKeywordLimit, setSocialKeywordLimit] = useState('')
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [subscriptionStatus, setSubscriptionStatus] = useState<
     'active' | 'trialing'
@@ -126,9 +130,7 @@ function AdminUserDetailsPage() {
       await Promise.all([
         supabase
           .from('user_profiles')
-          .select(
-            'user_id,email,telegram_chat_id,plan_id,status,social_interval_minutes,created_at,updated_at'
-          )
+          .select('*')
           .eq('user_id', userId)
           .maybeSingle(),
         // '*': inactive_reason exists only after migration 20261020000002.
@@ -231,6 +233,7 @@ function AdminUserDetailsPage() {
     setProfile(profileData)
     setTelegramChatId(profileData?.telegram_chat_id || '')
     setSocialInterval(String(profileData?.social_interval_minutes ?? ''))
+    setSocialKeywordLimit(String(profileData?.social_keyword_limit ?? ''))
     setPlans(planData)
     setSubscriptions(
       (subscriptionsRes.data || []) as unknown as UserSubscription[]
@@ -293,6 +296,9 @@ function AdminUserDetailsPage() {
   )
 
   const planSocialInterval = planSocialIntervalMinutes(
+    profile?.plan_id ? planById.get(profile.plan_id) : undefined
+  )
+  const planSocialKeywords = planSocialKeywordLimit(
     profile?.plan_id ? planById.get(profile.plan_id) : undefined
   )
   const currentKeywordLimit = planKeywordLimit(
@@ -394,6 +400,27 @@ function AdminUserDetailsPage() {
 
     await loadData()
     setMessage('Sosial yoxlama tezliyi saxlanıldı.')
+  }
+
+  async function saveSocialKeywordLimit() {
+    const trimmed = socialKeywordLimit.trim()
+    const value = trimmed === '' ? null : Number(trimmed)
+    if (value !== null && (!Number.isInteger(value) || value < 0 || value > 1000)) {
+      setMessage('Sosial açar söz limiti 0-1000 arası tam ədəd olmalıdır.')
+      return
+    }
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ social_keyword_limit: value })
+      .eq('user_id', userId)
+
+    if (error) {
+      setMessage(error.message)
+      return
+    }
+
+    await loadData()
+    setMessage('Sosial açar söz limiti saxlanıldı.')
   }
 
   async function saveTelegram() {
@@ -754,6 +781,38 @@ function AdminUserDetailsPage() {
             axtarılsın. Boş qalsa, plan təyin edir.
           </span>
         </label>
+
+        {profile && 'social_keyword_limit' in profile ? (
+          <div className='mt-4 grid max-w-sm gap-1.5 text-sm font-medium'>
+            <label htmlFor='social-keyword-limit'>
+              Fərdi sosial açar söz limiti
+            </label>
+            <div className='flex gap-2'>
+              <input
+                id='social-keyword-limit'
+                type='number'
+                min='0'
+                max='1000'
+                step='1'
+                value={socialKeywordLimit}
+                onChange={(event) => setSocialKeywordLimit(event.target.value)}
+                className='min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 font-normal'
+                placeholder={`Plan üzrə (${planSocialKeywords ?? 'limitsiz'})`}
+              />
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => void saveSocialKeywordLimit()}
+              >
+                Saxla
+              </Button>
+            </div>
+            <span className='text-xs font-normal text-muted-foreground'>
+              Neçə açar söz Facebook və Instagram-da axtarılsın. Boş qalsa,
+              plan təyin edir; 0 sosial axtarışı bağlayır.
+            </span>
+          </div>
+        ) : null}
 
         {subscriptions.length > 0 ? (
           <details className='mt-4 rounded-lg border'>

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import {
+  Check,
   Info,
   KeyRound,
   Loader2,
@@ -17,6 +18,7 @@ import {
   deleteKeyword,
   fetchKeywordsData,
   keywordErrorMessage,
+  setKeywordSocial,
   setKeywordStatus,
 } from '@/features/keywords/data'
 import { customerQueryKeys } from '@/lib/query-keys'
@@ -144,6 +146,23 @@ function KeywordsPage() {
     )
   }
 
+  async function toggleSocial(item: CustomerKeyword) {
+    const next = !item.social
+    setBusyId(item.id)
+    const error = await setKeywordSocial(item.id, next)
+    setBusyId(null)
+    if (error) {
+      setMessage(keywordErrorMessage(error))
+      return
+    }
+    await refresh()
+    setMessage(
+      next
+        ? t("Facebook və Instagram-da da axtarılır: {0}", [item.keyword])
+        : t("Yalnız xəbər saytlarında axtarılır: {0}", [item.keyword])
+    )
+  }
+
   async function removeKeyword(item: CustomerKeyword) {
     setBusyId(item.id)
     const error = await deleteKeyword(item.id)
@@ -174,6 +193,10 @@ function KeywordsPage() {
     maxKeywords && maxKeywords > 0
       ? Math.min(100, Math.round((activeCount / maxKeywords) * 100))
       : 0
+  const maxSocial = data?.maxSocialKeywords ?? null
+  const socialCount = data?.socialCount ?? 0
+  const socialShown = !!data?.socialSupported && maxSocial !== 0
+  const socialLimitReached = maxSocial !== null && socialCount >= maxSocial
 
   return (
     <>
@@ -183,7 +206,8 @@ function KeywordsPage() {
             <h1 className='text-2xl font-bold tracking-tight'>{t("Açar sözlər")}</h1>
             <p className='mt-1 text-sm text-muted-foreground'>{t("Sistem xəbər saytlarını və sosial şəbəkələri bu açar sözlər üzrə izləyir və uyğun nəticələri sizə göndərir.")}</p>
           </div>
-          <div className='w-full shrink-0 rounded-xl border bg-card px-3 py-2 shadow-sm sm:w-52'>
+          <div className='grid w-full shrink-0 gap-2 sm:w-52'>
+          <div className='rounded-xl border bg-card px-3 py-2 shadow-sm'>
             <div className='flex items-baseline justify-between gap-2 text-sm'>
               <span className='text-muted-foreground'>{t("Aktiv açar söz")}</span>
               <span
@@ -209,6 +233,21 @@ function KeywordsPage() {
             ) : (
               <p className='mt-1 text-xs text-muted-foreground'>{t("Limitsiz")}</p>
             )}
+          </div>
+          {socialShown ? (
+            <div className='flex items-baseline justify-between gap-2 rounded-xl border bg-card px-3 py-2 text-sm shadow-sm'>
+              <span className='text-muted-foreground'>{t("FB/IG açar söz")}</span>
+              <span
+                className={cn(
+                  'font-semibold whitespace-nowrap tabular-nums',
+                  socialLimitReached && 'text-amber-700'
+                )}
+              >
+                {socialCount}
+                {maxSocial !== null ? ` / ${maxSocial}` : ''}
+              </span>
+            </div>
+          ) : null}
           </div>
         </div>
 
@@ -264,7 +303,13 @@ function KeywordsPage() {
           ) : null}
           <div className='flex gap-2 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground'>
             <Info className='mt-0.5 h-3.5 w-3.5 shrink-0' />
-            <p>{t("Hər açar söz xəbər saytlarında və Facebook, Instagram paylaşımlarında axtarılır. Sosial şəbəkələrin yoxlanma tezliyi Profil səhifəsində göstərilir. Dayandırılmış açar söz limitə daxil deyil.")}</p>
+            <p>
+              {socialShown
+                ? t("Hər açar söz xəbər saytlarında axtarılır. FB/IG düyməsi seçilmiş sözlər Facebook və Instagram paylaşımlarında da axtarılır; yoxlanma tezliyi Profil səhifəsində göstərilir. Dayandırılmış açar söz limitə daxil deyil.")
+                : data?.socialSupported
+                  ? t("Hər açar söz xəbər saytlarında axtarılır. Facebook və Instagram monitorinqi Pro və Biznes planlarındadır. Dayandırılmış açar söz limitə daxil deyil.")
+                  : t("Hər açar söz xəbər saytlarında və Facebook, Instagram paylaşımlarında axtarılır. Sosial şəbəkələrin yoxlanma tezliyi Profil səhifəsində göstərilir. Dayandırılmış açar söz limitə daxil deyil.")}
+            </p>
           </div>
         </section>
 
@@ -341,6 +386,45 @@ function KeywordsPage() {
                       </span>
                     </div>
                     <div className='flex shrink-0 items-center gap-1'>
+                      {socialShown ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span tabIndex={!item.social && socialLimitReached ? 0 : undefined}>
+                              <button
+                                type='button'
+                                aria-pressed={item.social}
+                                aria-label={t("Facebook və Instagram-da axtar: {0}", [item.keyword])}
+                                onClick={() => void toggleSocial(item)}
+                                disabled={
+                                  busy ||
+                                  paused ||
+                                  (!item.social && socialLimitReached)
+                                }
+                                className={cn(
+                                  'inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                                  item.social
+                                    ? 'border-primary/30 bg-primary/10 text-primary'
+                                    : 'text-muted-foreground hover:bg-muted'
+                                )}
+                              >
+                                {item.social ? (
+                                  <Check className='h-3.5 w-3.5' />
+                                ) : null}
+                                FB/IG
+                              </button>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {paused
+                              ? t("Dayandırılmış söz sosial şəbəkələrdə axtarılmır")
+                              : item.social
+                                ? t("Facebook və Instagram-da axtarılır. Söndürmək üçün basın.")
+                                : socialLimitReached
+                                  ? t("Facebook və Instagram limiti dolub")
+                                  : t("Facebook və Instagram-da da axtar")}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : null}
                       {data?.statusSupported ? (
                         <Tooltip>
                           <TooltipTrigger asChild>

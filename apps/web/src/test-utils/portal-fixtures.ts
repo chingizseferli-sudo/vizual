@@ -149,6 +149,7 @@ const tables: Record<string, Record<string, unknown>[]> = {
       keyword: 'Bakı Dövlət Universiteti',
       match_type: 'contains',
       status: 'active',
+      social_enabled: true,
       created_at: timestamp,
     },
   ],
@@ -248,7 +249,7 @@ export const fixtureSupabase = {
   rpc(name: string) {
     if (name === 'current_user_plan_limits') {
       const result = {
-        data: { max_watches: 15, max_keywords: 300 },
+        data: { max_watches: 15, max_keywords: 300, max_social_keywords: 10 },
         error: null,
       }
       return { maybeSingle: async () => result }

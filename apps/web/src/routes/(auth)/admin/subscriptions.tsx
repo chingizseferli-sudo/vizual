@@ -12,6 +12,7 @@ import {
   formatPlanPrice,
   normalizePlanRow,
   planCompetitorLimit,
+  planSocialKeywordLimit,
   planKeywordLimit,
   planReportFrequencies,
   planSocialIntervalMinutes,
@@ -430,6 +431,23 @@ function SubscriptionPlansPage() {
             />
           </label>
           <label className='grid gap-1.5 text-sm font-medium'>
+            Sosial açar söz limiti
+            <input
+              type='number'
+              min='0'
+              step='1'
+              value={form.maxSocialKeywords}
+              onChange={(event) =>
+                updateForm('maxSocialKeywords', event.target.value)
+              }
+              className='rounded-lg border bg-background px-3 py-2 font-normal'
+              placeholder='Limitsiz'
+            />
+            <span className='text-xs font-normal text-muted-foreground'>
+              Facebook/Instagram-da axtarılan söz sayı. 0: plana daxil deyil.
+            </span>
+          </label>
+          <label className='grid gap-1.5 text-sm font-medium'>
             Veb izləmə limiti
             <input
               type='number'
@@ -648,6 +666,14 @@ function SubscriptionPlansPage() {
                   <div className='text-xs text-muted-foreground'>Açar söz</div>
                   <div className='font-semibold'>
                     {planKeywordLimit(plan) ?? '∞'}
+                  </div>
+                </div>
+                <div className='rounded-lg bg-muted/50 p-2'>
+                  <div className='text-xs text-muted-foreground'>
+                    FB/IG söz
+                  </div>
+                  <div className='font-semibold'>
+                    {planSocialKeywordLimit(plan) ?? '∞'}
                   </div>
                 </div>
                 <div className='rounded-lg bg-muted/50 p-2'>

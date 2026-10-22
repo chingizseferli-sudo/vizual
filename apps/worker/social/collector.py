@@ -84,6 +84,21 @@ def parse_time(value):
 # Settings, keywords, intervals ------------------------------------------------------
 
 
+def social_keyword_ids():
+    """Keyword ids the customers chose for FB/IG, capped at each plan's limit
+    (social_keyword_ids_for_worker, migration 20261022000006). None if missing."""
+    response = requests.post(
+        f"{sm.SUPABASE_URL}/rest/v1/rpc/social_keyword_ids_for_worker",
+        headers=sm.supabase_headers(),
+        json={},
+        timeout=sm.REQUEST_TIMEOUT,
+    )
+    if response.status_code != 200:
+        print(f"Sosial açar sözlər oxunmadı ({response.status_code}); migration 20261022000006 lazımdır.", flush=True)
+        return None
+    return {row.get("keyword_id") for row in response.json() or []}
+
+
 def load_settings():
     rows = rest_get("social_settings", {"select": "*", "id": "eq.1", "limit": "1"})
     return rows[0] if rows else {}
@@ -387,7 +402,12 @@ def run_tick(now=None):
     }
     if not any(enabled.values()):
         return
-    keyword_cache = sm.load_active_monitor_keywords() or []
+    allowed = social_keyword_ids()
+    if allowed is None:
+        return
+    # Only keywords the customer chose for FB/IG are searched, and only their
+    # owners are alerted about posts.
+    keyword_cache = [row for row in sm.load_active_monitor_keywords() or [] if row.get("id") in allowed]
     profiles = rest_get("user_profiles", {"select": "user_id,plan_id,social_interval_minutes"})
     plans = rest_get("subscription_plans", {"select": "id,limits"})
     targets = keyword_intervals(keyword_cache, profiles, plans, int(settings.get("default_interval_minutes") or 360))

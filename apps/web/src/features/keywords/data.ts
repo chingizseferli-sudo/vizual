@@ -12,6 +12,8 @@ export type CustomerKeyword = {
   monitor_id: string
   keyword: string
   status: KeywordStatus
+  // Also searched on Facebook and Instagram (set_keyword_social()).
+  social: boolean
   created_at: string | null
 }
 
@@ -19,6 +21,12 @@ export type KeywordsData = {
   keywords: CustomerKeyword[]
   activeCount: number
   maxKeywords: number | null
+  // Active keywords searched on FB/IG, and how many the plan allows
+  // (null: unlimited, 0: not in the plan).
+  socialCount: number
+  maxSocialKeywords: number | null
+  // False until migration 20261022000006: the FB/IG choice is hidden.
+  socialSupported: boolean
   // False until the migration adds monitor_keywords.status: pausing is hidden.
   statusSupported: boolean
 }
@@ -29,7 +37,12 @@ type KeywordRow = {
   monitor_id: string
   keyword: string
   status?: string | null
+  social_enabled?: boolean | null
   created_at: string | null
+}
+type PlanLimitsRow = {
+  max_keywords?: number | null
+  max_social_keywords?: number | null
 }
 type RpcError = { code?: string; message: string } | null
 
@@ -59,12 +72,21 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
     loadMonitors(userId),
     supabase.rpc('current_user_plan_limits').maybeSingle(),
   ])
-  const maxKeywords =
-    (limitsRes.data as { max_keywords?: number | null } | null)
-      ?.max_keywords ?? null
+  const limits = limitsRes.data as PlanLimitsRow | null
+  const maxKeywords = limits?.max_keywords ?? null
+  const socialSupported = !!limits && 'max_social_keywords' in limits
+  const maxSocialKeywords = limits?.max_social_keywords ?? null
 
   if (monitors.length === 0) {
-    return { keywords: [], activeCount: 0, maxKeywords, statusSupported: true }
+    return {
+      keywords: [],
+      activeCount: 0,
+      maxKeywords,
+      socialCount: 0,
+      maxSocialKeywords,
+      socialSupported,
+      statusSupported: true,
+    }
   }
 
   const monitorStatus = new Map(monitors.map((item) => [item.id, item.status]))
@@ -82,6 +104,7 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
     monitor_id: row.monitor_id,
     keyword: row.keyword,
     created_at: row.created_at,
+    social: row.social_enabled === true,
     status:
       monitorStatus.get(row.monitor_id) === 'active' && row.status !== 'paused'
         ? ('active' as const)
@@ -92,6 +115,11 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
     keywords,
     activeCount: keywords.filter((item) => item.status === 'active').length,
     maxKeywords,
+    socialCount: keywords.filter(
+      (item) => item.status === 'active' && item.social
+    ).length,
+    maxSocialKeywords,
+    socialSupported,
     statusSupported,
   }
 }
@@ -100,6 +128,12 @@ export function keywordErrorMessage(error: { message: string }) {
   const message = error.message || ''
   if (message.includes('PLAN_KEYWORD_LIMIT_REACHED')) {
     return t("Planınızda açar söz limiti dolub. Bir açar sözü silin, dayandırın və ya planınızı yüksəldin.")
+  }
+  if (message.includes('PLAN_SOCIAL_KEYWORD_LIMIT_REACHED')) {
+    return t("Facebook və Instagram üçün açar söz limiti dolub. Başqa bir sözdən FB/IG-ni söndürün və ya planınızı yüksəldin.")
+  }
+  if (message.includes('PLAN_SOCIAL_NOT_INCLUDED')) {
+    return t("Planınıza Facebook və Instagram monitorinqi daxil deyil.")
   }
   if (message.includes('KEYWORD_EXISTS')) {
     return t("Bu açar söz artıq əlavə edilib.")
@@ -153,6 +187,14 @@ export async function setKeywordStatus(id: string, status: KeywordStatus) {
   const { error } = await supabase.rpc('set_keyword_status', {
     p_keyword_id: id,
     p_status: status,
+  })
+  return error
+}
+
+export async function setKeywordSocial(id: string, enabled: boolean) {
+  const { error } = await supabase.rpc('set_keyword_social', {
+    p_keyword_id: id,
+    p_enabled: enabled,
   })
   return error
 }

@@ -121,9 +121,11 @@ def test_instagram_hashtag_keeps_azerbaijani_letters(col):
     assert col.instagram_hashtag("DİM") == "dim"
 
 
-def base_routes(settings, cache, usage=None):
+def base_routes(settings, cache, usage=None, social_ids=None):
+    ids = [row["id"] for row in cache] if social_ids is None else social_ids
     return {
         ("GET", "social_settings"): FakeResponse(200, [settings]),
+        ("POST", "social_keyword_ids_for_worker"): FakeResponse(200, [{"keyword_id": i} for i in ids]),
         ("GET", "monitor_keywords"): FakeResponse(200, cache),
         # One response serves both the interval read and the chat lookup (profile is the source of truth);
         # the inactive-owner read (status=neq.active) finds nobody.
@@ -220,6 +222,23 @@ def test_keywords_of_inactive_accounts_are_not_searched(col):
     fake = use(col, {**routes, **apify_routes([])})
     col.run_tick(NOW)
     assert fake.find("POST", "runs")[0]["json"]["searchQueries"] == ["AZAL"]
+
+
+def test_only_keywords_chosen_for_social_are_searched(col):
+    rows = [keyword_row("BDU", USER_A), keyword_row("AZAL", USER_B)]
+    # USER_B did not pick AZAL for FB/IG (or their plan has no social keywords).
+    fake = use(col, {**base_routes(FB_SETTINGS, rows, social_ids=["k-BDU-user-a"]), **apify_routes([])})
+    col.run_tick(NOW)
+    assert fake.find("POST", "runs")[0]["json"]["searchQueries"] == ["BDU"]
+
+
+def test_missing_social_keyword_function_searches_nothing(col):
+    routes = base_routes(FB_SETTINGS, [keyword_row("BDU", USER_A)])
+    routes[("POST", "social_keyword_ids_for_worker")] = FakeResponse(404, {"code": "PGRST202"})
+    fake = use(col, {**routes, **apify_routes([])})
+    col.run_tick(NOW)
+    assert not fake.find("POST", "runs")
+    assert not fake.find("GET", "monitor_keywords")
 
 
 def test_budget_exhausted_skips_provider(col):
