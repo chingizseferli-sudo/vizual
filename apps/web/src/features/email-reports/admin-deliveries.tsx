@@ -74,8 +74,9 @@ export function EmailReportDeliveries() {
             Email hesabatları
           </h2>
           <p className='text-sm text-muted-foreground'>
-            Gündəlik hesabat səhər 08:00-dan, həftəlik bazar ertəsi, aylıq
-            ayın 1-i göndərilir. Hesabatlar Railway-dəki rss xidmətindən
+            Gündəlik hesabat hər gün, həftəlik bazar ertəsi, aylıq ayın 1-i
+            müştərinin seçdiyi saatda (standart 09:00, Bakı vaxtı) göndərilir.
+            Hesabatlar Railway-dəki rss xidmətindən
             SMTP ilə gedir.
           </p>
         </div>

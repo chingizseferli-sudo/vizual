@@ -3,8 +3,9 @@
 Which customers get which report is decided in SQL (email_report_recipients):
 the plan's limits.report_frequencies, the customer's opt-outs, and the
 email_report_deliveries row that makes every report go out at most once.
-Reports cover the last finished Baku-time period and go out from 08:00 Baku
-on the next day (daily), Monday (weekly) or the 1st (monthly).
+Reports cover the last finished Baku-time period and go out on the next day
+(daily), Monday (weekly) or the 1st (monthly), from the hour each customer
+picked (user_profiles.email_report_hour, default 09:00 Baku).
 """
 
 import html
@@ -17,7 +18,6 @@ from email.utils import formatdate, make_msgid
 from zoneinfo import ZoneInfo
 
 BAKU_TZ = ZoneInfo("Asia/Baku")
-SEND_HOUR = 8
 KINDS = ("daily", "weekly", "monthly")
 # Results are deleted after 30 days; an older comparison period would read as zero.
 DATA_RETENTION_DAYS = int(os.getenv("MONITOR_DATA_RETENTION_DAYS", "30"))
@@ -50,8 +50,14 @@ def smtp_settings():
 
 
 def report_period(kind, now):
-    """(first day, last day) of the last finished period, or None before it is due."""
-    today = now.astimezone(BAKU_TZ).date()
+    """(first day, last day, latest send hour due) of the last finished period.
+
+    On the day the report becomes due only customers whose chosen hour has
+    come are due (hour <= now's Baku hour); later in the period everyone is,
+    so a report missed while the worker was down still goes out.
+    """
+    local = now.astimezone(BAKU_TZ)
+    today = local.date()
     if kind == "daily":
         send_day = today
         start = end = today - timedelta(days=1)
@@ -64,9 +70,7 @@ def report_period(kind, now):
         start = end.replace(day=1)
     else:
         raise ValueError(kind)
-    if now.astimezone(BAKU_TZ) < datetime.combine(send_day, time(SEND_HOUR), BAKU_TZ):
-        return None
-    return start, end
+    return start, end, local.hour if today == send_day else 23
 
 
 def previous_period_start(kind, start):
@@ -286,13 +290,13 @@ def send_due_reports(http, base_url, headers, timeout=10, now=None, send=send_me
     budget = REPORTS_PER_CHECK
     sent = 0
     for kind in KINDS:
-        period = report_period(kind, now)
-        if period is None or budget <= 0:
-            continue
-        start, end = period
+        if budget <= 0:
+            break
+        start, end, max_hour = report_period(kind, now)
         try:
             recipients = _rpc(http, base_url, headers, timeout, "email_report_recipients", {
                 "p_kind": kind, "p_period_start": start.isoformat(), "p_limit": budget,
+                "p_max_hour": max_hour,
             }) or []
         except Exception as exc:
             print(f"Email hesabatı alıcıları oxunmadı ({kind}): {exc}", flush=True)

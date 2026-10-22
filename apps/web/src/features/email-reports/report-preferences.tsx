@@ -5,33 +5,49 @@ import { customerQueryKeys } from '@/lib/query-keys'
 import { t } from '@/lib/i18n'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   REPORT_FREQUENCIES,
   type ReportFrequency,
 } from '@/features/subscriptions/model'
+import {
+  DEFAULT_HOUR,
+  HOURS,
+  formatHour,
+  parseReportSettings,
+  type ReportSettings,
+} from './report-settings'
 
-const LABELS: Record<ReportFrequency, () => { title: string; when: string }> = {
-  daily: () => ({ title: t("Gündəlik hesabat"), when: t("Hər səhər 08:00-da, ötən günün xəbərləri") }),
-  weekly: () => ({ title: t("Həftəlik hesabat"), when: t("Bazar ertəsi səhər, ötən həftənin xülasəsi") }),
-  monthly: () => ({ title: t("Aylıq hesabat"), when: t("Ayın 1-i səhər, ötən ayın xülasəsi") }),
+const LABELS: Record<
+  ReportFrequency,
+  (time: string) => { title: string; when: string }
+> = {
+  daily: (time) => ({ title: t("Gündəlik hesabat"), when: t("Hər gün saat {0}, ötən günün xəbərləri", [time]) }),
+  weekly: (time) => ({ title: t("Həftəlik hesabat"), when: t("Bazar ertəsi saat {0}, ötən həftənin xülasəsi", [time]) }),
+  monthly: (time) => ({ title: t("Aylıq hesabat"), when: t("Ayın 1-i saat {0}, ötən ayın xülasəsi", [time]) }),
 }
 
-const optOutKey = (userId: string) =>
-  [...customerQueryKeys.profile(), 'email-report-opt-out', userId] as const
+const settingsKey = (userId: string) =>
+  [...customerQueryKeys.profile(), 'email-report-settings', userId] as const
 
-async function fetchOptOut(userId: string) {
+async function fetchSettings(userId: string) {
   const { data, error } = await supabase
     .from('user_profiles')
-    .select('email_report_opt_out')
+    .select('email_report_opt_out,email_report_hour')
     .eq('user_id', userId)
     .maybeSingle()
   if (error) throw error
-  const value = (data as { email_report_opt_out?: unknown } | null)
-    ?.email_report_opt_out
-  return Array.isArray(value) ? (value as string[]) : []
+  return parseReportSettings(data)
 }
 
-// Email reports the plan includes, each one switchable off by the customer.
-// The rss worker reads user_profiles.email_report_opt_out before sending.
+// Email reports the plan includes, each one switchable off by the customer,
+// and the Baku-time hour they arrive. The rss worker reads
+// user_profiles.email_report_opt_out and email_report_hour before sending.
 export function EmailReportPreferences({
   userId,
   email,
@@ -42,30 +58,38 @@ export function EmailReportPreferences({
   planFrequencies: ReportFrequency[]
 }) {
   const queryClient = useQueryClient()
-  const optOut = useQuery({
-    queryKey: optOutKey(userId),
-    queryFn: () => fetchOptOut(userId),
+  const settings = useQuery({
+    queryKey: settingsKey(userId),
+    queryFn: () => fetchSettings(userId),
     enabled: planFrequencies.length > 0,
   })
   const save = useMutation({
-    mutationFn: async (next: string[]) => {
+    mutationFn: async (next: ReportSettings) => {
       const { error } = await supabase
         .from('user_profiles')
-        .update({ email_report_opt_out: next })
+        .update({
+          email_report_opt_out: next.optOut,
+          email_report_hour: next.hour,
+        })
         .eq('user_id', userId)
       if (error) throw error
       return next
     },
-    onSuccess: (next) => queryClient.setQueryData(optOutKey(userId), next),
+    onSuccess: (next) => queryClient.setQueryData(settingsKey(userId), next),
   })
 
-  const current = optOut.data ?? []
+  const current = settings.data?.optOut ?? []
+  const hour = settings.data?.hour ?? DEFAULT_HOUR
+  const busy = settings.isLoading || save.isPending
 
   function toggle(frequency: ReportFrequency, enabled: boolean) {
     const next = enabled
       ? current.filter((item) => item !== frequency)
       : [...new Set([...current, frequency])]
-    save.mutate(REPORT_FREQUENCIES.filter((item) => next.includes(item)))
+    save.mutate({
+      optOut: REPORT_FREQUENCIES.filter((item) => next.includes(item)),
+      hour,
+    })
   }
 
   return (
@@ -77,16 +101,42 @@ export function EmailReportPreferences({
 
       {planFrequencies.length === 0 ? (
         <p className='text-sm text-muted-foreground'>{t("Planınıza email hesabatları daxil deyil. Daha geniş plana keçəndə hesabatlar avtomatik başlayır.")}</p>
-      ) : optOut.isError ? (
+      ) : settings.isError ? (
         <p className='text-sm text-muted-foreground'>{t("Hesabat ayarları hələ hazır deyil. Bir az sonra yenidən baxın.")}</p>
       ) : (
         <>
           <p className='mb-4 text-sm text-muted-foreground'>
             {t("Hesabatlar {0} ünvanına göndərilir: neçə xəbər çıxıb, hansı açar sözlər və mənbələr önədir, son xəbərlər.", [email])}
           </p>
+          <div className='mb-4 flex flex-wrap items-center gap-3'>
+            <label
+              htmlFor='email-report-hour'
+              className='text-sm font-medium text-foreground'
+            >
+              {t("Göndərilmə saatı (Bakı vaxtı)")}
+            </label>
+            <Select
+              value={String(hour)}
+              disabled={busy}
+              onValueChange={(value) =>
+                save.mutate({ optOut: current, hour: Number(value) })
+              }
+            >
+              <SelectTrigger id='email-report-hour' className='w-28'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className='max-h-72'>
+                {HOURS.map((item) => (
+                  <SelectItem key={item} value={String(item)}>
+                    {formatHour(item)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className='grid gap-3 sm:grid-cols-3'>
             {planFrequencies.map((frequency) => {
-              const label = LABELS[frequency]()
+              const label = LABELS[frequency](formatHour(hour))
               const enabled = !current.includes(frequency)
               const id = `email-report-${frequency}`
               return (
@@ -99,7 +149,7 @@ export function EmailReportPreferences({
                     id={id}
                     className='mt-0.5'
                     checked={enabled}
-                    disabled={optOut.isLoading || save.isPending}
+                    disabled={busy}
                     onCheckedChange={(value) => toggle(frequency, value === true)}
                   />
                   <span>

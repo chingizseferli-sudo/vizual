@@ -1,6 +1,6 @@
 import importlib.util
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -73,18 +73,29 @@ def at(*args):
     return datetime(*args, tzinfo=BAKU)
 
 
-def test_periods_are_last_finished_baku_period_and_wait_for_8am(er):
-    # Monday 19 Oct 2026
-    assert er.report_period("daily", at(2026, 10, 20, 7, 59)) is None
-    assert er.report_period("daily", at(2026, 10, 20, 8, 0)) == (date(2026, 10, 19), date(2026, 10, 19))
-    assert er.report_period("weekly", at(2026, 10, 19, 9)) == (date(2026, 10, 12), date(2026, 10, 18))
-    assert er.report_period("weekly", at(2026, 10, 22, 9)) == (date(2026, 10, 12), date(2026, 10, 18))
-    assert er.report_period("weekly", at(2026, 10, 19, 7)) is None  # Monday before 08:00
-    assert er.report_period("monthly", at(2026, 11, 1, 8)) == (date(2026, 10, 1), date(2026, 10, 31))
-    assert er.report_period("monthly", at(2026, 11, 1, 7)) is None
-    assert er.report_period("monthly", at(2026, 1, 15, 12)) == (date(2025, 12, 1), date(2025, 12, 31))
+def test_periods_are_last_finished_baku_period_with_hour_due(er):
+    # Monday 19 Oct 2026. On the due day only customers whose hour has come are
+    # due (third value = current Baku hour); later in the period everyone is (23).
+    assert er.report_period("daily", at(2026, 10, 20, 7, 59)) == (date(2026, 10, 19), date(2026, 10, 19), 7)
+    assert er.report_period("daily", at(2026, 10, 20, 9, 0)) == (date(2026, 10, 19), date(2026, 10, 19), 9)
+    assert er.report_period("weekly", at(2026, 10, 19, 9)) == (date(2026, 10, 12), date(2026, 10, 18), 9)
+    assert er.report_period("weekly", at(2026, 10, 19, 0, 30)) == (date(2026, 10, 12), date(2026, 10, 18), 0)
+    assert er.report_period("weekly", at(2026, 10, 22, 6)) == (date(2026, 10, 12), date(2026, 10, 18), 23)
+    assert er.report_period("monthly", at(2026, 11, 1, 8)) == (date(2026, 10, 1), date(2026, 10, 31), 8)
+    assert er.report_period("monthly", at(2026, 1, 15, 12)) == (date(2025, 12, 1), date(2025, 12, 31), 23)
+    # UTC input is converted to Baku time (UTC+4).
+    assert er.report_period("daily", datetime(2026, 10, 20, 5, 0, tzinfo=timezone.utc))[2] == 9
     assert er.previous_period_start("monthly", date(2026, 3, 1)) == date(2026, 2, 1)
     assert er.previous_period_start("weekly", date(2026, 10, 12)) == date(2026, 10, 5)
+
+
+def test_recipients_are_asked_with_the_hour_due(er):
+    http = FakeHttp(recipients={})
+    er.send_due_reports(http, "https://db", {}, now=at(2026, 10, 19, 10), send=lambda s, m: None)
+    asked = {c[2]["p_kind"]: c[2]["p_max_hour"] for c in http.calls if c[1] == "email_report_recipients"}
+    assert asked == {"daily": 10, "weekly": 10, "monthly": 23}
+
+
 
 
 def test_labels_and_change_text(er):

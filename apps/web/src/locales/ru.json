@@ -362,9 +362,6 @@
   "Gündəlik hesabat": "Ежедневный отчёт",
   "Həftəlik hesabat": "Еженедельный отчёт",
   "Aylıq hesabat": "Ежемесячный отчёт",
-  "Hər səhər 08:00-da, ötən günün xəbərləri": "Каждое утро в 08:00, новости за прошлый день",
-  "Bazar ertəsi səhər, ötən həftənin xülasəsi": "В понедельник утром, сводка за прошлую неделю",
-  "Ayın 1-i səhər, ötən ayın xülasəsi": "1-го числа утром, сводка за прошлый месяц",
   "Planınıza email hesabatları daxil deyil. Daha geniş plana keçəndə hesabatlar avtomatik başlayır.": "Отчёты по email не входят в ваш тариф. При переходе на более широкий тариф они начнутся автоматически.",
   "Hesabat ayarları hələ hazır deyil. Bir az sonra yenidən baxın.": "Настройки отчётов пока недоступны. Загляните чуть позже.",
   "Hesabatlar {0} ünvanına göndərilir: neçə xəbər çıxıb, hansı açar sözlər və mənbələr önədir, son xəbərlər.": "Отчёты приходят на {0}: сколько вышло новостей, какие ключевые слова и источники впереди, последние новости.",
@@ -875,5 +872,9 @@
   "Rəqibin adı 1-80 simvol olmalıdır.": "Название конкурента должно содержать 1-80 символов.",
   "Hesabınız aktiv deyil. Rəqib əlavə etmək üçün hesabın aktiv olması lazımdır.": "Ваш аккаунт не активен. Чтобы добавить конкурента, аккаунт должен быть активен.",
   "Təhlükəsizlik yoxlamasını tamamlayın.": "Пройдите проверку безопасности.",
-  "Təhlükəsizlik yoxlaması yüklənmədi. Səhifəni yeniləyin.": "Проверка безопасности не загрузилась. Обновите страницу."
+  "Təhlükəsizlik yoxlaması yüklənmədi. Səhifəni yeniləyin.": "Проверка безопасности не загрузилась. Обновите страницу.",
+  "Hər gün saat {0}, ötən günün xəbərləri": "Каждый день в {0}, новости за прошлый день",
+  "Bazar ertəsi saat {0}, ötən həftənin xülasəsi": "В понедельник в {0}, сводка за прошлую неделю",
+  "Ayın 1-i saat {0}, ötən ayın xülasəsi": "1-го числа в {0}, сводка за прошлый месяц",
+  "Göndərilmə saatı (Bakı vaxtı)": "Время отправки (по Баку)"
 }
