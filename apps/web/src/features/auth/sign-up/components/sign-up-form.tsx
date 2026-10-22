@@ -6,6 +6,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { Loader2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
+import { useCaptcha } from '@/hooks/use-captcha'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -43,6 +44,7 @@ export function SignUpForm({
   ...props
 }: React.HTMLAttributes<HTMLFormElement>) {
   const [isLoading, setIsLoading] = useState(false)
+  const captcha = useCaptcha()
   const navigate = useNavigate()
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -55,6 +57,10 @@ export function SignUpForm({
   })
 
   async function onSubmit(data: z.infer<typeof formSchema>) {
+    if (captcha.missing) {
+      toast.error(t("Təhlükəsizlik yoxlamasını tamamlayın."))
+      return
+    }
     setIsLoading(true)
 
     const { data: signUpData, error } = await supabase.auth.signUp({
@@ -62,8 +68,10 @@ export function SignUpForm({
       password: data.password,
       options: {
         emailRedirectTo: `${window.location.origin}/sign-in`,
+        ...captcha.options,
       },
     })
+    captcha.reset()
 
     if (error) {
       setIsLoading(false)
@@ -147,9 +155,10 @@ export function SignUpForm({
             </FormItem>
           )}
         />
+        {captcha.widget}
         <Button
           className='mt-2 h-11'
-          disabled={isLoading}
+          disabled={isLoading || captcha.missing}
         >
           {isLoading ? <Loader2 className='animate-spin' /> : <UserPlus />}
           {isLoading ? t("Hesab yaradılır...") : t("İş masası hesabı yarat")}

@@ -274,3 +274,75 @@ describe('UserAuthForm', () => {
     )
   })
 })
+
+describe('UserAuthForm with captcha', () => {
+  let tokenCount = 0
+  const renderWidget = vi.fn()
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockProfileQuery()
+    tokenCount = 0
+    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', 'site-key-test')
+    // Each widget render solves the challenge at once with a fresh token.
+    renderWidget.mockImplementation(
+      (_element: HTMLElement, options: { callback: (token: string) => void }) => {
+        tokenCount += 1
+        const token = `token-${tokenCount}`
+        setTimeout(() => options.callback(token), 0)
+        return `widget-${tokenCount}`
+      }
+    )
+    window.turnstile = { render: renderWidget, remove: vi.fn() }
+    return () => {
+      vi.unstubAllEnvs()
+      delete window.turnstile
+    }
+  })
+
+  it('sends the captcha token and gets a new one after a failed attempt', async () => {
+    mocks.signInWithPassword.mockResolvedValue({
+      data: { user: null },
+      error: { message: 'Invalid login credentials' },
+    })
+    const screen = await render(<UserAuthForm />)
+    const signInButton = screen.getByRole('button', { name: /^Daxil ol$/i })
+
+    await expect.element(signInButton).toBeEnabled()
+    await fillAndSubmit(
+      screen.getByRole('textbox', { name: /^Email$/i }),
+      screen.getByLabelText(/^Şifrə$/i),
+      signInButton
+    )
+
+    await vi.waitFor(() =>
+      expect(mocks.signInWithPassword).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        password: '1234567',
+        options: { captchaToken: 'token-1' },
+      })
+    )
+    expect(renderWidget.mock.calls[0][1]).toMatchObject({
+      sitekey: 'site-key-test',
+    })
+
+    await vi.waitFor(() => expect(renderWidget).toHaveBeenCalledTimes(2))
+    await expect.element(signInButton).toBeEnabled()
+    await userEvent.click(signInButton)
+    await vi.waitFor(() =>
+      expect(mocks.signInWithPassword).toHaveBeenLastCalledWith({
+        email: 'user@example.com',
+        password: '1234567',
+        options: { captchaToken: 'token-2' },
+      })
+    )
+  })
+
+  it('keeps submit disabled until the challenge is solved', async () => {
+    renderWidget.mockImplementation(() => 'widget-pending')
+    const screen = await render(<UserAuthForm />)
+    await expect
+      .element(screen.getByRole('button', { name: /^Daxil ol$/i }))
+      .toBeDisabled()
+  })
+})

@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowRight, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
+import { useCaptcha } from '@/hooks/use-captcha'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -31,6 +32,7 @@ export function ForgotPasswordForm({
   ...props
 }: React.HTMLAttributes<HTMLFormElement>) {
   const [isLoading, setIsLoading] = useState(false)
+  const captcha = useCaptcha()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -38,13 +40,19 @@ export function ForgotPasswordForm({
   })
 
   async function onSubmit(data: z.infer<typeof formSchema>) {
+    if (captcha.missing) {
+      toast.error(t("Təhlükəsizlik yoxlamasını tamamlayın."))
+      return
+    }
     setIsLoading(true)
 
     const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
       redirectTo: `${window.location.origin}/reset-password`,
+      ...captcha.options,
     })
 
     setIsLoading(false)
+    captcha.reset()
 
     if (error) {
       toast.error(getAuthErrorMessage(error.message))
@@ -75,7 +83,8 @@ export function ForgotPasswordForm({
             </FormItem>
           )}
         />
-        <Button className='mt-2' disabled={isLoading}>
+        {captcha.widget}
+        <Button className='mt-2' disabled={isLoading || captcha.missing}>
           {isLoading ? t("Email göndərilir...") : t("Bərpa linki göndər")}
           {isLoading ? <Loader2 className='animate-spin' /> : <ArrowRight />}
         </Button>

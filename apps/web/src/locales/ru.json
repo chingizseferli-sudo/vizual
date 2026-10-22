@@ -873,5 +873,7 @@
   "Bu adda rəqib artıq əlavə edilib.": "Конкурент с таким названием уже добавлен.",
   "Hər açar söz 2-100 simvol olmalıdır.": "Каждое ключевое слово должно содержать 2-100 символов.",
   "Rəqibin adı 1-80 simvol olmalıdır.": "Название конкурента должно содержать 1-80 символов.",
-  "Hesabınız aktiv deyil. Rəqib əlavə etmək üçün hesabın aktiv olması lazımdır.": "Ваш аккаунт не активен. Чтобы добавить конкурента, аккаунт должен быть активен."
+  "Hesabınız aktiv deyil. Rəqib əlavə etmək üçün hesabın aktiv olması lazımdır.": "Ваш аккаунт не активен. Чтобы добавить конкурента, аккаунт должен быть активен.",
+  "Təhlükəsizlik yoxlamasını tamamlayın.": "Пройдите проверку безопасности.",
+  "Təhlükəsizlik yoxlaması yüklənmədi. Səhifəni yeniləyin.": "Проверка безопасности не загрузилась. Обновите страницу."
 }

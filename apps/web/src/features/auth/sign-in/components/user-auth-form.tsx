@@ -8,6 +8,7 @@ import { Loader2, LogIn } from 'lucide-react'
 import { toast } from 'sonner'
 import { adminMfaPath } from '@/lib/admin-mfa'
 import { supabase } from '@/lib/supabase'
+import { useCaptcha } from '@/hooks/use-captcha'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -119,6 +120,7 @@ export function UserAuthForm({
   ...props
 }: UserAuthFormProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const captcha = useCaptcha()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -131,13 +133,19 @@ export function UserAuthForm({
   })
 
   async function onSubmit(data: z.infer<typeof formSchema>) {
+    if (captcha.missing) {
+      toast.error(t("Təhlükəsizlik yoxlamasını tamamlayın."))
+      return
+    }
     setIsLoading(true)
 
     const { data: authData, error: signInError } =
       await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
+        ...(captcha.token ? { options: captcha.options } : {}),
       })
+    captcha.reset()
 
     if (signInError || !authData.user) {
       setIsLoading(false)
@@ -251,7 +259,11 @@ export function UserAuthForm({
             </FormItem>
           )}
         />
-        <Button className='mt-2 h-10 font-medium' disabled={isLoading}>
+        {captcha.widget}
+        <Button
+          className='mt-2 h-10 font-medium'
+          disabled={isLoading || captcha.missing}
+        >
           {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
           {isLoading ? t("Daxil olunur...") : t("Daxil ol")}
         </Button>
