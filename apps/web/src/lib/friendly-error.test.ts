@@ -67,4 +67,12 @@ describe('friendlyError', () => {
     expect(friendlyError(new Error('boom'), 'Plan saxlanmadı.')).toBe('Plan saxlanmadı.')
     expect(friendlyError(null, 'Plan saxlanmadı.')).toBe('Plan saxlanmadı.')
   })
+  it('explains a failed confirmation email and a failed sign-up insert', () => {
+    expect(
+      friendlyError({ code: 'unexpected_failure', status: 500, message: 'Error sending confirmation email' })
+    ).toBe('Təsdiq maili göndərilmədi. Bir az sonra yenidən cəhd edin və ya bizimlə əlaqə saxlayın.')
+    expect(friendlyError({ status: 500, message: 'Database error saving new user' })).toBe(
+      'Hesab yaradılmadı. Bir az sonra yenidən cəhd edin və ya bizimlə əlaqə saxlayın.'
+    )
+  })
 })

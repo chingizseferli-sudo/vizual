@@ -129,6 +129,8 @@ const DB_CODES: Record<string, string> = {
 // Matches on the raw English text, for errors that arrive without a code.
 const TEXT_RULES: [RegExp, string][] = [
   [/email rate limit|over_email_send_rate_limit/i, EMAIL_RATE_LIMIT],
+  [/error sending (confirmation|recovery|magic link|invite|email change)|sending .*email/i, 'Təsdiq maili göndərilmədi. Bir az sonra yenidən cəhd edin və ya bizimlə əlaqə saxlayın.'],
+  [/database error saving new user|database error (creating|updating)/i, 'Hesab yaradılmadı. Bir az sonra yenidən cəhd edin və ya bizimlə əlaqə saxlayın.'],
   [/rate limit|too many requests|too_many_requests/i, RATE_LIMIT],
   [/invalid login credentials/i, AUTH_CODES.invalid_credentials],
   [/email not confirmed/i, AUTH_CODES.email_not_confirmed],
