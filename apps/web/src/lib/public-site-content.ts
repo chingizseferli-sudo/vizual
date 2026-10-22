@@ -114,15 +114,15 @@ export const defaultPublicSiteContent: PublicSiteContent = {
     brand: 'Vizual.Az',
     tagline: t("İzləyin. Anlayın. Qərar verin."),
     description:
-      t("Media mənbələrində yayımlanan materialları, seçilmiş vebsaytlardakı dəyişiklikləri və təşkilatınız haqqında vacib məlumatları bir platformadan izləyin."),
-    primaryCta: t("15 gün pulsuz sına"),
+      t("Media mənbələrində və sosial şəbəkələrdə təşkilatınız haqqında yayımlanan vacib məlumatları bir platformadan izləyin."),
+    primaryCta: t("7 gün pulsuz sına"),
     secondaryCta: t("İstifadəçi girişi"),
   },
   services: {
     eyebrow: t("Xidmətlər"),
     title: t("Vizual.Az nə edir?"),
     description:
-      t("Media gündəmini, vebsayt dəyişikliklərini və təşkilatınız haqqında yayımlanan məlumatları bir platformadan izləyin."),
+      t("Media gündəmini, sosial şəbəkələri və təşkilatınız haqqında yayımlanan məlumatları bir platformadan izləyin."),
     items: [
       {
         title: t("Media monitorinqi"),
@@ -135,12 +135,6 @@ export const defaultPublicSiteContent: PublicSiteContent = {
         description: t("Açar sözlərinizlə bağlı paylaşımları izləyir və Telegram-a göndərir."),
         icon: 'file',
         status: 'Beta',
-      },
-      {
-        title: t("Vebsayt dəyişiklikləri"),
-        description: t("Seçdiyiniz səhifədə dəyişiklik olanda sizə xəbər verir."),
-        icon: 'radio',
-        status: t("Aktiv"),
       },
       {
         title: t("Kommunikasiya analitikası"),
@@ -194,10 +188,10 @@ export const defaultPublicSiteContent: PublicSiteContent = {
   },
   demo: {
     eyebrow: t("Sınaq"),
-    title: t("Vizual.Az-ı 15 gün sınaqdan keçirin"),
+    title: t("Vizual.Az-ı 7 gün sınaqdan keçirin"),
     description:
-      t("Sınaq müddətində monitor yaradın, açar sözləri yoxlayın, nəticələri və bildiriş axınını real iş prosesinizdə test edin."),
-    primaryCta: t("15 gün pulsuz sına"),
+      t("Sınaq müddətində açar sözlərinizi əlavə edin, nəticələri və bildiriş axınını real iş prosesinizdə test edin."),
+    primaryCta: t("7 gün pulsuz sına"),
     secondaryCta: t("Sınaq müraciəti"),
     placeholderTitle: t("Sınaq və məhsul təqdimatı"),
     placeholderDescription:
@@ -210,9 +204,9 @@ export const defaultPublicSiteContent: PublicSiteContent = {
         time: '09:12',
       },
       {
-        title: t("Seçilmiş vebsəhifədə yeni məlumat əlavə olundu"),
-        source: t("rəsmi sayt"),
-        keyword: t("veb izləmə"),
+        title: t("Facebook-da açar sözünüzlə yeni paylaşım tapıldı"),
+        source: 'facebook.com',
+        keyword: t("brend adı"),
         time: '08:47',
       },
       {
@@ -231,9 +225,9 @@ export const defaultPublicSiteContent: PublicSiteContent = {
     plans: [
       {
         name: t("Pulsuz sınaq"),
-        price: t("15 günlük sınaq"),
+        price: t("7 günlük sınaq"),
         description: t("Məhsulu tanımaq və ilk monitorinq axınını yoxlamaq üçün."),
-        features: [t("Məhdud monitor sayı"), t("Əsas nəticələr"), t("Sınaq iş masası")],
+        features: [t("Məhdud açar söz sayı"), t("Əsas nəticələr"), t("Sınaq iş masası")],
       },
       {
         name: t("Başlanğıc"),
@@ -247,7 +241,7 @@ export const defaultPublicSiteContent: PublicSiteContent = {
         description: t("Aktiv PR və kommunikasiya komandaları üçün."),
         features: [
           t("Geniş monitorinq"),
-          t("Vebsayt dəyişikliklərinin izlənməsi"),
+          t("Facebook və Instagram monitorinqi"),
           t("Prioritet dəstək"),
         ],
       },
@@ -294,7 +288,7 @@ export const defaultPublicSiteContent: PublicSiteContent = {
       {
         title: t("Vaxtında xəbərdarlıq"),
         description:
-          t("Açar sözlər və seçilmiş vebsəhifələr üzrə vacib dəyişikliklər vaxtında görünür."),
+          t("Açar sözlər üzrə vacib xəbərlər və paylaşımlar vaxtında görünür."),
       },
       {
         title: t("Qərar üçün siqnal"),
@@ -307,7 +301,7 @@ export const defaultPublicSiteContent: PublicSiteContent = {
     eyebrow: t("Əlaqə"),
     title: t("Sınaq, əməkdaşlıq və dəstək üçün əlaqə saxlayın"),
     description:
-      t("Vizual.Az-ı komandanızın media monitorinqi, vebsayt izləmə və bildiriş ehtiyaclarına görə necə istifadə edə biləcəyinizi birlikdə nəzərdən keçirək."),
+      t("Vizual.Az-ı komandanızın media monitorinqi, sosial şəbəkə izləmə və bildiriş ehtiyaclarına görə necə istifadə edə biləcəyinizi birlikdə nəzərdən keçirək."),
     cardTitle: t("Sınaq müraciəti"),
     cardDescription:
       t("Formu doldurun, komandamız sizinlə əlaqə saxlayacaq."),

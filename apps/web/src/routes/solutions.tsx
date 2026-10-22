@@ -56,7 +56,7 @@ function SolutionsPage() {
           <Link
             to='/demo'
             className='inline-flex h-11 items-center rounded-lg bg-[#1463ff] px-5 text-sm font-bold text-white transition hover:bg-blue-700'
-          >{t("15 gün pulsuz sına")}</Link>
+          >{t("7 gün pulsuz sına")}</Link>
         </PublicPageHero>
 
         <section className='mx-auto max-w-7xl px-5 pb-20 md:px-8'>
@@ -99,8 +99,8 @@ function SolutionsPage() {
               <p className='mt-3 text-sm leading-6 text-slate-600'>{t("Təşkilat adı, rəhbər şəxs, layihə və kampaniya mövzuları ardıcıl izlənir.")}</p>
             </PublicCard>
             <PublicCard>
-              <h3 className='font-extrabold text-slate-950'>{t("Veb dəyişiklik izləmə")}</h3>
-              <p className='mt-3 text-sm leading-6 text-slate-600'>{t("Seçilmiş səhifə sahələri dəyişdikdə tarixçə və bildiriş yaranır.")}</p>
+              <h3 className='font-extrabold text-slate-950'>{t("Sosial şəbəkə izləmə")}</h3>
+              <p className='mt-3 text-sm leading-6 text-slate-600'>{t("Facebook və Instagram paylaşımları açar sözlər üzrə toplanır və bildiriş göndərilir.")}</p>
             </PublicCard>
           </div>
         </section>

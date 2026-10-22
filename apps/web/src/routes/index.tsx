@@ -120,7 +120,7 @@ function IndexPage() {
                   <p className='mt-1 text-2xl font-black'>2</p>
                 </div>
                 <div className='rounded-xl bg-slate-50 p-3'>
-                  <p className='text-xs font-bold text-slate-500'>{t("Aktiv monitor")}</p>
+                  <p className='text-xs font-bold text-slate-500'>{t("Aktiv açar söz")}</p>
                   <p className='mt-1 text-2xl font-black'>3</p>
                 </div>
               </div>

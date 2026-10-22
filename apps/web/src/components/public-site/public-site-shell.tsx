@@ -20,7 +20,7 @@ const label = {
   demoRequest: t('Sınaq müraciəti'),
   demo: t('Sınaq'),
   blog: t('Bloq'),
-  trial: t('15 gün pulsuz sına'),
+  trial: t('7 gün pulsuz sına'),
   openMenu: t('Menyunu aç'),
   closeMenu: t('Menyunu bağla'),
   footer: t('© 2026 Vizual.Az. Kommunikasiya və Media Monitorinq Platforması.'),
