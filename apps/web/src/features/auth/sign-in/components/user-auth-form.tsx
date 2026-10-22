@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Loader2, LogIn } from 'lucide-react'
 import { toast } from 'sonner'
+import { adminMfaPath } from '@/lib/admin-mfa'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -189,6 +190,14 @@ export function UserAuthForm({
     // signed-out page, or another account's data) must not be shown now.
     queryClient.clear()
     setIsLoading(false)
+
+    // The password is only the first step for admins: the database grants
+    // admin rights to two-step (aal2) sessions only.
+    if (mode === 'admin') {
+      await navigate(adminMfaPath(safeRedirect))
+      return
+    }
+
     toast.success(t("Giriş uğurludur."))
     await navigate({
       to: safeRedirect,

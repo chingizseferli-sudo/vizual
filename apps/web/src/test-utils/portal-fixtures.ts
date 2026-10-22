@@ -178,6 +178,12 @@ export const fixtureSupabase = {
       error: null,
     }),
     signOut: async () => ({ error: null }),
+    mfa: {
+      getAuthenticatorAssuranceLevel: async () => ({
+        data: { currentLevel: 'aal2', nextLevel: 'aal2' },
+        error: null,
+      }),
+    },
     onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
   },
   rpc(name: string) {

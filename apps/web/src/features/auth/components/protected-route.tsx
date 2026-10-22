@@ -4,6 +4,7 @@ import {
   type CurrentProfile,
   getCurrentSupabaseProfile,
 } from '@/lib/auth-session'
+import { adminMfaPath, getAdminMfaState } from '@/lib/admin-mfa'
 import { t } from '@/lib/i18n'
 import { supabase } from '@/lib/supabase'
 import { AccountStatusScreen } from './account-status-screen'
@@ -12,6 +13,9 @@ type ProtectedRouteProps = {
   allowedRoles: string[]
   unauthorizedRedirect?: '/monitor' | '/sign-in' | '/admin/sign-in'
   unauthenticatedRedirect?: '/sign-in' | '/admin/sign-in'
+  // Admin pages: the session must have passed two-step login (aal2), which is
+  // what the database requires for admin rights.
+  requireAdminMfa?: boolean
   children: React.ReactNode
 }
 
@@ -19,6 +23,7 @@ export function ProtectedRoute({
   allowedRoles,
   unauthorizedRedirect = '/sign-in',
   unauthenticatedRedirect = '/sign-in',
+  requireAdminMfa = false,
   children,
 }: ProtectedRouteProps) {
   const navigate = useNavigate()
@@ -41,8 +46,18 @@ export function ProtectedRoute({
           ? { ...profile, profile: { ...profile.profile, status: state.status } }
           : profile
       })
-      .then((profile) => {
+      .then(async (profile) => {
         if (!mounted) return
+
+        if (requireAdminMfa && profile.isAdmin) {
+          const mfaState = await getAdminMfaState().catch(() => 'challenge')
+          if (!mounted) return
+          if (mfaState !== 'verified') {
+            const here = window.location.pathname + window.location.search
+            void navigate(adminMfaPath(here))
+            return
+          }
+        }
 
         setSessionProfile(profile)
         setIsChecking(false)
@@ -51,7 +66,7 @@ export function ProtectedRoute({
     return () => {
       mounted = false
     }
-  }, [])
+  }, [navigate, requireAdminMfa])
 
   useEffect(() => {
     if (isChecking || !sessionProfile) return

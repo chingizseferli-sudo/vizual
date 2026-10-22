@@ -12,6 +12,7 @@ function AdminLayout() {
       allowedRoles={['admin', 'superadmin']}
       unauthorizedRedirect='/admin/sign-in'
       unauthenticatedRedirect='/admin/sign-in'
+      requireAdminMfa
     >
       <AuthenticatedLayout />
     </ProtectedRoute>

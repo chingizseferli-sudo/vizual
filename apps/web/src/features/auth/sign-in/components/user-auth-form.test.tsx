@@ -144,7 +144,7 @@ describe('UserAuthForm', () => {
       .toBeInTheDocument()
   })
 
-  it('redirects a superadmin to admin dashboard on successful sign-in', async () => {
+  it('sends a superadmin to two-step login after the password', async () => {
     mockSuccessfulSignIn()
     mockProfile('superadmin')
 
@@ -161,7 +161,8 @@ describe('UserAuthForm', () => {
         password: '1234567',
       })
       expect(mocks.navigate).toHaveBeenCalledWith({
-        to: '/admin',
+        to: '/admin/mfa',
+        search: { redirect: '/admin' },
         replace: true,
       })
     })
@@ -244,7 +245,8 @@ describe('UserAuthForm', () => {
 
     await vi.waitFor(() =>
       expect(mocks.navigate).toHaveBeenCalledWith({
-        to: '/admin/monitor/sources',
+        to: '/admin/mfa',
+        search: { redirect: '/admin/monitor/sources' },
         replace: true,
       })
     )

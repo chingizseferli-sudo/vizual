@@ -18,6 +18,7 @@ import { Route as BlogRouteImport } from './routes/blog'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminSignInRouteImport } from './routes/admin.sign-in'
+import { Route as AdminMfaRouteImport } from './routes/admin.mfa'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors404RouteImport } from './routes/(errors)/404'
@@ -117,6 +118,11 @@ const IndexRoute = IndexRouteImport.update({
 const AdminSignInRoute = AdminSignInRouteImport.update({
   id: '/admin/sign-in',
   path: '/admin/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminMfaRoute = AdminMfaRouteImport.update({
+  id: '/admin/mfa',
+  path: '/admin/mfa',
   getParentRoute: () => rootRouteImport,
 } as any)
 const errors503Route = errors503RouteImport.update({
@@ -430,6 +436,7 @@ export interface FileRoutesByFullPath {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/admin/mfa': typeof AdminMfaRoute
   '/admin/sign-in': typeof AdminSignInRoute
   '/admin/monitor': typeof authAdminMonitorRouteRouteWithChildren
   '/admin/settings': typeof authAdminSettingsRouteRouteWithChildren
@@ -494,6 +501,7 @@ export interface FileRoutesByTo {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/admin/mfa': typeof AdminMfaRoute
   '/admin/sign-in': typeof AdminSignInRoute
   '/admin/calculator': typeof authAdminCalculatorRoute
   '/admin/demo-requests': typeof authAdminDemoRequestsRoute
@@ -557,6 +565,7 @@ export interface FileRoutesById {
   '/(errors)/404': typeof errors404Route
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
+  '/admin/mfa': typeof AdminMfaRoute
   '/admin/sign-in': typeof AdminSignInRoute
   '/(auth)/admin/monitor': typeof authAdminMonitorRouteRouteWithChildren
   '/(auth)/admin/settings': typeof authAdminSettingsRouteRouteWithChildren
@@ -625,6 +634,7 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/admin/mfa'
     | '/admin/sign-in'
     | '/admin/monitor'
     | '/admin/settings'
@@ -689,6 +699,7 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/admin/mfa'
     | '/admin/sign-in'
     | '/admin/calculator'
     | '/admin/demo-requests'
@@ -751,6 +762,7 @@ export interface FileRouteTypes {
     | '/(errors)/404'
     | '/(errors)/500'
     | '/(errors)/503'
+    | '/admin/mfa'
     | '/admin/sign-in'
     | '/(auth)/admin/monitor'
     | '/(auth)/admin/settings'
@@ -818,6 +830,7 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  AdminMfaRoute: typeof AdminMfaRoute
   AdminSignInRoute: typeof AdminSignInRoute
 }
 
@@ -884,6 +897,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/sign-in'
       fullPath: '/admin/sign-in'
       preLoaderRoute: typeof AdminSignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/mfa': {
+      id: '/admin/mfa'
+      path: '/admin/mfa'
+      fullPath: '/admin/mfa'
+      preLoaderRoute: typeof AdminMfaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/(errors)/503': {
@@ -1447,6 +1467,7 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  AdminMfaRoute: AdminMfaRoute,
   AdminSignInRoute: AdminSignInRoute,
 }
 export const routeTree = rootRouteImport

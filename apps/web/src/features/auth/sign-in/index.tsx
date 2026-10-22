@@ -20,7 +20,20 @@ type SignInProps = {
   redirectTo?: string
 }
 
-function AdminSignIn({ redirectTo }: { redirectTo?: string }) {
+type AdminAuthShellProps = {
+  title: string
+  description: string
+  footer: string
+  children: React.ReactNode
+}
+
+// The admin sign-in page and its two-step login page share this frame.
+export function AdminAuthShell({
+  title,
+  description,
+  footer,
+  children,
+}: AdminAuthShellProps) {
   const { siteName, logoUrl, iconUrl } = usePublicSiteBrand()
 
   return (
@@ -52,15 +65,19 @@ function AdminSignIn({ redirectTo }: { redirectTo?: string }) {
               <ShieldCheck className='size-4' />
             </div>
             <div>
-              <CardTitle className='text-xl font-semibold tracking-tight'>{t("Admin panelə giriş")}</CardTitle>
-              <CardDescription className='mt-2 leading-6'>{t("Bu giriş yalnız admin və superadmin hesabları üçündür.")}</CardDescription>
+              <CardTitle className='text-xl font-semibold tracking-tight'>
+                {title}
+              </CardTitle>
+              <CardDescription className='mt-2 leading-6'>
+                {description}
+              </CardDescription>
             </div>
           </CardHeader>
-          <CardContent>
-            <UserAuthForm redirectTo={redirectTo} mode='admin' />
-          </CardContent>
+          <CardContent>{children}</CardContent>
           <CardFooter>
-            <p className='w-full text-center text-xs leading-5 text-muted-foreground'>{t("Admin icazəsi ayrıca yoxlanılır. İstifadəçi iş masası üçün ayrıca girişdən istifadə edin.")}</p>
+            <p className='w-full text-center text-xs leading-5 text-muted-foreground'>
+              {footer}
+            </p>
           </CardFooter>
         </Card>
 
@@ -69,6 +86,18 @@ function AdminSignIn({ redirectTo }: { redirectTo?: string }) {
         </div>
       </div>
     </main>
+  )
+}
+
+function AdminSignIn({ redirectTo }: { redirectTo?: string }) {
+  return (
+    <AdminAuthShell
+      title={t("Admin panelə giriş")}
+      description={t("Bu giriş yalnız admin və superadmin hesabları üçündür.")}
+      footer={t("Admin icazəsi ayrıca yoxlanılır. İstifadəçi iş masası üçün ayrıca girişdən istifadə edin.")}
+    >
+      <UserAuthForm redirectTo={redirectTo} mode='admin' />
+    </AdminAuthShell>
   )
 }
 

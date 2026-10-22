@@ -17,6 +17,16 @@ function bearerToken(req: Request) {
   return match?.[1]?.trim() || null;
 }
 
+function tokenAal(token: string): string | null {
+  try {
+    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const claims = JSON.parse(atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, "=")));
+    return typeof claims.aal === "string" ? claims.aal : null;
+  } catch {
+    return null;
+  }
+}
+
 function env(name: string) {
   const value = Deno.env.get(name)?.trim();
   if (!value) throw new Error(`${name} is missing`);
@@ -117,6 +127,12 @@ export async function requireAdmin(req: Request, json: JsonResponder): Promise<A
 
   if ((role !== "admin" && role !== "superadmin") || status !== "active") {
     return json({ error: "Admin access required" }, 403);
+  }
+
+  // Same rule as public.is_admin_user(): admin rights need two-step login.
+  // Auth already validated this token above, so reading its claims is safe.
+  if (tokenAal(token) !== "aal2") {
+    return json({ error: "Two-step verification required" }, 403);
   }
 
   return {

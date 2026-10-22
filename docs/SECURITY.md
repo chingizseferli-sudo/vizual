@@ -64,7 +64,7 @@ The migration is idempotent and runs as part of `supabase db push` on the new pr
 - Auth → Providers → Email/Password: enable **leaked password protection**, minimum length ≥ 8 with character requirements, keep email confirmation on.
 - Auth → URL Configuration: Site URL and Redirect URLs list only the production domain(s) (password reset and sign-up use `window.location.origin`).
 - Auth → Rate limits: review sign-up/sign-in/email limits; consider CAPTCHA on sign-up (anyone can sign up and call `selector-proxy`).
-- Enable MFA for admin accounts.
+- Admin two-step login (`20261022000002_admin_requires_mfa.sql`): `is_admin_user()` and edge-function `requireAdmin` accept only aal2 (TOTP-verified) sessions; `/admin/mfa` enrolls or challenges after the password. Keep Auth → Multi-Factor → TOTP enabled. Lost phone: Authentication → Users → the admin → delete the MFA factor; the next sign-in enrolls a new one.
 - Edge Functions → Secrets: set `ALLOWED_ORIGINS` (e.g. `https://vizual.az,https://www.vizual.az`), then redeploy all four functions.
 - Storage → `public-site-assets`: replace any existing `.svg` logo/icon.
 - Decide on finding #19 (history rewrite).
