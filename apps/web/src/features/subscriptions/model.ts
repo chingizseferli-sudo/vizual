@@ -52,6 +52,7 @@ export type PlanFormValues = {
   displayOrder: string
   maxWatches: string
   maxKeywords: string
+  maxCompetitors: string
   minimumIntervalMinutes: string
   historyDays: string
   telegramEnabled: boolean
@@ -97,6 +98,7 @@ export const emptyPlanForm: PlanFormValues = {
   displayOrder: '0',
   maxWatches: '',
   maxKeywords: '',
+  maxCompetitors: '',
   minimumIntervalMinutes: '',
   historyDays: '',
   telegramEnabled: true,
@@ -145,6 +147,17 @@ export function planKeywordLimit(
     return value
   }
   return plan?.max_watches != null ? plan.max_watches * 20 : null
+}
+
+// Competitors a plan allows on the Rəqiblər page; mirrors
+// competitor_limit_for_user() in SQL: limits.max_competitors, else 0.
+export function planCompetitorLimit(
+  plan: Pick<SubscriptionPlan, 'limits'> | undefined
+) {
+  const value = plan?.limits?.max_competitors
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : 0
 }
 
 export function normalizePlanCode(value: string) {
@@ -229,6 +242,11 @@ export function buildPlanPayload(
   })
   if (maxKeywords.error) return { error: maxKeywords.error }
 
+  const maxCompetitors = parseOptionalNumber(values.maxCompetitors, 'Rəqib limiti', {
+    integer: true,
+  })
+  if (maxCompetitors.error) return { error: maxCompetitors.error }
+
   const minimumInterval = parseOptionalNumber(
     values.minimumIntervalMinutes,
     'Minimum interval',
@@ -265,6 +283,8 @@ export function buildPlanPayload(
   )
   delete limits.report_frequencies
   if (reportFrequencies.length) limits.report_frequencies = reportFrequencies
+  delete limits.max_competitors
+  if (maxCompetitors.value !== null) limits.max_competitors = maxCompetitors.value
 
   const features = Array.from(
     new Set(
@@ -309,6 +329,10 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     maxKeywords:
       typeof plan.limits.max_keywords === 'number'
         ? String(plan.limits.max_keywords)
+        : '',
+    maxCompetitors:
+      typeof plan.limits.max_competitors === 'number'
+        ? String(plan.limits.max_competitors)
         : '',
     minimumIntervalMinutes: plan.minimum_interval_minutes?.toString() || '',
     historyDays: plan.history_days?.toString() || '',

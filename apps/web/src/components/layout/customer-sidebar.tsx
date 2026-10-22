@@ -10,6 +10,7 @@ import {
   MapPinned,
   Radio,
   ShieldCheck,
+  Swords,
   UserRound,
 } from 'lucide-react'
 import {
@@ -46,6 +47,11 @@ const customerNavItems = [
     title: t('Açar sözlər'),
     url: '/monitor/keywords',
     icon: Radio,
+  },
+  {
+    title: t('Rəqiblər'),
+    url: '/monitor/competitors',
+    icon: Swords,
   },
   {
     title: t('İş masası'),

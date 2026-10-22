@@ -81,6 +81,49 @@ const matches = items.map((item, i) => ({
   user_monitors: monitor,
   monitored_items: item,
 }))
+const competitors = [
+  {
+    id: 'fixture-competitor-1',
+    name: 'Azərbaycan Texniki Universiteti',
+    keywords: ['Texniki Universitet', 'AzTU'],
+    created_at: timestamp,
+  },
+  {
+    id: 'fixture-competitor-2',
+    name: 'ADA Universiteti',
+    keywords: ['ADA Universiteti'],
+    created_at: timestamp,
+  },
+]
+const competitorStats = [
+  {
+    kind: 'own',
+    competitor_id: null,
+    name: null,
+    mentions: 24,
+    positive: 9,
+    neutral: 10,
+    negative: 3,
+  },
+  {
+    kind: 'competitor',
+    competitor_id: competitors[0].id,
+    name: competitors[0].name,
+    mentions: 31,
+    positive: 6,
+    neutral: 14,
+    negative: 8,
+  },
+  {
+    kind: 'competitor',
+    competitor_id: competitors[1].id,
+    name: competitors[1].name,
+    mentions: 12,
+    positive: 7,
+    neutral: 4,
+    negative: 0,
+  },
+]
 const tables: Record<string, Record<string, unknown>[]> = {
   user_profiles: [profile],
   admin_users: [{ ...profile, role: 'admin' }],
@@ -110,6 +153,22 @@ const tables: Record<string, Record<string, unknown>[]> = {
     },
   ],
   monitored_items: items,
+  competitors,
+  competitor_matches: items.map((item, i) => ({
+    competitor_id: competitors[i % 2].id,
+    created_at: timestamp,
+    monitored_items: {
+      ...item,
+      ai_sentiment: ['positive', 'negative', null][i],
+    },
+  })),
+  competitor_insights: [
+    {
+      insight_date: '2026-10-11',
+      summary:
+        'Son 7 gündə Azərbaycan Texniki Universiteti xəbərlərdə sizdən çox keçib, amma mənfi xəbərlərinin payı daha yüksəkdir. ADA Universiteti az xəbərdə görünsə də, xəbərlərinin çoxu müsbətdir.',
+    },
+  ],
   sources,
   monitor_matches: matches,
   monitor_alerts: matches.map((match, i) => ({
@@ -188,8 +247,20 @@ export const fixtureSupabase = {
   },
   rpc(name: string) {
     if (name === 'current_user_plan_limits') {
-      const result = { data: { max_watches: 15, max_keywords: 300 }, error: null }
+      const result = {
+        data: { max_watches: 15, max_keywords: 300 },
+        error: null,
+      }
       return { maybeSingle: async () => result }
+    }
+    if (name === 'current_user_competitor_limit') {
+      return Promise.resolve({ data: 3, error: null })
+    }
+    if (name === 'my_competitor_stats') {
+      return Promise.resolve({
+        data: portalFixture.state === 'empty' ? [] : competitorStats,
+        error: null,
+      })
     }
     if (name === 'current_user_account_state') {
       return Promise.resolve({ data: [{ status: 'active' }], error: null })

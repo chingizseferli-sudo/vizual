@@ -3,6 +3,7 @@ import {
   fetchAllMonitorIds,
   fetchDashboardData,
 } from '@/features/keywords/dashboard'
+import { fetchCompetitorsData } from '@/features/competitors/data'
 import { fetchCustomerAlerts } from '@/features/keywords/alerts'
 import { fetchKeywordsData } from '@/features/keywords/data'
 import { customerQueryKeys } from '@/lib/query-keys'
@@ -166,6 +167,15 @@ export function prefetchCustomerRoute(queryClient: QueryClient, url: string) {
     void queryClient.prefetchQuery({
       queryKey: customerQueryKeys.keywords(),
       queryFn: fetchKeywordsData,
+      staleTime: 60 * 1000,
+    })
+    return
+  }
+
+  if (url === '/monitor/competitors') {
+    void queryClient.prefetchQuery({
+      queryKey: customerQueryKeys.competitors(),
+      queryFn: fetchCompetitorsData,
       staleTime: 60 * 1000,
     })
     return

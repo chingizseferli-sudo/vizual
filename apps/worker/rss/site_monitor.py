@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 from dateutil import parser
 from lxml import html
 
+import competitor_ai
 import email_reports
 import source_lifecycle as lifecycle
 from domain_policy import is_excluded_domain
@@ -71,7 +72,9 @@ ARTICLE_TITLE_INFO_CACHE = {}
 #   old_news / duplicate_url never change; no_monitor_match depends on the keyword set.
 ARTICLE_VERDICT_CACHE = {}
 ARTICLE_VERDICT_MAX = 20000
-ARTICLE_VERDICT_TTL_SECONDS = {"old_news": 86400, "duplicate_url": 86400, "no_monitor_match": 1800}
+ARTICLE_VERDICT_TTL_SECONDS = {"old_news": 86400, "duplicate_url": 86400, "no_monitor_match": 1800, "competitor_only": 86400}
+# Verdicts that depend on the keyword set; they expire when keywords change.
+KEYWORD_VERDICTS = {"no_monitor_match", "competitor_only"}
 _KEYWORD_SIGNATURE_MEMO = {"id": None, "signature": ""}
 
 
@@ -99,13 +102,13 @@ def cached_article_verdict(link, signature, now=None):
     reason = entry["reason"]
     if now - entry["at"] > ARTICLE_VERDICT_TTL_SECONDS.get(reason, 0):
         return ""
-    if reason == "no_monitor_match" and (not signature or entry["signature"] != signature):
+    if reason in KEYWORD_VERDICTS and (not signature or entry["signature"] != signature):
         return ""
     return reason
 
 
 def remember_article_verdict(link, reason, signature="", now=None):
-    if reason == "no_monitor_match" and not signature:
+    if reason in KEYWORD_VERDICTS and not signature:
         return
     ARTICLE_VERDICT_CACHE[normalize_link(link)] = {
         "reason": reason,
@@ -114,6 +117,12 @@ def remember_article_verdict(link, reason, signature="", now=None):
     }
 LAST_MONITOR_CLEANUP = None
 LAST_ACCOUNT_HOUSEKEEPING = None
+COMPETITOR_AI = {"client": None, "client_ready": False, "last_sentiment_at": None, "last_summary_date": None}
+COMPETITOR_SENTIMENT_EVERY = timedelta(minutes=30)
+COMPETITOR_SENTIMENT_BATCH = 200
+# The daily competitor brief is written after this hour (Baku time).
+COMPETITOR_SUMMARY_HOUR = 9
+COMPETITOR_SUMMARY_HEADLINES = 8
 TELEGRAM_LAST_ERROR = ""
 BOT_SETTINGS_CACHE = {"paused": False, "fetched_at": 0.0}
 RUNTIME_STATE_TABLE_AVAILABLE = True
@@ -4795,6 +4804,237 @@ def match_user_monitors(item_id, title, monitor_keywords_cache=None):
         return []
 
 
+def load_competitor_keywords():
+    """[{competitor_id, user_id, keyword}] the plan allows for active accounts; [] when unknown."""
+    if not supabase_ready():
+        return []
+    try:
+        response = requests.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/competitor_keywords_for_worker",
+            headers=supabase_headers(),
+            json={},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code != 200:
+            print(f"Rəqib açar sözləri oxunmadı: {response.status_code} | {response.text[:200]}", flush=True)
+            return []
+        rows = [row for row in response.json() or [] if row.get("competitor_id") and clean_text(row.get("keyword"))]
+        if rows:
+            print(f"Rəqib açar söz cache: {len(rows)}", flush=True)
+        return rows
+    except Exception as exc:
+        print(f"Rəqib açar sözləri istisnası: {exc}", flush=True)
+        return []
+
+
+def combined_keywords_signature(monitor_keywords_cache, competitor_keywords_cache):
+    """Customer keyword signature extended with competitor keywords; '' when unknown."""
+    signature = keywords_signature(monitor_keywords_cache)
+    if not signature or not competitor_keywords_cache:
+        return signature
+    parts = sorted(f"{row.get('competitor_id')}|{row.get('keyword')}" for row in competitor_keywords_cache)
+    return hashlib.sha1("\n".join([signature, *parts]).encode("utf-8")).hexdigest()
+
+
+def find_competitor_hits(title, competitor_keywords_cache):
+    """One hit per competitor whose keyword is in the title, with the keyword that matched."""
+    title_text = normalize_text(title)
+    hits = []
+    seen = set()
+    for row in competitor_keywords_cache or []:
+        competitor_id = row.get("competitor_id")
+        if competitor_id in seen:
+            continue
+        keyword = row.get("keyword", "")
+        if keyword_matches_title(normalize_text(keyword), title_text):
+            seen.add(competitor_id)
+            hits.append({"competitor_id": competitor_id, "matched_keyword": keyword})
+    return hits
+
+
+def save_competitor_matches(item_id, hits):
+    payload = [{"competitor_id": hit["competitor_id"], "item_id": item_id, "matched_keyword": hit["matched_keyword"]} for hit in hits]
+    try:
+        response = requests.post(
+            f"{SUPABASE_URL}/rest/v1/competitor_matches",
+            headers=supabase_headers({"Prefer": "resolution=ignore-duplicates,return=minimal"}),
+            json=payload,
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code in (200, 201, 204, 409):
+            print(f"✅ Rəqib uyğunluğu yazıldı: {', '.join(hit['matched_keyword'] for hit in hits)} | item={item_id}", flush=True)
+            return True
+        print(f"Rəqib uyğunluğu yazılmadı: {response.status_code} | {response.text[:200]}", flush=True)
+    except Exception as exc:
+        print(f"Rəqib uyğunluğu istisnası: {exc}", flush=True)
+    return False
+
+
+def competitor_ai_client():
+    if not COMPETITOR_AI["client_ready"]:
+        COMPETITOR_AI["client"] = competitor_ai.make_client()
+        COMPETITOR_AI["client_ready"] = True
+        if COMPETITOR_AI["client"] is None:
+            print("ANTHROPIC_API_KEY yoxdur: rəqiblər səhifəsi AI təhlilsiz işləyir.", flush=True)
+    return COMPETITOR_AI["client"]
+
+
+def start_competitor_ai(competitor_keywords_cache):
+    """Run the AI work beside the news check so slow API calls never delay alerts."""
+    thread = COMPETITOR_AI.get("thread")
+    if thread and thread.is_alive():
+        return
+    COMPETITOR_AI["thread"] = threading.Thread(
+        target=competitor_ai_if_needed,
+        args=(competitor_keywords_cache,),
+        name="competitor-ai",
+        daemon=True,
+    )
+    COMPETITOR_AI["thread"].start()
+
+
+def competitor_ai_if_needed(competitor_keywords_cache, now=None):
+    """Every 30 min label new headlines' tone; once a day after 09:00 write each customer's brief."""
+    if not supabase_ready() or not competitor_keywords_cache:
+        return
+    client = competitor_ai_client()
+    if client is None:
+        return
+    now = now or datetime.now(BAKU_TZ)
+    last = COMPETITOR_AI["last_sentiment_at"]
+    if not last or now - last >= COMPETITOR_SENTIMENT_EVERY:
+        COMPETITOR_AI["last_sentiment_at"] = now
+        classify_pending_sentiment(client)
+    if now.hour >= COMPETITOR_SUMMARY_HOUR and COMPETITOR_AI["last_summary_date"] != now.date():
+        COMPETITOR_AI["last_summary_date"] = now.date()
+        user_ids = sorted({row.get("user_id") for row in competitor_keywords_cache if row.get("user_id")})
+        write_competitor_summaries(client, user_ids, now.date())
+
+
+def classify_pending_sentiment(client):
+    try:
+        response = requests.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/items_needing_sentiment",
+            headers=supabase_headers(),
+            json={"p_limit": COMPETITOR_SENTIMENT_BATCH},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code != 200:
+            print(f"Ton gözləyən xəbərlər oxunmadı: {response.status_code} | {response.text[:200]}", flush=True)
+            return 0
+        items = [row for row in response.json() or [] if row.get("id") and clean_text(row.get("title"))]
+        if not items:
+            return 0
+        labels = competitor_ai.classify_headlines(client, items)
+        classified_at = datetime.now(BAKU_TZ).isoformat()
+        saved = 0
+        for item_id, label in labels.items():
+            patch = requests.patch(
+                f"{SUPABASE_URL}/rest/v1/monitored_items",
+                headers=supabase_headers({"Prefer": "return=minimal"}),
+                params={"id": f"eq.{item_id}"},
+                json={"ai_sentiment": label["sentiment"], "ai_topic": label["topic"], "ai_classified_at": classified_at},
+                timeout=REQUEST_TIMEOUT,
+            )
+            if patch.status_code in (200, 204):
+                saved += 1
+        print(f"AI ton təhlili: {saved}/{len(items)} xəbər", flush=True)
+        return saved
+    except Exception as exc:
+        print(f"AI ton təhlili istisnası: {redact_secrets(exc)}", flush=True)
+        return 0
+
+
+def recent_titles(table, params):
+    response = requests.get(
+        f"{SUPABASE_URL}/rest/v1/{table}",
+        headers=supabase_headers(),
+        params={**params, "order": "created_at.desc", "limit": str(COMPETITOR_SUMMARY_HEADLINES)},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code != 200:
+        return []
+    return [
+        (row.get("monitored_items") or {}).get("title")
+        for row in response.json() or []
+        if (row.get("monitored_items") or {}).get("title")
+    ]
+
+
+def write_competitor_summaries(client, user_ids, today):
+    """One brief per customer per day; customers who already have today's are skipped."""
+    if not user_ids:
+        return 0
+    try:
+        existing = requests.get(
+            f"{SUPABASE_URL}/rest/v1/competitor_insights",
+            headers=supabase_headers(),
+            params={"select": "user_id", "insight_date": f"eq.{today.isoformat()}"},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if existing.status_code != 200:
+            print(f"Rəqib xülasələri oxunmadı: {existing.status_code} | {existing.text[:200]}", flush=True)
+            return 0
+        done = {row.get("user_id") for row in existing.json() or []}
+    except Exception as exc:
+        print(f"Rəqib xülasələri istisnası: {exc}", flush=True)
+        return 0
+
+    written = 0
+    for user_id in user_ids:
+        if user_id in done:
+            continue
+        try:
+            stats_response = requests.post(
+                f"{SUPABASE_URL}/rest/v1/rpc/competitor_stats",
+                headers=supabase_headers(),
+                json={"p_user_id": user_id, "p_days": 7},
+                timeout=REQUEST_TIMEOUT,
+            )
+            if stats_response.status_code != 200:
+                print(f"Rəqib statistikası oxunmadı: {stats_response.status_code} | {stats_response.text[:200]}", flush=True)
+                continue
+            stats = stats_response.json() or []
+            summary = None
+            if any(int(row.get("mentions") or 0) for row in stats):
+                headlines = {
+                    "Öz açar sözləriniz": recent_titles(
+                        "monitor_matches",
+                        {"select": "monitored_items(title),user_monitors!inner(user_id)", "user_monitors.user_id": f"eq.{user_id}"},
+                    )
+                }
+                for row in stats:
+                    if row.get("kind") == "competitor" and row.get("competitor_id"):
+                        headlines[row.get("name") or "Rəqib"] = recent_titles(
+                            "competitor_matches",
+                            {"select": "monitored_items(title)", "competitor_id": f"eq.{row['competitor_id']}"},
+                        )
+                summary = competitor_ai.write_summary(client, stats, headlines)
+                if not summary:
+                    continue
+            save = requests.post(
+                f"{SUPABASE_URL}/rest/v1/competitor_insights",
+                headers=supabase_headers({"Prefer": "resolution=merge-duplicates,return=minimal"}),
+                json={
+                    "user_id": user_id,
+                    "insight_date": today.isoformat(),
+                    "summary": summary,
+                    "stats": stats,
+                    "model": competitor_ai.AI_MODEL if summary else None,
+                },
+                timeout=REQUEST_TIMEOUT,
+            )
+            if save.status_code in (200, 201, 204):
+                written += 1
+            else:
+                print(f"Rəqib xülasəsi yazılmadı: {save.status_code} | {save.text[:200]}", flush=True)
+        except Exception as exc:
+            print(f"Rəqib xülasəsi istisnası: {redact_secrets(exc)}", flush=True)
+    if written:
+        print(f"Rəqib xülasələri yazıldı: {written}", flush=True)
+    return written
+
+
 def extract_keywords_from_rules(site):
     keywords = set()
     for keyword in site.get("keywords", []):
@@ -4972,7 +5212,7 @@ def load_sites():
         return []
 
 
-def process_site(index, total, site, patterns_data, monitor_keywords_cache=None):
+def process_site(index, total, site, patterns_data, monitor_keywords_cache=None, competitor_keywords_cache=None):
     started = time.time()
     result = {
         "sent": 0,
@@ -5003,7 +5243,7 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None)
         update_source_health(site, result)
         return result
 
-    keyword_signature = keywords_signature(monitor_keywords_cache)
+    keyword_signature = combined_keywords_signature(monitor_keywords_cache, competitor_keywords_cache)
     for item in items[:site.get("limit", MAX_LINKS_PER_SITE)]:
         title = item["title"]
         link = item["link"]
@@ -5083,12 +5323,21 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None)
             )
             continue
         pre_matches = find_matching_user_monitors(clean_title, monitor_keywords_cache)
-        if not pre_matches:
+        competitor_hits = find_competitor_hits(clean_title, competitor_keywords_cache)
+        if not pre_matches and not competitor_hits:
             result["reason"] = "no_monitor_match"
             remember_article_verdict(link, "no_monitor_match", keyword_signature)
             continue
 
         monitor_item_id = save_to_vizual_monitor(site, item, clean_title, published_time)
+        if monitor_item_id and competitor_hits:
+            save_competitor_matches(monitor_item_id, competitor_hits)
+        if not pre_matches:
+            # Competitor news is kept for the Rəqiblər page only: no Telegram alert.
+            result["reason"] = "competitor_only"
+            if monitor_item_id:
+                remember_article_verdict(link, "competitor_only", keyword_signature)
+            continue
         monitor_matches = match_user_monitors(monitor_item_id, clean_title, monitor_keywords_cache) if monitor_item_id else []
         matched_keywords = clean_matched_keywords([match.get("keyword") for match in monitor_matches])
 
@@ -5193,6 +5442,8 @@ def check_sites(poll_commands=True):
         log_scheduler_dry_run_summary(sites, scheduler_decisions)
     patterns_data = load_patterns()
     monitor_keywords_cache = load_active_monitor_keywords()
+    competitor_keywords_cache = load_competitor_keywords()
+    start_competitor_ai(competitor_keywords_cache)
     total = len(sites)
     print(f"Yüklənən sayt sayı: {total}", flush=True)
     print(f"Monitorinq başladı | worker={MAX_WORKERS} | son {NEWS_TIME_LIMIT_HOURS} saat | {datetime.now(BAKU_TZ).strftime('%d.%m.%Y %H:%M:%S')} AZT", flush=True)
@@ -5217,7 +5468,7 @@ def check_sites(poll_commands=True):
     max_workers = max(1, min(MAX_WORKERS, total or 1))
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(process_site, index, total, site, patterns_data, monitor_keywords_cache): site for index, site in enumerate(sites, start=1)}
+        futures = {executor.submit(process_site, index, total, site, patterns_data, monitor_keywords_cache, competitor_keywords_cache): site for index, site in enumerate(sites, start=1)}
         for future in as_completed(futures):
             try:
                 result = future.result() or {}

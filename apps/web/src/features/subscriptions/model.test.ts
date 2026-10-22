@@ -4,6 +4,7 @@ import {
   emptyPlanForm,
   formatPlanPrice,
   normalizePlanCode,
+  planCompetitorLimit,
   planKeywordLimit,
   planReportFrequencies,
   planToFormValues,
@@ -129,6 +130,25 @@ describe('subscription plan model', () => {
       limits: { report_frequencies: ['weekly', 'daily', 'hourly'] },
     })
     expect(planToFormValues(row).reportFrequencies).toEqual(['daily', 'weekly'])
+  })
+
+  it('stores the competitor limit; no limit means no competitors', () => {
+    const plan = buildPlanPayload(
+      { ...emptyPlanForm, name: 'Pro', maxCompetitors: '3' },
+      { max_competitors: 5, max_keywords: 20 }
+    ).data!
+    expect(plan.limits).toEqual({ max_competitors: 3 })
+    expect(planCompetitorLimit(plan)).toBe(3)
+
+    const cleared = buildPlanPayload(
+      { ...emptyPlanForm, name: 'Pro' },
+      { max_competitors: 5 }
+    ).data!
+    expect(cleared.limits).toEqual({})
+    expect(planCompetitorLimit(cleared)).toBe(0)
+    expect(
+      buildPlanPayload({ ...emptyPlanForm, name: 'Pro', maxCompetitors: '-1' }).error
+    ).toContain('Rəqib limiti')
   })
 
   it('formats recurring and custom prices', () => {

@@ -11,6 +11,7 @@ import {
   emptyPlanForm,
   formatPlanPrice,
   normalizePlanRow,
+  planCompetitorLimit,
   planKeywordLimit,
   planReportFrequencies,
   planSocialIntervalMinutes,
@@ -415,6 +416,20 @@ function SubscriptionPlansPage() {
             />
           </label>
           <label className='grid gap-1.5 text-sm font-medium'>
+            Rəqib limiti
+            <input
+              type='number'
+              min='0'
+              step='1'
+              value={form.maxCompetitors}
+              onChange={(event) =>
+                updateForm('maxCompetitors', event.target.value)
+              }
+              className='rounded-lg border bg-background px-3 py-2 font-normal'
+              placeholder='0 (yoxdur)'
+            />
+          </label>
+          <label className='grid gap-1.5 text-sm font-medium'>
             Veb izləmə limiti
             <input
               type='number'
@@ -622,7 +637,7 @@ function SubscriptionPlansPage() {
               <p className='mt-3 text-sm text-muted-foreground'>
                 {plan.description || 'Təsvir yoxdur.'}
               </p>
-              <div className='mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4'>
+              <div className='mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3'>
                 <div className='rounded-lg bg-muted/50 p-2'>
                   <div className='text-xs text-muted-foreground'>Abunə</div>
                   <div className='font-semibold'>
@@ -633,6 +648,12 @@ function SubscriptionPlansPage() {
                   <div className='text-xs text-muted-foreground'>Açar söz</div>
                   <div className='font-semibold'>
                     {planKeywordLimit(plan) ?? '∞'}
+                  </div>
+                </div>
+                <div className='rounded-lg bg-muted/50 p-2'>
+                  <div className='text-xs text-muted-foreground'>Rəqib</div>
+                  <div className='font-semibold'>
+                    {planCompetitorLimit(plan) || 'Yoxdur'}
                   </div>
                 </div>
                 <div className='rounded-lg bg-muted/50 p-2'>
