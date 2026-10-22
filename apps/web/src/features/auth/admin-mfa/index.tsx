@@ -195,7 +195,6 @@ export function AdminMfa({ redirectTo }: { redirectTo?: string }) {
           ? t("Admin panel üçün telefonunuzda autentifikator tətbiqi (Google Authenticator, Microsoft Authenticator və s.) lazımdır. Bunu bir dəfə qurursunuz.")
           : t("Telefonunuzdakı autentifikator tətbiqində göstərilən 6 rəqəmli kodu yazın.")
       }
-      footer={t("Telefonu itirsəniz, superadmin Supabase panelində (Authentication → Users) iki addımlı girişi sıfırlaya bilər.")}
     >
       {step.kind === 'loading' && (
         <div className='flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground'>

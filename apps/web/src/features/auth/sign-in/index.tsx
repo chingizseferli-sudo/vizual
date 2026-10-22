@@ -23,7 +23,7 @@ type SignInProps = {
 type AdminAuthShellProps = {
   title: string
   description: string
-  footer: string
+  footer?: string
   children: React.ReactNode
 }
 
@@ -74,11 +74,13 @@ export function AdminAuthShell({
             </div>
           </CardHeader>
           <CardContent>{children}</CardContent>
-          <CardFooter>
-            <p className='w-full text-center text-xs leading-5 text-muted-foreground'>
-              {footer}
-            </p>
-          </CardFooter>
+          {footer && (
+            <CardFooter>
+              <p className='w-full text-center text-xs leading-5 text-muted-foreground'>
+                {footer}
+              </p>
+            </CardFooter>
+          )}
         </Card>
 
         <div className='mt-5 text-center text-sm text-muted-foreground'>
@@ -122,9 +124,6 @@ export function SignIn({ mode = 'customer', redirectTo }: SignInProps) {
         <CardContent>
           <UserAuthForm redirectTo={redirectTo} mode='customer' />
         </CardContent>
-        <CardFooter>
-          <p className='px-2 text-center text-xs leading-5 text-muted-foreground'>{t("Bu giriş istifadəçi iş masası üçündür. Admin panelə ayrıca admin girişindən daxil olun.")}</p>
-        </CardFooter>
       </Card>
     </AuthLayout>
   )
