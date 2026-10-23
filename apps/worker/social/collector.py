@@ -37,13 +37,25 @@ APIFY_FB_ACTOR = "topapi~facebook-search-posts-scraper"
 SOCIALFETCH_BASE = "https://api.socialfetch.dev"
 
 SOCIAL_TICK_SECONDS = int(os.getenv("SOCIAL_TICK_SECONDS", "300"))
-SOCIAL_MAX_POSTS_PER_QUERY = int(os.getenv("SOCIAL_MAX_POSTS_PER_QUERY", "10"))
+# Posts per keyword per Facebook run: admin setting fb_max_posts_per_query, unless this env is set.
+SOCIAL_MAX_POSTS_PER_QUERY_ENV = os.getenv("SOCIAL_MAX_POSTS_PER_QUERY", "").strip()
 # Posts older than this are stored for nobody: the first run would otherwise alert old posts.
 SOCIAL_MAX_AGE_HOURS = int(os.getenv("SOCIAL_MAX_AGE_HOURS", "48"))
 APIFY_RUN_TIMEOUT_SECONDS = int(os.getenv("APIFY_RUN_TIMEOUT_SECONDS", "600"))
 # Budget estimates, used when the provider does not report the actual cost.
-APIFY_FB_USD_PER_QUERY_ESTIMATE = float(os.getenv("APIFY_FB_USD_PER_QUERY_ESTIMATE", "0.05"))
-SOCIALFETCH_USD_PER_CREDIT_ESTIMATE = float(os.getenv("SOCIALFETCH_USD_PER_CREDIT_ESTIMATE", "0.01"))
+# The Facebook actor bills per delivered post ($2.40 / 1000), no start fee.
+APIFY_FB_USD_PER_POST = float(os.getenv("APIFY_FB_USD_PER_POST", "0.0024"))
+# SocialFetch Starter: $29 for 18 000 credits.
+SOCIALFETCH_USD_PER_CREDIT_ESTIMATE = float(os.getenv("SOCIALFETCH_USD_PER_CREDIT_ESTIMATE", str(29 / 18000)))
+# Own monitor memory, so other uses of the actor on this Apify account don't share it.
+APIFY_FB_MONITOR_STORE = "vizual-fb-monitor"
+# Cost-control defaults, used until migration 20261023000004 adds the settings.
+FB_DEFAULTS = {
+    "fb_must_contain_query": True,
+    "fb_min_interval_minutes": 360,
+    "fb_max_posts_per_query": 10,
+    "fb_daily_posts_per_keyword": 30,
+}
 
 PLATFORM_BASE_URLS = {
     "facebook": "https://www.facebook.com",
@@ -107,6 +119,21 @@ def load_settings():
     return rows[0] if rows else {}
 
 
+def fb_setting(settings, key):
+    value = settings.get(key)
+    return FB_DEFAULTS[key] if value is None else value
+
+
+def fb_max_posts_per_query(settings):
+    if SOCIAL_MAX_POSTS_PER_QUERY_ENV:
+        return max(1, int(SOCIAL_MAX_POSTS_PER_QUERY_ENV))
+    return max(1, min(50, int(fb_setting(settings, "fb_max_posts_per_query"))))
+
+
+def baku_day(now):
+    return now.astimezone(sm.BAKU_TZ).strftime("%Y-%m-%d")
+
+
 def keyword_intervals(keyword_rows, profiles, plans, default_interval):
     """{keyword_fold: {"keyword": original, "interval": minutes}} for active monitors."""
     plan_intervals = {}
@@ -134,17 +161,48 @@ def keyword_intervals(keyword_rows, profiles, plans, default_interval):
     return targets
 
 
-def due_keywords(platform, targets, now):
-    state = {
-        row.get("keyword_fold"): parse_time(row.get("last_checked_at"))
-        for row in rest_get("social_keyword_state", {"select": "keyword_fold,last_checked_at", "platform": f"eq.{platform}"})
+def load_keyword_state(platform):
+    """{keyword_fold: state row}; '*' so it works before last_stats exists."""
+    return {
+        row.get("keyword_fold"): row
+        for row in rest_get("social_keyword_state", {"select": "*", "platform": f"eq.{platform}"})
     }
+
+
+def due_keywords(platform, targets, now, state=None, settings=None):
+    state = load_keyword_state(platform) if state is None else state
+    settings = settings or {}
+    # Facebook bills per delivered post, so its keywords are never searched more
+    # often than the admin floor, whatever the plan or a customer's override says.
+    floor = int(fb_setting(settings, "fb_min_interval_minutes")) if platform == "facebook" else 0
+    daily_cap = fb_setting(settings, "fb_daily_posts_per_keyword") if platform == "facebook" else None
+    today = baku_day(now)
     due = []
     for folded, target in sorted(targets.items()):
-        last = state.get(folded)
-        if last is None or now - last >= timedelta(minutes=target["interval"]):
-            due.append(folded)
+        row = state.get(folded) or {}
+        last = parse_time(row.get("last_checked_at"))
+        interval = max(target["interval"], floor)
+        if last is not None and now - last < timedelta(minutes=interval):
+            continue
+        stats = row.get("last_stats") or {}
+        if daily_cap and stats.get("day") == today and int(stats.get("day_posts") or 0) >= int(daily_cap):
+            continue
+        due.append(folded)
     return due
+
+
+def carry_totals(stats, previous, now, usd):
+    """Adds this run's cost and delivered posts to the day and month totals of the
+    previous run's stats (last_stats)."""
+    previous = previous or {}
+    month = f"{now:%Y-%m}"
+    today = baku_day(now)
+    stats["usd"] = round(usd, 4)
+    stats["month"] = month
+    stats["month_usd"] = round((float(previous.get("month_usd") or 0) if previous.get("month") == month else 0) + usd, 4)
+    stats["day"] = today
+    stats["day_posts"] = (int(previous.get("day_posts") or 0) if previous.get("day") == today else 0) + stats["raw"]
+    return stats
 
 
 # Until migration 20261023000002 adds last_stats, state is written without it.
@@ -213,36 +271,53 @@ def load_usage(now):
     return value if ok and isinstance(value, dict) else {"usd": 0.0, "calls": 0}
 
 
-def add_usage(now, usd, calls):
+def add_usage(now, usd, calls, platform=None):
     usage = load_usage(now)
     usage["usd"] = round(float(usage.get("usd") or 0) + usd, 4)
     usage["calls"] = int(usage.get("calls") or 0) + calls
+    if platform:
+        usage[f"{platform}_usd"] = round(float(usage.get(f"{platform}_usd") or 0) + usd, 4)
+        usage[f"{platform}_calls"] = int(usage.get(f"{platform}_calls") or 0) + calls
     sm.save_runtime_state(usage_key(now), usage)
     return usage
 
 
-def budget_exhausted(settings, now):
+def budget_exhausted(settings, now, platform=None):
+    """The total monthly budget, and the platform's own one, both stop searching."""
+    usage = load_usage(now)
     budget = settings.get("monthly_budget_usd")
-    if budget in (None, ""):
-        return False
-    return float(load_usage(now).get("usd") or 0) >= float(budget)
+    if budget not in (None, "") and float(usage.get("usd") or 0) >= float(budget):
+        return True
+    if platform:
+        platform_budget = settings.get(f"{platform}_monthly_budget_usd")
+        if platform_budget not in (None, "") and float(usage.get(f"{platform}_usd") or 0) >= float(platform_budget):
+            return True
+    return False
 
 
 # Providers ----------------------------------------------------------------------------
 
 
-def apify_facebook_search(targets, folded_keywords):
+def apify_facebook_input(queries, settings):
+    per_query = fb_max_posts_per_query(settings)
+    return {
+        "searchQueries": list(queries),
+        "sortBy": "recent",
+        # Only posts earlier runs did not deliver are returned (and billed).
+        "monitorMode": True,
+        "monitorStoreName": APIFY_FB_MONITOR_STORE,
+        "mustContainQuery": bool(fb_setting(settings, "fb_must_contain_query")),
+        "startDate": f"{max(1, SOCIAL_MAX_AGE_HOURS // 24)} days",
+        "maxPostsPerQuery": per_query,
+        "maxItems": per_query * len(queries),
+    }
+
+
+def apify_facebook_search(targets, folded_keywords, settings=None):
     """One actor run for all due keywords. Returns (posts, usd, error)."""
     headers = {"Authorization": f"Bearer {APIFY_TOKEN}"}
     by_query = {targets[folded]["keyword"]: folded for folded in folded_keywords}
-    run_input = {
-        "searchQueries": list(by_query),
-        "sortBy": "recent",
-        "monitorMode": True,
-        "startDate": f"{max(1, SOCIAL_MAX_AGE_HOURS // 24)} days",
-        "maxPostsPerQuery": SOCIAL_MAX_POSTS_PER_QUERY,
-        "maxItems": SOCIAL_MAX_POSTS_PER_QUERY * len(by_query),
-    }
+    run_input = apify_facebook_input(by_query, settings or {})
     response = requests.post(
         f"{APIFY_BASE}/acts/{APIFY_FB_ACTOR}/runs",
         params={"waitForFinish": "60"},
@@ -264,10 +339,9 @@ def apify_facebook_search(targets, folded_keywords):
         if response.status_code != 200:
             return [], 0.0, f"apify_poll:{response.status_code}"
         run = (response.json() or {}).get("data") or {}
-    usd = run.get("usageTotalUsd")
-    usd = float(usd) if usd is not None else APIFY_FB_USD_PER_QUERY_ESTIMATE * len(by_query)
+    reported = float(run.get("usageTotalUsd") or 0)
     if run.get("status") != "SUCCEEDED":
-        return [], usd, f"apify_run:{run.get('status') or 'timeout'}"
+        return [], reported, f"apify_run:{run.get('status') or 'timeout'}"
     response = requests.get(
         f"{APIFY_BASE}/datasets/{run.get('defaultDatasetId')}/items",
         params={"clean": "true", "format": "json"},
@@ -275,9 +349,12 @@ def apify_facebook_search(targets, folded_keywords):
         timeout=HTTP_TIMEOUT,
     )
     if response.status_code != 200:
-        return [], usd, f"apify_dataset:{response.status_code}"
+        return [], reported, f"apify_dataset:{response.status_code}"
+    items = response.json() or []
+    # Pay-per-result: the bill is the delivered posts; usageTotalUsd may leave it out.
+    usd = max(reported, len(items) * APIFY_FB_USD_PER_POST)
     posts = []
-    for item in response.json() or []:
+    for item in items:
         author = item.get("author")
         if isinstance(author, dict):
             author = author.get("name") or author.get("url")
@@ -542,10 +619,11 @@ def sample(post):
 
 
 def collect_platform(platform, settings, targets, source_id, keyword_cache, now):
-    if budget_exhausted(settings, now):
+    if budget_exhausted(settings, now, platform):
         print(f"{platform}: aylıq büdcə limiti dolub, axtarış dayandırıldı.", flush=True)
         return
-    due = due_keywords(platform, targets, now)
+    state = load_keyword_state(platform)
+    due = due_keywords(platform, targets, now, state, settings)
     if not due:
         return
     print(f"{platform}: {len(due)} açar söz axtarılır", flush=True)
@@ -553,13 +631,13 @@ def collect_platform(platform, settings, targets, source_id, keyword_cache, now)
     batches = [due] if platform == "facebook" else [[folded] for folded in due]
     for batch in batches:
         if platform == "facebook":
-            posts, usd, error = apify_facebook_search(targets, batch)
+            posts, usd, error = apify_facebook_search(targets, batch, settings)
         else:
-            if budget_exhausted(settings, now):
+            if budget_exhausted(settings, now, platform):
                 print("instagram: aylıq büdcə limiti dolub, qalan açar sözlər keçildi.", flush=True)
                 return
             posts, usd, error = socialfetch_instagram_hashtag(targets, batch[0])
-        add_usage(now, usd, 1)
+        add_usage(now, usd, 1, platform)
         stats = {folded: new_stats() for folded in batch}
         for post in posts:
             keyword_stats = stats.setdefault(post["keyword_fold"], new_stats())
@@ -573,6 +651,14 @@ def collect_platform(platform, settings, targets, source_id, keyword_cache, now)
                 keyword_stats[outcome] += 1
                 keyword_stats["matched_users"] += matched_users
                 keyword_stats["alerted"] += alerted
+        for folded in batch:
+            keyword_stats = stats.setdefault(folded, new_stats())
+            # Facebook bills per delivered post; Instagram per call (one keyword per call).
+            if platform == "facebook":
+                keyword_usd = keyword_stats["raw"] * APIFY_FB_USD_PER_POST
+            else:
+                keyword_usd = usd / len(batch)
+            carry_totals(keyword_stats, (state.get(folded) or {}).get("last_stats"), now, keyword_usd)
         record_keyword_state(platform, batch, stats, error)
         print(f"{platform}: {len(batch)} söz | {stats_line(stats)} | xəta={error or '-'}", flush=True)
         if error and error.endswith((":401", ":402", ":403")):
@@ -632,11 +718,11 @@ def collect_accounts(platform, settings, source_id, keyword_cache, now):
     for row in due:
         handle = sm.clean_text(row.get("handle"))
         if platform == "instagram":
-            if budget_exhausted(settings, now):
+            if budget_exhausted(settings, now, platform):
                 print("instagram səhifələri: aylıq büdcə limiti dolub, qalan səhifələr keçildi.", flush=True)
                 return
             posts, usd, error = socialfetch_instagram_profile(handle)
-            add_usage(now, usd, 1)
+            add_usage(now, usd, 1, platform)
         else:
             posts, usd, error = fetch_telegram_channel(handle)
         stats = new_stats()

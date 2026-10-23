@@ -19,7 +19,22 @@ type SocialSettings = {
   telegram_channels_enabled?: boolean
   default_interval_minutes: number
   monthly_budget_usd: number | null
+  facebook_monthly_budget_usd?: number | null
+  instagram_monthly_budget_usd?: number | null
+  fb_must_contain_query?: boolean
+  fb_min_interval_minutes?: number
+  fb_max_posts_per_query?: number
+  fb_daily_posts_per_keyword?: number | null
   updated_at: string | null
+}
+
+type Usage = {
+  usd?: number
+  calls?: number
+  facebook_usd?: number
+  facebook_calls?: number
+  instagram_usd?: number
+  instagram_calls?: number
 }
 
 type KeywordStats = {
@@ -32,6 +47,11 @@ type KeywordStats = {
   stored?: number
   matched_users?: number
   alerted?: number
+  usd?: number
+  month?: string
+  month_usd?: number
+  day?: string
+  day_posts?: number
   samples?: { url: string | null; text: string; date: string | null }[]
 }
 
@@ -59,7 +79,7 @@ type Heartbeat = {
 type SocialAdminData = {
   settings: SocialSettings | null
   keywords: KeywordState[]
-  usage: { usd?: number; calls?: number } | null
+  usage: Usage | null
   heartbeat: Heartbeat | null
   errors: string[]
 }
@@ -160,6 +180,94 @@ async function checkNow(target: { platform?: string; keyword?: string }) {
     p_keyword_fold: target.keyword ?? null,
   })
   if (error) throw error
+}
+
+function formatUsd(value: number | null | undefined) {
+  return value == null ? '—' : `$${Number(value).toFixed(2)}`
+}
+
+function BudgetBar({ spent, budget }: { spent: number; budget: number | null | undefined }) {
+  if (budget == null) return null
+  const percent = budget > 0 ? Math.min(100, (spent / budget) * 100) : 100
+  return (
+    <div
+      className='h-2 overflow-hidden rounded-full bg-muted'
+      role='progressbar'
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(percent)}
+    >
+      <div
+        className={`h-full ${percent >= 100 ? 'bg-destructive' : percent >= 80 ? 'bg-warning' : 'bg-success'}`}
+        style={{ width: `${percent}%` }}
+      />
+    </div>
+  )
+}
+
+function NumberSetting({
+  name,
+  label,
+  hint,
+  value,
+  min,
+  max,
+  step = 1,
+  allowEmpty = false,
+  disabled,
+  onSave,
+}: {
+  name: string
+  label: string
+  hint: string
+  value: number | null | undefined
+  min: number
+  max?: number
+  step?: number
+  allowEmpty?: boolean
+  disabled: boolean
+  onSave: (value: number | null) => void
+}) {
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const raw = String(new FormData(event.currentTarget).get(name) ?? '').trim()
+    if (raw === '') {
+      if (allowEmpty) onSave(null)
+      return
+    }
+    const next = Number(raw)
+    if (!Number.isFinite(next) || next < min || (max !== undefined && next > max)) return
+    onSave(next)
+  }
+
+  return (
+    <form key={String(value ?? '')} onSubmit={submit} className='grid gap-1'>
+      <label htmlFor={`social-${name}`} className='text-sm font-medium'>
+        {label}
+      </label>
+      <div className='flex gap-2'>
+        <input
+          id={`social-${name}`}
+          name={name}
+          type='number'
+          min={min}
+          max={max}
+          step={step}
+          inputMode='decimal'
+          defaultValue={value ?? ''}
+          className='h-10 w-full rounded-lg border bg-background px-3 text-sm'
+        />
+        <button
+          type='submit'
+          disabled={disabled}
+          className='rounded-lg border bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60'
+        >
+          Saxla
+        </button>
+      </div>
+      <p className='text-xs text-muted-foreground'>{hint}</p>
+    </form>
+  )
 }
 
 function minutesSince(value: string | undefined) {
@@ -328,6 +436,8 @@ function SocialAdminPage() {
   const settings = data.settings
   const disabled = mutation.isPending || !settings
   const spent = Number(data.usage?.usd ?? 0)
+  const facebookSpent = Number(data.usage?.facebook_usd ?? 0)
+  const instagramSpent = Number(data.usage?.instagram_usd ?? 0)
 
   function saveBudget(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -446,9 +556,10 @@ function SocialAdminPage() {
         <section className='grid content-start gap-3 rounded-lg border bg-card p-4 md:p-5'>
           <h2 className='text-lg font-semibold'>Aylıq xərc limiti</h2>
           <p className='text-sm text-muted-foreground'>
-            Bu ay: ${spent.toFixed(2)} · {data.usage?.calls ?? 0} sorğu. Limit
-            dolanda axtarış ay sonuna qədər dayanır. Boş = limitsiz.
+            Bu ay cəmi: ${spent.toFixed(2)} · {data.usage?.calls ?? 0} sorğu.
+            Limit dolanda axtarış ay sonuna qədər dayanır. Boş = limitsiz.
           </p>
+          <BudgetBar spent={spent} budget={settings?.monthly_budget_usd} />
           <form
             key={String(settings?.monthly_budget_usd ?? '')}
             onSubmit={saveBudget}
@@ -473,8 +584,96 @@ function SocialAdminPage() {
               Saxla
             </button>
           </form>
+          {(
+            [
+              {
+                key: 'facebook_monthly_budget_usd',
+                label: 'Facebook aylıq büdcə ($)',
+                spent: facebookSpent,
+                calls: data.usage?.facebook_calls ?? 0,
+              },
+              {
+                key: 'instagram_monthly_budget_usd',
+                label: 'Instagram aylıq büdcə ($)',
+                spent: instagramSpent,
+                calls: data.usage?.instagram_calls ?? 0,
+              },
+            ] as const
+          ).map((platform) => (
+            <div key={platform.key} className='grid gap-2 border-t pt-3'>
+              <NumberSetting
+                name={platform.key}
+                label={platform.label}
+                hint={`Bu ay: $${platform.spent.toFixed(2)} · ${platform.calls} sorğu${
+                  settings?.[platform.key] != null
+                    ? ` / $${Number(settings[platform.key]).toFixed(2)}`
+                    : ''
+                }. Dolanda yalnız bu platforma dayanır. Boş = limitsiz.`}
+                value={settings?.[platform.key]}
+                min={0}
+                allowEmpty
+                disabled={disabled}
+                onSave={(value) => mutation.mutate({ [platform.key]: value })}
+              />
+              <BudgetBar spent={platform.spent} budget={settings?.[platform.key]} />
+            </div>
+          ))}
         </section>
       </div>
+
+      <section className='grid content-start gap-4 rounded-lg border bg-card p-4 md:p-5'>
+        <div>
+          <h2 className='text-lg font-semibold'>Facebook xərc nəzarəti</h2>
+          <p className='text-sm text-muted-foreground'>
+            Apify hər gələn post üçün ödəniş alır (təxminən 1000 post = $2.40).
+            Xərc yoxlama tezliyindən və bir yoxlamada gələn post sayından asılıdır.
+          </p>
+        </div>
+        <PlatformSwitch
+          label='Yalnız açar sözü olan postlar (FB)'
+          hint='Apify yalnız mətnində açar söz olan postları qaytarır. Süzülən postlara görə ödəniş alınıb-alınmadığı təsdiqlənməyib.'
+          checked={settings?.fb_must_contain_query ?? true}
+          disabled={disabled}
+          onChange={(next) => mutation.mutate({ fb_must_contain_query: next })}
+        />
+        <div className='grid gap-4 md:grid-cols-3'>
+          <NumberSetting
+            name='fb_min_interval_minutes'
+            label='FB minimum yoxlama intervalı (dəq)'
+            hint='Plan və ya fərdi tezlik nə olursa olsun, Facebook bundan tez yoxlanmır. Instagram öz tezliyində qalır.'
+            value={settings?.fb_min_interval_minutes ?? 360}
+            min={10}
+            max={10080}
+            disabled={disabled}
+            onSave={(value) =>
+              value != null && mutation.mutate({ fb_min_interval_minutes: value })
+            }
+          />
+          <NumberSetting
+            name='fb_max_posts_per_query'
+            label='FB: bir yoxlamada maksimum post (hər söz)'
+            hint='1–50. Railway-də SOCIAL_MAX_POSTS_PER_QUERY verilibsə, o üstündür.'
+            value={settings?.fb_max_posts_per_query ?? 10}
+            min={1}
+            max={50}
+            disabled={disabled}
+            onSave={(value) =>
+              value != null && mutation.mutate({ fb_max_posts_per_query: value })
+            }
+          />
+          <NumberSetting
+            name='fb_daily_posts_per_keyword'
+            label='FB: hər söz üçün gündəlik maksimum post'
+            hint='Bakı vaxtı ilə gün ərzində bu qədər post gələndən sonra söz sabaha qədər axtarılmır. Boş = limitsiz.'
+            value={settings?.fb_daily_posts_per_keyword}
+            min={1}
+            max={1000}
+            allowEmpty
+            disabled={disabled}
+            onSave={(value) => mutation.mutate({ fb_daily_posts_per_keyword: value })}
+          />
+        </div>
+      </section>
 
       <section className='rounded-lg border bg-card p-4 md:p-5'>
         <div className='flex flex-wrap items-start justify-between gap-3'>
@@ -517,6 +716,11 @@ function SocialAdminPage() {
               </li>
             ))}
             <li>
+              <span className='font-medium text-foreground'>Təxmini xərc:</span>{' '}
+              son yoxlama / bu ay. Facebook: gələn post × $0.0024; Instagram:
+              kredit × təxmini qiymət.
+            </li>
+            <li>
               <span className='font-medium text-foreground'>Instagram:</span>{' '}
               yalnız hashtag axtarılır (#kapitalbank). Hashtag qoyulmayan postlar
               tapılmır.
@@ -544,6 +748,12 @@ function SocialAdminPage() {
                       {column.label}
                     </th>
                   ))}
+                  <th
+                    className='py-2 pr-3 text-right font-medium whitespace-nowrap'
+                    title='Son yoxlama / bu ay. Facebook: gələn post × $0.0024; Instagram: kredit × təxmini qiymət.'
+                  >
+                    Təxmini xərc
+                  </th>
                   <th className='py-2 font-medium'>
                     <span className='sr-only'>Əməliyyat</span>
                   </th>
@@ -575,6 +785,19 @@ function SocialAdminPage() {
                                 : '—'}
                           </td>
                         ))}
+                        <td className='py-2 pr-3 text-right tabular-nums whitespace-nowrap'>
+                          {formatUsd(stats?.usd)}
+                          <span className='text-muted-foreground'>
+                            {' / '}
+                            {formatUsd(
+                              stats?.month === usageKey().slice('social_usage_'.length)
+                                ? stats.month_usd
+                                : stats
+                                  ? 0
+                                  : null
+                            )}
+                          </span>
+                        </td>
                         <td className='py-2'>
                           <button
                             type='button'
@@ -593,7 +816,7 @@ function SocialAdminPage() {
                       </tr>
                       {row.last_error || samples.length > 0 ? (
                         <tr>
-                          <td colSpan={STAT_COLUMNS.length + 4} className='pb-3'>
+                          <td colSpan={STAT_COLUMNS.length + 5} className='pb-3'>
                             {row.last_error ? (
                               <div className='font-mono text-xs wrap-anywhere text-destructive'>
                                 Xəta: {row.last_error}

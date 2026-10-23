@@ -128,11 +128,11 @@ def test_custom_minute_override_is_used_and_scheduled(col):
     use(col, {("GET", "social_keyword_state"): FakeResponse(200, [
         {"keyword_fold": "bdu", "last_checked_at": (NOW - timedelta(minutes=44)).isoformat()},
     ])})
-    assert col.due_keywords("facebook", targets, NOW) == []
+    assert col.due_keywords("instagram", targets, NOW) == []
     use(col, {("GET", "social_keyword_state"): FakeResponse(200, [
         {"keyword_fold": "bdu", "last_checked_at": (NOW - timedelta(minutes=46)).isoformat()},
     ])})
-    assert col.due_keywords("facebook", targets, NOW) == ["bdu"]
+    assert col.due_keywords("instagram", targets, NOW) == ["bdu"]
 
 
 def test_instagram_hashtag_keeps_azerbaijani_letters(col):
@@ -225,7 +225,7 @@ def test_facebook_tick_alerts_once_for_fresh_whole_word_match(col):
         "stored": 1, "matched_users": 1, "alerted": 1}
     assert len(stats["samples"]) == 3 and stats["samples"][0]["url"].endswith("/1")
     usage = [c for c in fake.find("POST", "bot_runtime_state") if c["json"]["key"].startswith("social_usage_")]
-    assert usage[0]["json"]["value"] == {"usd": 0.12, "calls": 1}
+    assert usage[0]["json"]["value"] == {"usd": 0.12, "calls": 1, "facebook_usd": 0.12, "facebook_calls": 1}
 
 
 def test_already_stored_post_is_not_alerted_again(col):
@@ -562,3 +562,58 @@ def test_instagram_pages_without_key_make_no_calls(col):
                      ("POST", "bot_runtime_state"): FakeResponse(201, None)})
     col.run_tick(NOW)
     assert [c["name"] for c in fake.calls] == ["social_settings", "bot_runtime_state"]
+
+
+# Facebook cost controls ----------------------------------------------------------------
+
+
+def test_facebook_floor_interval_overrides_short_plan_and_custom_minutes(col):
+    targets = {"bdu": {"keyword": "BDU", "interval": 45}}
+    state = {"bdu": {"keyword_fold": "bdu", "last_checked_at": (NOW - timedelta(minutes=100)).isoformat()}}
+    # Default floor 360: a 45-minute override does not make Facebook search sooner.
+    assert col.due_keywords("facebook", targets, NOW, state, {}) == []
+    assert col.due_keywords("facebook", targets, NOW, state, {"fb_min_interval_minutes": 60}) == ["bdu"]
+    # Instagram keeps the customer's interval.
+    assert col.due_keywords("instagram", targets, NOW, state, {}) == ["bdu"]
+
+
+def test_facebook_daily_cap_skips_keyword_until_next_baku_day(col):
+    targets = {"bdu": {"keyword": "BDU", "interval": 60}}
+    today = col.baku_day(NOW)
+    old = (NOW - timedelta(hours=7)).isoformat()
+    full = {"bdu": {"last_checked_at": old, "last_stats": {"day": today, "day_posts": 30}}}
+    assert col.due_keywords("facebook", targets, NOW, full, {}) == []
+    assert col.due_keywords("facebook", targets, NOW, full, {"fb_daily_posts_per_keyword": 40}) == ["bdu"]
+    yesterday = {"bdu": {"last_checked_at": old, "last_stats": {"day": "2026-10-19", "day_posts": 99}}}
+    assert col.due_keywords("facebook", targets, NOW, yesterday, {}) == ["bdu"]
+
+
+def test_carry_totals_adds_day_posts_and_month_cost(col):
+    stats = col.new_stats()
+    stats["raw"] = 4
+    col.carry_totals(stats, {"month": f"{NOW:%Y-%m}", "month_usd": 0.5, "day": col.baku_day(NOW), "day_posts": 10}, NOW, 0.0096)
+    assert stats["usd"] == 0.0096 and stats["month_usd"] == 0.5096 and stats["day_posts"] == 14
+    fresh = col.new_stats()
+    fresh["raw"] = 2
+    col.carry_totals(fresh, {"month": "2026-09", "month_usd": 9, "day": "2026-09-30", "day_posts": 50}, NOW, 0.0048)
+    assert fresh["month_usd"] == 0.0048 and fresh["day_posts"] == 2
+
+
+def test_apify_input_uses_settings_and_own_monitor_store(col):
+    run_input = col.apify_facebook_input(["BDU", "SOCAR"], {"fb_max_posts_per_query": 5, "fb_must_contain_query": False})
+    assert run_input["monitorMode"] is True
+    assert run_input["monitorStoreName"] == "vizual-fb-monitor"
+    assert run_input["mustContainQuery"] is False
+    assert run_input["maxPostsPerQuery"] == 5 and run_input["maxItems"] == 10
+    defaults = col.apify_facebook_input(["BDU"], {})
+    assert defaults["mustContainQuery"] is True and defaults["maxPostsPerQuery"] == 10
+    assert col.apify_facebook_input(["BDU"], {"fb_max_posts_per_query": 500})["maxPostsPerQuery"] == 50
+
+
+def test_platform_budget_stops_only_that_platform(col):
+    usage = {"usd": 6, "calls": 3, "facebook_usd": 5, "instagram_usd": 1}
+    use(col, {("GET", "bot_runtime_state"): FakeResponse(200, [{"value": usage}])})
+    settings = {"monthly_budget_usd": None, "facebook_monthly_budget_usd": 5, "instagram_monthly_budget_usd": 3}
+    assert col.budget_exhausted(settings, NOW, "facebook") is True
+    assert col.budget_exhausted(settings, NOW, "instagram") is False
+    assert col.budget_exhausted({**settings, "monthly_budget_usd": 6}, NOW, "instagram") is True

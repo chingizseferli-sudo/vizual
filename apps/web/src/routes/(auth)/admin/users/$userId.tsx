@@ -1028,6 +1028,26 @@ function CustomSocialIntervalInput({
 }) {
   const minutes = Number(value.trim())
   const valid = value.trim() !== '' && isValidCustomSocialInterval(minutes)
+  const [facebookFloor, setFacebookFloor] = useState(360)
+
+  useEffect(() => {
+    let active = true
+    void supabase
+      .from('social_settings')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle()
+      .then(({ data }) => {
+        const floor = Number(
+          (data as { fb_min_interval_minutes?: number } | null)
+            ?.fb_min_interval_minutes
+        )
+        if (active && Number.isFinite(floor) && floor > 0) setFacebookFloor(floor)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   return (
     <div className='mt-3 grid max-w-sm gap-1.5 text-sm font-medium'>
@@ -1060,11 +1080,15 @@ function CustomSocialIntervalInput({
           ? `${formatDuration(minutes)} · ${formatSocialInterval(minutes)}`
           : `${CUSTOM_SOCIAL_INTERVAL_RANGE.min}-${CUSTOM_SOCIAL_INTERVAL_RANGE.max} dəqiqə (10 dəqiqədən 7 günə qədər).`}
       </span>
+      <span className='text-xs font-normal text-muted-foreground'>
+        Facebook üçün minimum interval: {formatDuration(facebookFloor)}
+        (Sosial monitorinq səhifəsində dəyişilir). Daha qısa tezlik yalnız
+        Instagram-a aiddir.
+      </span>
       {valid && minutes < 60 ? (
         <span className='rounded-md bg-amber-50 px-2 py-1.5 text-xs font-normal text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'>
           Saatdan tez yoxlama Instagram sorğularını artırır (hər yoxlama ayrıca
-          ödənilir). Facebook yalnız yeni postlara görə ödənir, ona görə az
-          dəyişir.
+          ödənilir).
         </span>
       ) : null}
     </div>
