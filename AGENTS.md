@@ -14,7 +14,6 @@ Keep it small and verified. This repo replaced four repos and a pile of AI-writt
 ## Where things are
 - Keyword matching: `apps/worker/rss/site_monitor.py` (`keyword_fold`, `keyword_matches_title`).
 - Telegram delivery and bot commands: `apps/worker/rss/site_monitor.py` (`send_telegram`, `connect_telegram_users_from_updates`).
-- Page change fetch with SSRF guard: `apps/worker/page_change/change_monitor.py` (`safe_http_request`).
 - Customer and admin routes: `apps/web/src/routes/(auth)/monitor`, `apps/web/src/routes/(auth)/admin`.
 
 Sub-agents for this repo live in `.claude/agents/`.

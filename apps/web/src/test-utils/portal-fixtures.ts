@@ -23,7 +23,6 @@ const plan = {
   is_active: true,
   is_public: true,
   is_custom: false,
-  max_watches: 15,
   minimum_interval_minutes: 10,
   history_days: 30,
   telegram_enabled: true,
@@ -128,7 +127,6 @@ const tables: Record<string, Record<string, unknown>[]> = {
   user_profiles: [profile],
   admin_users: [{ ...profile, role: 'admin' }],
   subscription_plans: [plan],
-  user_profile_with_plan_limits: [{ ...profile, ...plan }],
   user_subscriptions: [
     {
       id: 'fixture-subscription',
@@ -230,7 +228,7 @@ export const fixtureSupabase = {
   rpc(name: string) {
     if (name === 'current_user_plan_limits') {
       const result = {
-        data: { max_watches: 15, max_keywords: 300, max_social_keywords: 10 },
+        data: { max_keywords: 300, max_social_keywords: 10 },
         error: null,
       }
       return { maybeSingle: async () => result }

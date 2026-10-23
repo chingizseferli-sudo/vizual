@@ -23,7 +23,6 @@ describe('subscription plan model', () => {
       ...emptyPlanForm,
       name: 'Professional',
       priceAmount: '79.90',
-      maxWatches: '100',
       minimumIntervalMinutes: '5',
       historyDays: '30',
       displayOrder: '20',
@@ -34,7 +33,6 @@ describe('subscription plan model', () => {
     expect(result.data).toMatchObject({
       code: 'professional',
       price_amount: 79.9,
-      max_watches: 100,
       minimum_interval_minutes: 5,
       history_days: 30,
       features: ['Telegram', 'CSV ixrac'],
@@ -73,21 +71,20 @@ describe('subscription plan model', () => {
     expect(invalid.error).toContain('Sosial yoxlama')
   })
 
-  it('stores the keyword limit and falls back to 20 per web watch', () => {
+  it('stores the keyword limit and treats an empty one as unlimited', () => {
     const plan = buildPlanPayload(
-      { ...emptyPlanForm, name: 'Pro', maxKeywords: '50', maxWatches: '3' },
+      { ...emptyPlanForm, name: 'Pro', maxKeywords: '50' },
       { max_keywords: 10 }
     ).data!
     expect(plan.limits).toEqual({ max_keywords: 50 })
     expect(planKeywordLimit(plan)).toBe(50)
 
     const cleared = buildPlanPayload(
-      { ...emptyPlanForm, name: 'Pro', maxWatches: '3' },
+      { ...emptyPlanForm, name: 'Pro' },
       { max_keywords: 10 }
     ).data!
     expect(cleared.limits).toEqual({})
-    expect(planKeywordLimit(cleared)).toBe(60)
-    expect(planKeywordLimit({ limits: {}, max_watches: null })).toBeNull()
+    expect(planKeywordLimit(cleared)).toBeNull()
   })
 
   it('stores the email reports a plan includes in a fixed order', () => {
@@ -124,7 +121,6 @@ describe('subscription plan model', () => {
       currency: 'AZN',
       billing_interval: 'month',
       display_order: 1,
-      max_watches: null,
       minimum_interval_minutes: null,
       history_days: 30,
       telegram_enabled: true,

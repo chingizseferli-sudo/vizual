@@ -1,4 +1,4 @@
-# Shared runtime dependencies for both workers (rss + page_change).
+# Shared runtime dependencies for all workers (rss + social).
 requests>=2.32.3
 beautifulsoup4>=4.12.3
 lxml>=5.3.0

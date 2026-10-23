@@ -10,7 +10,7 @@
 | Service | `WORKER` | Type |
 |---|---|---|
 | vizual-rss | `rss` | always on |
-| vizual-page-change | `page_change` | always on |
+| vizual-social | `social` | always on |
 | vizual-discovery | `discovery` | cron `0 */6 * * *` |
 | vizual-discovery-deep | `discovery_deep` | cron `0 23 * * *` |
 

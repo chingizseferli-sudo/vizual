@@ -9,4 +9,3 @@ pytest.ini
 requirements-dev.txt
 rss/test_*.py
 !rss/test_sources_readability.py
-page_change/test_*.py

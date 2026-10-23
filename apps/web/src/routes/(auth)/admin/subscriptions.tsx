@@ -37,7 +37,7 @@ type SubscriptionRow = UserSubscription & {
 }
 
 const planFields =
-  'id,code,name,description,is_active,is_custom,is_public,price_amount,currency,billing_interval,display_order,max_watches,minimum_interval_minutes,history_days,telegram_enabled,features,limits,created_at,updated_at'
+  'id,code,name,description,is_active,is_custom,is_public,price_amount,currency,billing_interval,display_order,minimum_interval_minutes,history_days,telegram_enabled,features,limits,created_at,updated_at'
 
 function formatDate(value: string | null | undefined) {
   if (!value) return 'Müddətsiz'
@@ -414,9 +414,7 @@ function SubscriptionPlansPage() {
               value={form.maxKeywords}
               onChange={(event) => updateForm('maxKeywords', event.target.value)}
               className='rounded-lg border bg-background px-3 py-2 font-normal'
-              placeholder={
-                form.maxWatches ? `${Number(form.maxWatches) * 20}` : 'Limitsiz'
-              }
+              placeholder='Limitsiz'
             />
           </label>
           <label className='grid gap-1.5 text-sm font-medium'>

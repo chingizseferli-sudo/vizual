@@ -45,7 +45,6 @@ type PlanLimitsRow = {
   max_keywords?: number | null
   max_social_keywords?: number | null
 }
-type RpcError = { code?: string; message: string } | null
 
 async function currentUserId() {
   const {
@@ -148,39 +147,11 @@ export function keywordErrorMessage(error: { message: string }) {
   return friendlyError(error)
 }
 
-function isMissingFunction(error: RpcError) {
-  return error?.code === 'PGRST202'
-}
-
-// Before migration 20261020000008 there is no add_keyword(): the keyword goes
-// to the customer's first active monitor, created if needed.
-async function addKeywordLegacy(keyword: string) {
-  const userId = await currentUserId()
-  const monitors = await loadMonitors(userId)
-  let monitorId = monitors.find((item) => item.status === 'active')?.id
-
-  if (!monitorId) {
-    const { data, error } = await supabase.rpc(
-      'create_user_monitor_with_limit',
-      { p_name: 'Açar sözlər', p_description: null, p_notify_telegram: true }
-    )
-    if (error) return error
-    monitorId = ((Array.isArray(data) ? data[0] : data) as { id: string })
-      ?.id
-  }
-
-  const { error } = await supabase
-    .from('monitor_keywords')
-    .insert({ monitor_id: monitorId, keyword, match_type: 'contains' })
-  return error
-}
-
 export async function addKeyword(keyword: string) {
   const { error } = await supabase.rpc('add_keyword', {
     p_keyword: keyword,
     p_match_type: 'contains',
   })
-  if (isMissingFunction(error)) return addKeywordLegacy(keyword)
   return error
 }
 

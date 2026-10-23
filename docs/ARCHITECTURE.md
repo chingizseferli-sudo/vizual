@@ -5,21 +5,21 @@ Scale target: up to 1,000 customers (expected ~100). One Postgres, a few worker 
 ```
 Vercel: apps/web ──(anon key + RLS)──► Supabase Postgres ◄──(service role)── Railway: apps/worker
                                              │                               ├─ rss          (loop)
-                                             │                               ├─ page_change  (loop)
+                                             │                               ├─ social       (loop)
                                              │                               └─ discovery*   (cron)
 Customers ◄── Telegram Bot API ◄─────────────┴───────────────────────────────┘
 ```
 
 ## Data model (source-centric)
 - Global: `sources` (news sites/RSS), `monitored_items` (collected articles). Collected once, shared by all tenants.
-- Per tenant: `user_monitors`, `monitor_keywords`, `monitor_matches`, `monitor_alerts`, `change_sources`, `change_alerts`, `user_profiles`.
+- Per tenant: `user_monitors`, `monitor_keywords`, `monitor_matches`, `monitor_alerts`, `user_profiles`.
 - Customers manage keywords only. Each has one non-archived `user_monitors` row (hidden container) holding all keywords; `monitor_keywords.status` is `active` or `paused`, and the plan's `max_keywords` counts active keywords. Writes go through `add_keyword`, `set_keyword_status`, `delete_keyword` (`20261020000008`). Monitors merged into it are `archived` and keep their old matches.
 - A keyword match fans out from one `monitored_items` row to every tenant whose keywords match. Cost does not grow with tenant count.
 
 ## Workers (`apps/worker`)
 One Docker image; `WORKER` picks the process (see `start.sh`).
 - `rss`: polls sources, extracts articles, matches keywords (Azerbaijani-aware folding), writes matches, sends Telegram alerts, links Telegram chats via `/start`.
-- `page_change`: fetches customer-selected page regions (SSRF-guarded), detects changes, writes `change_alerts`, sends Telegram.
+- `social`: Facebook, Instagram, YouTube and Telegram channel collector for keywords flagged for social.
 - `discovery`, `discovery_deep`, `sync_sources`, `auto_configure`, `readability`: one-shot jobs for source maintenance.
 
 ## Telegram bot

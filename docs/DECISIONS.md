@@ -13,3 +13,4 @@ Short, dated, final. Add a line, don't write an essay.
 
 - 2026-10-19: Empty reads (`selector_empty`, `rss_empty`, ...) count toward `consecutive_fail_count`; after 3 in a row (`EMPTY_READ_FAIL_THRESHOLD`) the source gets `last_error`. Requires `SOURCE_HEALTH_ENABLED=true`.
 - 2026-10-20: Customers see keywords, not monitors. One hidden monitor per customer holds all keywords; limits count active keywords (`limits.max_keywords`, else 20 × `max_watches`). `max_watches` now limits only web page watches.
+- 2026-10-23: Web page watching removed (UI, `page_change` worker, `change_*` tables, `max_watches`; migration `20261023000006`). Keyword limit is `limits.max_keywords`; unset means unlimited.

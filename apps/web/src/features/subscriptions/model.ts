@@ -19,7 +19,6 @@ export type SubscriptionPlan = {
   currency: string
   billing_interval: BillingInterval
   display_order: number
-  max_watches: number | null
   minimum_interval_minutes: number | null
   history_days: number | null
   telegram_enabled: boolean
@@ -50,7 +49,6 @@ export type PlanFormValues = {
   currency: string
   billingInterval: BillingInterval
   displayOrder: string
-  maxWatches: string
   maxKeywords: string
   maxCompetitors: string
   maxSocialKeywords: string
@@ -73,7 +71,6 @@ export type PlanWritePayload = {
   currency: string
   billing_interval: BillingInterval
   display_order: number
-  max_watches: number | null
   minimum_interval_minutes: number | null
   history_days: number | null
   telegram_enabled: boolean
@@ -98,7 +95,6 @@ export const emptyPlanForm: PlanFormValues = {
   currency: 'AZN',
   billingInterval: 'month',
   displayOrder: '0',
-  maxWatches: '',
   maxKeywords: '',
   maxCompetitors: '',
   maxSocialKeywords: '',
@@ -161,15 +157,13 @@ export function planSocialIntervalMinutes(
 }
 
 // Active keywords a plan allows; mirrors keyword_limit_for_user() in SQL:
-// limits.max_keywords, else 20 per web watch, else unlimited (null).
-export function planKeywordLimit(
-  plan: Pick<SubscriptionPlan, 'limits' | 'max_watches'> | undefined
-) {
+// limits.max_keywords, else unlimited (null).
+export function planKeywordLimit(plan: Pick<SubscriptionPlan, 'limits'> | undefined) {
   const value = plan?.limits?.max_keywords
   if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
     return value
   }
-  return plan?.max_watches != null ? plan.max_watches * 20 : null
+  return null
 }
 
 // Competitors a plan allows on the Rəqiblər page; mirrors
@@ -267,11 +261,6 @@ export function buildPlanPayload(
   })
   if (displayOrder.error) return { error: displayOrder.error }
 
-  const maxWatches = parseOptionalNumber(values.maxWatches, 'Veb izləmə limiti', {
-    integer: true,
-  })
-  if (maxWatches.error) return { error: maxWatches.error }
-
   const maxKeywords = parseOptionalNumber(values.maxKeywords, 'Açar söz limiti', {
     integer: true,
   })
@@ -358,7 +347,6 @@ export function buildPlanPayload(
       currency,
       billing_interval: values.billingInterval,
       display_order: displayOrder.value ?? 0,
-      max_watches: maxWatches.value,
       minimum_interval_minutes: minimumInterval.value,
       history_days: historyDays.value,
       telegram_enabled: values.telegramEnabled,
@@ -379,7 +367,6 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     currency: plan.currency,
     billingInterval: plan.billing_interval,
     displayOrder: plan.display_order.toString(),
-    maxWatches: plan.max_watches?.toString() || '',
     maxKeywords:
       typeof plan.limits.max_keywords === 'number'
         ? String(plan.limits.max_keywords)

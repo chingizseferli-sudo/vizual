@@ -147,7 +147,7 @@ function AdminUserDetailsPage() {
         supabase
           .from('subscription_plans')
           .select(
-            'id,code,name,description,is_active,is_custom,is_public,price_amount,currency,billing_interval,display_order,max_watches,minimum_interval_minutes,history_days,telegram_enabled,features,limits,created_at,updated_at'
+            'id,code,name,description,is_active,is_custom,is_public,price_amount,currency,billing_interval,display_order,minimum_interval_minutes,history_days,telegram_enabled,features,limits,created_at,updated_at'
           )
           .order('display_order')
           .order('name'),

@@ -1,7 +1,6 @@
 #!/bin/sh
 # Single image, several Railway services: pick the process with WORKER.
 #   rss            long-running news/RSS keyword monitor (site_monitor.py)
-#   page_change    long-running page change monitor (change_monitor.py)
 #   social         long-running Facebook/Instagram keyword collector (social/collector.py)
 #   discovery      one-shot fast source discovery   (Railway cron, e.g. "0 */6 * * *")
 #   discovery_deep one-shot deep discovery          (Railway cron, e.g. "0 23 * * *")
@@ -16,10 +15,6 @@ case "${WORKER:-}" in
     # site_monitor defaults to RUN_ONCE=1 (GitHub Actions); a service must loop.
     export RUN_ONCE="${RUN_ONCE:-0}"
     exec python -u site_monitor.py
-    ;;
-  page_change)
-    cd /app/page_change
-    exec python -u change_monitor.py
     ;;
   social)
     cd /app/social
@@ -46,7 +41,7 @@ case "${WORKER:-}" in
     exec python -u test_sources_readability.py
     ;;
   *)
-    echo "Set WORKER to one of: rss, page_change, social, discovery, discovery_deep, sync_sources, auto_configure, readability" >&2
+    echo "Set WORKER to one of: rss, social, discovery, discovery_deep, sync_sources, auto_configure, readability" >&2
     exit 64
     ;;
 esac

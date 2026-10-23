@@ -113,28 +113,6 @@ async function deleteUserData(supabaseUrl: string, serviceRoleKey: string, targe
     user_id: `eq.${targetUserId}`,
   });
 
-  const changeSources = await readRows<IdRow>(supabaseUrl, serviceRoleKey, "change_sources", {
-    user_id: `eq.${targetUserId}`,
-    select: "id",
-  });
-  const changeSourceIds = changeSources.map((source) => source.id).filter(Boolean);
-
-  if (changeSourceIds.length > 0) {
-    const sourceIdFilter = `in.(${changeSourceIds.join(",")})`;
-    await deleteRows(supabaseUrl, serviceRoleKey, "change_alerts", {
-      source_id: sourceIdFilter,
-    });
-    await deleteRows(supabaseUrl, serviceRoleKey, "change_events", {
-      source_id: sourceIdFilter,
-    });
-    await deleteRows(supabaseUrl, serviceRoleKey, "change_snapshots", {
-      source_id: sourceIdFilter,
-    });
-    await deleteRows(supabaseUrl, serviceRoleKey, "change_sources", {
-      id: sourceIdFilter,
-    });
-  }
-
   await deleteRows(supabaseUrl, serviceRoleKey, "user_profiles", {
     user_id: `eq.${targetUserId}`,
   });

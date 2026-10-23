@@ -1,11 +1,11 @@
 # Vizual
 
-Media monitoring and reputation analytics for Azerbaijan. Customers enter keywords; Vizual watches news sites, RSS, page changes and social sources, shows matches in a web panel and sends Telegram alerts.
+Media monitoring and reputation analytics for Azerbaijan. Customers enter keywords; Vizual watches news sites, RSS and social sources, shows matches in a web panel and sends Telegram alerts.
 
 | Path | What | Runs on |
 |---|---|---|
 | `apps/web` | Public site, customer panel (`/monitor`), admin panel (`/admin`). React 19, Vite, TanStack, Supabase JS | Vercel |
-| `apps/worker` | Python workers in one image: `rss` (news keyword monitor + Telegram bot), `page_change` (page change monitor), discovery jobs | Railway |
+| `apps/worker` | Python workers in one image: `rss` (news keyword monitor + Telegram bot), `social` (Facebook/Instagram/YouTube/Telegram collector), discovery jobs | Railway |
 | `supabase` | The only database: migrations, edge functions, rollback scripts | Supabase |
 | `docs` | Architecture, deployment, decisions, security | |
 
