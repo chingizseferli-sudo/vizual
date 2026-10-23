@@ -50,7 +50,7 @@ type FilterOption = {
 type ExportRange = '1' | '7' | '30' | 'all'
 
 type SourceCategory = 'web' | 'social'
-type SocialNetwork = 'facebook' | 'instagram'
+type SocialNetwork = 'facebook' | 'instagram' | 'telegram'
 
 type ResultsSearch = {
   cat?: SourceCategory
@@ -61,6 +61,7 @@ type ResultsSearch = {
 const socialNetworkLabels: Record<SocialNetwork, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
+  telegram: 'Telegram',
 }
 
 // A plain validator keeps zod out of the entry bundle.
@@ -72,7 +73,7 @@ function validateResultsSearch(search: Record<string, unknown>): ResultsSearch {
   }
   if (
     next.cat === 'social' &&
-    (search.net === 'facebook' || search.net === 'instagram')
+    (search.net === 'facebook' || search.net === 'instagram' || search.net === 'telegram')
   ) {
     next.net = search.net
   }
@@ -125,6 +126,7 @@ function getHost(url: string | undefined) {
 function getSocialNetwork(host: string): SocialNetwork | null {
   if (/(^|\.)(facebook\.com|fb\.com|fb\.watch)$/.test(host)) return 'facebook'
   if (/(^|\.)instagram\.com$/.test(host)) return 'instagram'
+  if (/^(t\.me|telegram\.me)$/.test(host)) return 'telegram'
   return null
 }
 
@@ -421,7 +423,7 @@ function ResultsPage() {
         .map((row) => getSocialNetwork(getHost(row.monitored_items?.url)))
         .filter((value): value is SocialNetwork => value !== null)
     )
-    return (['facebook', 'instagram'] as SocialNetwork[]).filter((value) =>
+    return (['facebook', 'instagram', 'telegram'] as SocialNetwork[]).filter((value) =>
       values.has(value)
     )
   }, [periodRows])
@@ -870,7 +872,7 @@ function ResultsPage() {
                   setSourceSearch({
                     cat: 'social',
                     net:
-                      value === 'facebook' || value === 'instagram'
+                      value === 'facebook' || value === 'instagram' || value === 'telegram'
                         ? value
                         : undefined,
                   })

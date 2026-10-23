@@ -8,12 +8,15 @@ import {
 } from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
 import { friendlyError } from '@/lib/friendly-error'
+import { WatchedAccounts } from '@/features/social/watched-accounts'
 
 const socialAdminQueryKey = ['admin', 'social'] as const
 
 type SocialSettings = {
   facebook_enabled: boolean
   instagram_enabled: boolean
+  instagram_accounts_enabled?: boolean
+  telegram_channels_enabled?: boolean
   default_interval_minutes: number
   monthly_budget_usd: number | null
   updated_at: string | null
@@ -45,6 +48,8 @@ type Heartbeat = {
   at?: string
   facebook_enabled?: boolean
   instagram_enabled?: boolean
+  instagram_accounts_enabled?: boolean
+  telegram_channels_enabled?: boolean
   apify_key?: boolean
   socialfetch_key?: boolean
   keywords?: number
@@ -98,9 +103,7 @@ async function fetchSocialAdminData(): Promise<SocialAdminData> {
   const [settingsResult, keywordsResult, usageResult, heartbeatResult] = await Promise.all([
     supabase
       .from('social_settings')
-      .select(
-        'facebook_enabled,instagram_enabled,default_interval_minutes,monthly_budget_usd,updated_at'
-      )
+      .select('*')
       .eq('id', 1)
       .maybeSingle(),
     supabase
@@ -398,6 +401,20 @@ function SocialAdminPage() {
             disabled={disabled}
             onChange={(next) => mutation.mutate({ instagram_enabled: next })}
           />
+          <PlatformSwitch
+            label='Instagram səhifələri'
+            hint='Seçilmiş səhifələrin bütün postları, hashtag olmadan'
+            checked={Boolean(settings?.instagram_accounts_enabled)}
+            disabled={disabled}
+            onChange={(next) => mutation.mutate({ instagram_accounts_enabled: next })}
+          />
+          <PlatformSwitch
+            label='Telegram kanalları'
+            hint='Açıq kanallar (t.me/s), pulsuz'
+            checked={Boolean(settings?.telegram_channels_enabled)}
+            disabled={disabled}
+            onChange={(next) => mutation.mutate({ telegram_channels_enabled: next })}
+          />
         </section>
 
         <section className='grid content-start gap-3 rounded-lg border bg-card p-4 md:p-5'>
@@ -619,6 +636,11 @@ function SocialAdminPage() {
           </div>
         )}
       </section>
+
+      <WatchedAccounts
+        instagramEnabled={Boolean(settings?.instagram_accounts_enabled)}
+        telegramEnabled={Boolean(settings?.telegram_channels_enabled)}
+      />
     </div>
   )
 }

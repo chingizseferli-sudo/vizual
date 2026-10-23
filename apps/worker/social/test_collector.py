@@ -281,6 +281,7 @@ def test_disabled_platforms_make_no_calls(col):
     beat = fake.find("POST", "bot_runtime_state")[0]["json"]
     assert beat["key"] == "social_heartbeat"
     assert beat["value"] == {"at": NOW.isoformat(), "facebook_enabled": False, "instagram_enabled": False,
+                             "instagram_accounts_enabled": False, "telegram_channels_enabled": False,
                              "apify_key": True, "socialfetch_key": True, "keywords": 0}
 
 
@@ -379,3 +380,185 @@ def test_state_is_written_without_stats_before_migration(col):
     col.run_tick(NOW)
     assert len(calls) == 2 and "last_stats" not in calls[1][0]
     assert fake.find("POST", "runs")
+
+
+# Watched Instagram pages and Telegram channels ------------------------------------------
+
+TG_HTML = """
+<html><body>
+<div class="tgme_channel_info_header_title"><span dir="auto">APA xəbər</span></div>
+<div class="tgme_widget_message_wrap"><div class="tgme_widget_message js-widget_message" data-post="apa_az/101">
+  <div class="tgme_widget_message_text js-message_text" dir="auto">Kapital Bankın yeni filialı açıldı</div>
+  <a class="tgme_widget_message_date" href="https://t.me/apa_az/101"><time datetime="{fresh}" class="time">10:00</time></a>
+</div></div>
+<div class="tgme_widget_message_wrap"><div class="tgme_widget_message js-widget_message" data-post="apa_az/100">
+  <div class="tgme_widget_message_text js-message_text" dir="auto">Kapital Bank köhnə xəbər</div>
+  <a class="tgme_widget_message_date" href="https://t.me/apa_az/100"><time datetime="{old}" class="time">09:00</time></a>
+</div></div>
+<div class="tgme_widget_message_wrap"><div class="tgme_widget_message js-widget_message" data-post="apa_az/99">
+  <div class="tgme_widget_message_text js-message_text" dir="auto">Hava proqnozu</div>
+  <a class="tgme_widget_message_date" href="https://t.me/apa_az/99"><time datetime="{fresh}" class="time">08:00</time></a>
+</div></div>
+</body></html>
+""".replace("{fresh}", (NOW - timedelta(hours=1)).isoformat()).replace("{old}", (NOW - timedelta(days=5)).isoformat())
+
+
+def test_parse_telegram_preview(col):
+    posts, title = col.parse_telegram_preview(TG_HTML, "apa_az")
+    assert title == "APA xəbər"
+    assert [p["url"] for p in posts] == ["https://t.me/apa_az/101", "https://t.me/apa_az/100", "https://t.me/apa_az/99"]
+    assert posts[0]["text"] == "Kapital Bankın yeni filialı açıldı"
+    assert posts[0]["published_at"] == NOW - timedelta(hours=1)
+    assert posts[0]["external_id"] == "apa_az/101" and posts[0]["author"] == "APA xəbər"
+
+
+def account_routes(settings, cache, accounts, social_ids=None):
+    routes = base_routes(settings, cache, social_ids=social_ids)
+    routes[("GET", "sources")] = FakeResponse(200, [
+        {"id": "src-fb", "base_url": "https://www.facebook.com"},
+        {"id": "src-ig", "base_url": "https://www.instagram.com"},
+        {"id": "src-tg", "base_url": "https://t.me"},
+    ])
+    routes[("GET", "social_watched_accounts")] = lambda kw: FakeResponse(
+        200, [a for a in accounts if kw["params"]["platform"] == f"eq.{a['platform']}"])
+    routes[("PATCH", "social_watched_accounts")] = FakeResponse(204, None)
+    return routes
+
+
+class HtmlResponse:
+    status_code = 200
+
+    def __init__(self, text):
+        self.text = text
+
+
+def fake_telegram(col, monkeypatch, html=TG_HTML):
+    seen = []
+
+    def fake_request(url, **_kwargs):
+        seen.append(url)
+        return HtmlResponse(html)
+
+    monkeypatch.setattr(col.sm, "safe_request", fake_request)
+    monkeypatch.setattr(col.sm, "decode_response_text", lambda response: response.text)
+    return seen
+
+
+TG_SETTINGS = {"facebook_enabled": False, "instagram_enabled": False, "telegram_channels_enabled": True,
+               "default_interval_minutes": 360, "monthly_budget_usd": None}
+
+
+def test_telegram_channel_alerts_every_active_keyword_owner(col, monkeypatch):
+    seen = fake_telegram(col, monkeypatch)
+    stored = []
+
+    def insert_item(kwargs):
+        stored.append(kwargs["json"])
+        return FakeResponse(201, [{"id": f"item-{len(stored)}"}])
+
+    # Telegram is a news source: a keyword NOT picked for FB/IG still matches.
+    fake = use(col, {**account_routes(TG_SETTINGS, [keyword_row("Kapital Bank", USER_A)],
+                                      [{"id": "acc-1", "platform": "telegram", "handle": "apa_az"}], social_ids=[]),
+                     ("POST", "monitored_items"): insert_item})
+    col.run_tick(NOW)
+    assert seen == ["https://t.me/s/apa_az"]
+    assert len(stored) == 1
+    assert stored[0]["source_id"] == "src-tg" and stored[0]["url"] == "https://t.me/apa_az/101"
+    assert stored[0]["item_hash"] == "telegram:apa_az/101"
+    sends = fake.find("POST", "sendMessage")
+    assert len(sends) == 1 and "Telegram" in sends[0]["data"]["text"] and "https://t.me/apa_az/101" in sends[0]["data"]["text"]
+    state = fake.find("PATCH", "social_watched_accounts")[0]
+    assert state["params"] == {"id": "eq.acc-1"}
+    stats = state["json"]["last_stats"]
+    assert {k: stats[k] for k in ("raw", "too_old", "no_match", "stored", "alerted")} == {
+        "raw": 3, "too_old": 1, "no_match": 1, "stored": 1, "alerted": 1}
+    assert state["json"]["last_error"] is None and state["json"]["last_post_count"] == 3
+    # Telegram needs no FB/IG keyword list and no provider.
+    assert not fake.find("POST", "social_keyword_ids_for_worker")
+
+
+def test_telegram_channel_not_due_is_skipped(col, monkeypatch):
+    seen = fake_telegram(col, monkeypatch)
+    fresh = (NOW - timedelta(minutes=5)).isoformat()
+    use(col, account_routes(TG_SETTINGS, [keyword_row("Kapital Bank", USER_A)],
+                            [{"id": "acc-1", "platform": "telegram", "handle": "apa_az", "last_checked_at": fresh}]))
+    col.run_tick(NOW)
+    assert seen == []
+
+
+def test_telegram_without_preview_reports_error(col, monkeypatch):
+    fake_telegram(col, monkeypatch, html="<html><body>no posts</body></html>")
+    fake = use(col, account_routes(TG_SETTINGS, [keyword_row("Kapital Bank", USER_A)],
+                                   [{"id": "acc-1", "platform": "telegram", "handle": "wrongname"}]))
+    col.run_tick(NOW)
+    assert fake.find("PATCH", "social_watched_accounts")[0]["json"]["last_error"] == "telegram:no_preview"
+
+
+IG_PAGE_SETTINGS = {"facebook_enabled": False, "instagram_enabled": False, "instagram_accounts_enabled": True,
+                    "default_interval_minutes": 360, "monthly_budget_usd": 50}
+
+
+def ig_profile_media(*items):
+    return {"meta": {"creditsCharged": 1}, "data": {"lookupStatus": "found", "media": list(items)}}
+
+
+def test_instagram_page_matches_caption_without_hashtag(col):
+    media = ig_profile_media(
+        {"id": "p1", "url": "https://www.instagram.com/p/p1/", "caption": "Bu gün Kapital Bankın prezentasiyası oldu",
+         "createdAt": (NOW - timedelta(hours=2)).isoformat(), "owner": {"handle": "report.az"}},
+        {"id": "p2", "url": "https://www.instagram.com/p/p2/", "caption": "İdman xəbərləri",
+         "createdAt": (NOW - timedelta(hours=2)).isoformat(), "owner": {"handle": "report.az"}},
+        {"id": "p3", "url": "https://www.instagram.com/p/p3/", "caption": "Kapital Bank, sabitlənmiş köhnə post",
+         "createdAt": (NOW - timedelta(days=40)).isoformat(), "owner": {"handle": "report.az"}},
+    )
+    stored = []
+
+    def insert_item(kwargs):
+        stored.append(kwargs["json"])
+        return FakeResponse(201, [{"id": "item-p1"}])
+
+    fake = use(col, {**account_routes(IG_PAGE_SETTINGS, [keyword_row("Kapital Bank", USER_A)],
+                                      [{"id": "acc-ig", "platform": "instagram", "handle": "report.az"}]),
+                     ("GET", "media"): FakeResponse(200, media),
+                     ("POST", "monitored_items"): insert_item})
+    col.run_tick(NOW)
+    call = fake.find("GET", "media")[0]
+    assert "/profiles/report.az/media" in call["url"] and call["params"] == {"tab": "posts"}
+    assert call["headers"]["x-api-key"] == "sf-key"
+    assert len(stored) == 1 and stored[0]["url"] == "https://www.instagram.com/p/p1/"
+    # Same hash as a hashtag result for the same post, so it is stored once.
+    assert stored[0]["item_hash"] == "instagram:p1" and stored[0]["source_id"] == "src-ig"
+    assert len(fake.find("POST", "sendMessage")) == 1
+    usage = [c for c in fake.find("POST", "bot_runtime_state") if c["json"]["key"].startswith("social_usage_")]
+    assert usage[0]["json"]["value"]["calls"] == 1
+
+
+def test_instagram_page_post_does_not_reach_users_without_social(col):
+    media = ig_profile_media(
+        {"id": "p1", "url": "https://www.instagram.com/p/p1/", "caption": "Kapital Bank xəbəri",
+         "createdAt": (NOW - timedelta(hours=1)).isoformat(), "owner": {"handle": "report.az"}})
+    rows = [keyword_row("Kapital Bank", USER_A), keyword_row("Kapital Bank", USER_B, chat="888")]
+    fake = use(col, {**account_routes(IG_PAGE_SETTINGS, rows, [{"id": "acc-ig", "platform": "instagram", "handle": "report.az"}],
+                                      social_ids=["k-Kapital Bank-user-a"]),
+                     ("GET", "media"): FakeResponse(200, media),
+                     ("POST", "monitored_items"): FakeResponse(201, [{"id": "item-p1"}])})
+    col.run_tick(NOW)
+    chats = [c["data"]["chat_id"] for c in fake.find("POST", "sendMessage")]
+    assert chats == ["777"]
+
+
+def test_private_instagram_page_reports_error(col):
+    media = {"meta": {"creditsCharged": 1}, "data": {"lookupStatus": "private", "media": []}}
+    fake = use(col, {**account_routes(IG_PAGE_SETTINGS, [keyword_row("Kapital Bank", USER_A)],
+                                      [{"id": "acc-ig", "platform": "instagram", "handle": "closed.page"}]),
+                     ("GET", "media"): FakeResponse(200, media)})
+    col.run_tick(NOW)
+    assert fake.find("PATCH", "social_watched_accounts")[0]["json"]["last_error"] == "profile:private"
+
+
+def test_instagram_pages_without_key_make_no_calls(col):
+    col.SOCIALFETCH_API_KEY = ""
+    fake = use(col, {("GET", "social_settings"): FakeResponse(200, [IG_PAGE_SETTINGS]),
+                     ("POST", "bot_runtime_state"): FakeResponse(201, None)})
+    col.run_tick(NOW)
+    assert [c["name"] for c in fake.calls] == ["social_settings", "bot_runtime_state"]

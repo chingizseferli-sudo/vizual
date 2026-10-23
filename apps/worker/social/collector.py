@@ -1,4 +1,5 @@
-"""Facebook (Apify) and Instagram (SocialFetch) keyword collector.
+"""Facebook (Apify) and Instagram (SocialFetch) keyword collector, plus
+watched Instagram pages and public Telegram channels.
 
 Every tick: read social_settings, collect the active monitor keywords, and
 search each unique folded keyword once when it is due. A keyword is due when
@@ -8,6 +9,12 @@ track it (profile override, else plan limit, else the global default).
 Matching posts are stored as monitored_items under the platform's sources row,
 then matched and alerted through the rss worker's own functions, so panels,
 matches, alerts and retention behave exactly like news items.
+
+Watched accounts (social_watched_accounts, admin list) are read whole and
+matched here, once per account for every customer: Instagram pages find posts
+without a hashtag (only keywords picked for FB/IG match, like hashtag results);
+Telegram channels come from the free t.me/s preview and count as a news source,
+so every active keyword matches.
 """
 
 import os
@@ -38,8 +45,14 @@ APIFY_RUN_TIMEOUT_SECONDS = int(os.getenv("APIFY_RUN_TIMEOUT_SECONDS", "600"))
 APIFY_FB_USD_PER_QUERY_ESTIMATE = float(os.getenv("APIFY_FB_USD_PER_QUERY_ESTIMATE", "0.05"))
 SOCIALFETCH_USD_PER_CREDIT_ESTIMATE = float(os.getenv("SOCIALFETCH_USD_PER_CREDIT_ESTIMATE", "0.01"))
 
-PLATFORM_BASE_URLS = {"facebook": "https://www.facebook.com", "instagram": "https://www.instagram.com"}
-PLATFORM_LABELS = {"facebook": "Facebook", "instagram": "Instagram"}
+PLATFORM_BASE_URLS = {
+    "facebook": "https://www.facebook.com",
+    "instagram": "https://www.instagram.com",
+    "telegram": "https://t.me",
+}
+PLATFORM_LABELS = {"facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram"}
+# Minutes between reads of a watched account when the admin set none.
+ACCOUNT_DEFAULT_INTERVALS = {"instagram": 180, "telegram": 10}
 HTTP_TIMEOUT = 90
 
 
@@ -302,19 +315,86 @@ def socialfetch_instagram_hashtag(targets, folded):
     body = data.get("data") or {}
     if body.get("lookupStatus") not in (None, "found"):
         return [], usd, None
+    # The "recent" tab lists new posts only, so an undated one is new now.
+    return socialfetch_media_posts(body, folded, undated_is_new=True), usd, None
+
+
+def socialfetch_media_posts(body, folded=None, undated_is_new=False):
     posts = []
     for item in body.get("media") or []:
         owner = item.get("owner") or {}
+        published = parse_time(item.get("createdAt") or item.get("takenAt") or item.get("timestamp"))
         posts.append({
             "keyword_fold": folded,
             "external_id": str(item.get("id") or item.get("shortcode") or item.get("url") or ""),
             "url": item.get("url"),
             "text": item.get("caption") or "",
             "author": owner.get("handle"),
-            # The "recent" tab lists new posts only, so an undated one is new now.
-            "published_at": parse_time(item.get("createdAt") or item.get("takenAt") or item.get("timestamp")) or utcnow(),
+            "published_at": published or (utcnow() if undated_is_new else None),
         })
-    return posts, usd, None
+    return posts
+
+
+def socialfetch_instagram_profile(handle):
+    """Latest posts of one Instagram page (GET /v2/instagram/profiles/{profile}/media,
+    tab=posts, 1 credit per page). Returns (posts, usd, error)."""
+    response = requests.get(
+        f"{SOCIALFETCH_BASE}/v2/instagram/profiles/{urllib.parse.quote(handle)}/media",
+        params={"tab": "posts"},
+        headers={"x-api-key": SOCIALFETCH_API_KEY, "Accept": "application/json"},
+        timeout=HTTP_TIMEOUT,
+    )
+    if response.status_code != 200:
+        return [], 0.0, f"socialfetch:{response.status_code}"
+    data = response.json() or {}
+    credits = (data.get("meta") or {}).get("creditsCharged") or 0
+    usd = credits * SOCIALFETCH_USD_PER_CREDIT_ESTIMATE
+    body = data.get("data") or {}
+    status = body.get("lookupStatus")
+    if status not in (None, "found"):
+        # private / not_found: the page cannot be read; the admin should fix the handle.
+        return [], usd, f"profile:{status}"
+    # Pinned posts can be old; undated ones are not guessed (counted as no_date).
+    return socialfetch_media_posts(body), usd, None
+
+
+def parse_telegram_preview(page_html, channel):
+    """Posts of a public channel's t.me/s/<channel> page: [(post dict)], title."""
+    soup = sm.BeautifulSoup(page_html or "", "html.parser")
+    title_node = soup.select_one(".tgme_channel_info_header_title") or soup.select_one(".tgme_header_title")
+    title = title_node.get_text(" ", strip=True) if title_node else channel
+    posts = []
+    for message in soup.select("div.tgme_widget_message[data-post]"):
+        post_ref = message.get("data-post") or ""
+        if "/" not in post_ref:
+            continue
+        text_node = message.select_one(".tgme_widget_message_text")
+        time_node = message.select_one(".tgme_widget_message_date time[datetime]") or message.select_one("time[datetime]")
+        posts.append({
+            "keyword_fold": None,
+            "external_id": post_ref,
+            "url": f"https://t.me/{post_ref}",
+            "text": text_node.get_text(" ", strip=True) if text_node else "",
+            "author": title,
+            "published_at": parse_time(time_node.get("datetime")) if time_node else None,
+        })
+    return posts, title
+
+
+def fetch_telegram_channel(handle):
+    """Public preview, no login or key. Returns (posts, usd, error)."""
+    url = f"https://t.me/s/{urllib.parse.quote(handle)}"
+    try:
+        response = sm.safe_request(url, headers=sm.REQUEST_HEADERS, timeout=sm.REQUEST_TIMEOUT, allow_redirects=True)
+    except Exception as exc:
+        return [], 0.0, f"telegram:{type(exc).__name__}"
+    if response.status_code != 200:
+        return [], 0.0, f"telegram:{response.status_code}"
+    posts, _title = parse_telegram_preview(sm.decode_response_text(response), handle)
+    if not posts:
+        # t.me redirects to the plain channel page when the preview is off or the name is wrong.
+        return [], 0.0, "telegram:no_preview"
+    return posts, 0.0, None
 
 
 # Storing, matching, alerting ------------------------------------------------------------
@@ -500,12 +580,91 @@ def collect_platform(platform, settings, targets, source_id, keyword_cache, now)
             return
 
 
+# Watched Instagram pages and Telegram channels ---------------------------------------
+
+
+# Until migration 20261023000003 adds social_watched_accounts, accounts are skipped.
+def load_watched_accounts(platform):
+    response = requests.get(
+        f"{sm.SUPABASE_URL}/rest/v1/social_watched_accounts",
+        headers=sm.supabase_headers(),
+        params={"select": "*", "platform": f"eq.{platform}", "active": "eq.true", "order": "handle"},
+        timeout=sm.REQUEST_TIMEOUT,
+    )
+    if response.status_code != 200:
+        print(f"social_watched_accounts oxunmadı ({response.status_code}); migration 20261023000003 lazımdır.", flush=True)
+        return []
+    return response.json() or []
+
+
+def due_accounts(platform, rows, now):
+    due = []
+    for row in rows:
+        interval = row.get("check_interval_minutes") or ACCOUNT_DEFAULT_INTERVALS[platform]
+        last = parse_time(row.get("last_checked_at"))
+        if last is None or now - last >= timedelta(minutes=interval):
+            due.append(row)
+    return due
+
+
+def record_account_state(row, stats, error):
+    response = requests.patch(
+        f"{sm.SUPABASE_URL}/rest/v1/social_watched_accounts",
+        headers=sm.supabase_headers({"Prefer": "return=minimal"}),
+        params={"id": f"eq.{row.get('id')}"},
+        json={
+            "last_checked_at": utcnow().isoformat(),
+            "last_error": error,
+            "last_post_count": stats["raw"],
+            "last_stats": {**stats, "error": error},
+        },
+        timeout=sm.REQUEST_TIMEOUT,
+    )
+    if response.status_code not in (200, 204):
+        print(f"social_watched_accounts yazılmadı: {response.status_code} | {response.text[:160]}", flush=True)
+
+
+def collect_accounts(platform, settings, source_id, keyword_cache, now):
+    due = due_accounts(platform, load_watched_accounts(platform), now)
+    if not due:
+        return
+    print(f"{platform} səhifələri: {len(due)} hesab oxunur", flush=True)
+    for row in due:
+        handle = sm.clean_text(row.get("handle"))
+        if platform == "instagram":
+            if budget_exhausted(settings, now):
+                print("instagram səhifələri: aylıq büdcə limiti dolub, qalan səhifələr keçildi.", flush=True)
+                return
+            posts, usd, error = socialfetch_instagram_profile(handle)
+            add_usage(now, usd, 1)
+        else:
+            posts, usd, error = fetch_telegram_channel(handle)
+        stats = new_stats()
+        stats["raw"] = len(posts)
+        stats["samples"] = [sample(post) for post in posts[:3]]
+        for post in merge_posts(posts):
+            outcome, matched_users, alerted = handle_post(platform, source_id, post, keyword_cache, now)
+            stats[outcome] += 1
+            stats["matched_users"] += matched_users
+            stats["alerted"] += alerted
+        record_account_state(row, stats, error)
+        print(f"{platform} @{handle} | {stats_line({handle: stats})} | xəta={error or '-'}", flush=True)
+        if platform == "instagram" and error and error.endswith((":401", ":402", ":403")):
+            print("instagram: açar rədd edildi və ya kredit bitdi, bu dövr dayandırıldı.", flush=True)
+            return
+
+
+# Tick ---------------------------------------------------------------------------------
+
+
 def write_heartbeat(settings, now, **extra):
     """Admin page shows whether the social service runs at all. Never secrets."""
     sm.save_runtime_state("social_heartbeat", {
         "at": now.isoformat(),
         "facebook_enabled": bool(settings.get("facebook_enabled")),
         "instagram_enabled": bool(settings.get("instagram_enabled")),
+        "instagram_accounts_enabled": bool(settings.get("instagram_accounts_enabled")),
+        "telegram_channels_enabled": bool(settings.get("telegram_channels_enabled")),
         "apify_key": bool(APIFY_TOKEN),
         "socialfetch_key": bool(SOCIALFETCH_API_KEY),
         **extra,
@@ -519,31 +678,55 @@ def run_tick(now=None):
         "facebook": bool(settings.get("facebook_enabled")) and bool(APIFY_TOKEN),
         "instagram": bool(settings.get("instagram_enabled")) and bool(SOCIALFETCH_API_KEY),
     }
-    if not any(enabled.values()):
+    instagram_pages = bool(settings.get("instagram_accounts_enabled")) and bool(SOCIALFETCH_API_KEY)
+    telegram_channels = bool(settings.get("telegram_channels_enabled"))
+    if not any(enabled.values()) and not instagram_pages and not telegram_channels:
         write_heartbeat(settings, now, keywords=0)
         return
-    allowed = social_keyword_ids()
-    if allowed is None:
-        write_heartbeat(settings, now, keywords=0, problem="social_keyword_ids_for_worker")
+
+    extra = {"keywords": 0}
+    keyword_cache = []
+    if any(enabled.values()) or instagram_pages:
+        allowed = social_keyword_ids()
+        if allowed is None:
+            extra["problem"] = "social_keyword_ids_for_worker"
+            enabled = {platform: False for platform in enabled}
+            instagram_pages = False
+        else:
+            # Only keywords the customer chose for FB/IG are searched, and only
+            # their owners are alerted about FB/IG posts.
+            keyword_cache = [row for row in sm.load_active_monitor_keywords() or [] if row.get("id") in allowed]
+
+    targets = {}
+    if any(enabled.values()) and keyword_cache:
+        profiles = rest_get("user_profiles", {"select": "user_id,plan_id,social_interval_minutes"})
+        plans = rest_get("subscription_plans", {"select": "id,limits"})
+        targets = keyword_intervals(keyword_cache, profiles, plans, int(settings.get("default_interval_minutes") or 360))
+        extra["keywords"] = len(targets)
+    write_heartbeat(settings, now, **extra)
+    if not targets and not (instagram_pages and keyword_cache) and not telegram_channels:
         return
-    # Only keywords the customer chose for FB/IG are searched, and only their
-    # owners are alerted about posts.
-    keyword_cache = [row for row in sm.load_active_monitor_keywords() or [] if row.get("id") in allowed]
-    profiles = rest_get("user_profiles", {"select": "user_id,plan_id,social_interval_minutes"})
-    plans = rest_get("subscription_plans", {"select": "id,limits"})
-    targets = keyword_intervals(keyword_cache, profiles, plans, int(settings.get("default_interval_minutes") or 360))
-    write_heartbeat(settings, now, keywords=len(targets))
-    if not targets:
-        return
+
     source_ids = platform_source_ids()
-    for platform, is_enabled in enabled.items():
-        if not is_enabled:
-            continue
+    jobs = []
+    if targets:
+        jobs += [(platform, "keywords") for platform, is_enabled in enabled.items() if is_enabled]
+    if instagram_pages and keyword_cache:
+        jobs.append(("instagram", "accounts"))
+    if telegram_channels:
+        jobs.append(("telegram", "accounts"))
+    for platform, kind in jobs:
         if not source_ids.get(platform):
-            print(f"{platform}: sources sətri yoxdur (migration 20261020000001).", flush=True)
+            print(f"{platform}: sources sətri yoxdur (migration 20261020000001 / 20261023000003).", flush=True)
             continue
         try:
-            collect_platform(platform, settings, targets, source_ids[platform], keyword_cache, now)
+            if kind == "keywords":
+                collect_platform(platform, settings, targets, source_ids[platform], keyword_cache, now)
+            elif platform == "instagram":
+                collect_accounts(platform, settings, source_ids[platform], keyword_cache, now)
+            else:
+                # Telegram channels are a news source: every active keyword matches.
+                collect_accounts(platform, settings, source_ids[platform], sm.load_active_monitor_keywords() or [], now)
         except Exception as exc:
             print(f"{platform} xətası: {sm.redact_secrets(exc)}", flush=True)
 
