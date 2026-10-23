@@ -217,8 +217,13 @@ def test_facebook_tick_alerts_once_for_fresh_whole_word_match(col):
     assert "Facebook" in sends[0]["data"]["text"]
 
     state = fake.find("POST", "social_keyword_state")[0]["json"]
-    assert state == [{"platform": "facebook", "keyword_fold": "bdu", "last_checked_at": state[0]["last_checked_at"],
-                      "last_result_count": 3, "last_error": None}]
+    assert len(state) == 1 and state[0]["platform"] == "facebook" and state[0]["keyword_fold"] == "bdu"
+    assert state[0]["last_result_count"] == 3 and state[0]["last_error"] is None
+    stats = state[0]["last_stats"]
+    assert {k: stats[k] for k in col.STAT_KEYS} == {
+        "raw": 3, "no_url": 0, "no_date": 0, "too_old": 1, "no_match": 1, "duplicate": 0,
+        "stored": 1, "matched_users": 1, "alerted": 1}
+    assert len(stats["samples"]) == 3 and stats["samples"][0]["url"].endswith("/1")
     usage = [c for c in fake.find("POST", "bot_runtime_state") if c["json"]["key"].startswith("social_usage_")]
     assert usage[0]["json"]["value"] == {"usd": 0.12, "calls": 1}
 
@@ -269,9 +274,14 @@ def test_budget_exhausted_skips_provider(col):
 
 
 def test_disabled_platforms_make_no_calls(col):
-    fake = use(col, {("GET", "social_settings"): FakeResponse(200, [{"facebook_enabled": False, "instagram_enabled": False}])})
+    fake = use(col, {("GET", "social_settings"): FakeResponse(200, [{"facebook_enabled": False, "instagram_enabled": False}]),
+                     ("POST", "bot_runtime_state"): FakeResponse(201, None)})
     col.run_tick(NOW)
-    assert [c["name"] for c in fake.calls] == ["social_settings"]
+    assert [c["name"] for c in fake.calls] == ["social_settings", "bot_runtime_state"]
+    beat = fake.find("POST", "bot_runtime_state")[0]["json"]
+    assert beat["key"] == "social_heartbeat"
+    assert beat["value"] == {"at": NOW.isoformat(), "facebook_enabled": False, "instagram_enabled": False,
+                             "apify_key": True, "socialfetch_key": True, "keywords": 0}
 
 
 def test_instagram_searches_each_keyword_hashtag(col):
@@ -289,3 +299,83 @@ def test_instagram_searches_each_keyword_hashtag(col):
     assert call["headers"]["x-api-key"] == "sf-key"
     assert fake.find("POST", "monitored_items")[0]["json"]["source_id"] == "src-ig"
     assert len(fake.find("POST", "sendMessage")) == 1
+
+
+@pytest.mark.parametrize("keyword,text,expected", [
+    ("Kapital Bank", "Kapital Bankın yeni kampaniyası", True),
+    ("Kapital Bank", "#kapitalbank #baku", True),
+    ("Kapital Bank", "#KapitalBankda endirim", True),
+    ("Kapital Bank", "kapital-bank xəbərləri", True),
+    ("Kapital Bank", "Bankın kapitalı artdı", False),
+    ("Azərişıq", "AZƏRİŞIQ işıqları söndürdü", True),
+    ("Azərişıq", "#azerisiq", True),
+    ("BDU", "#bdu tələbələri", True),
+    ("BDU", "ABDU şirkəti", False),
+    ("DİM", "dimensional design", False),
+    ("Bakı metrosu", "#bakımetrosu dayandı", True),
+])
+def test_social_keyword_matcher(col, keyword, text, expected):
+    assert col.social_keyword_matches(keyword, text) is expected
+
+
+def ig_settings():
+    return {"facebook_enabled": False, "instagram_enabled": True, "default_interval_minutes": 360, "monthly_budget_usd": None}
+
+
+def ig_media(caption, created=True):
+    item = {"id": "ig1", "url": "https://www.instagram.com/p/ig1", "caption": caption, "owner": {"handle": "baku"}}
+    if created:
+        item["createdAt"] = (NOW - timedelta(hours=1)).isoformat()
+    return {"meta": {"creditsCharged": 1}, "data": {"lookupStatus": "found", "media": [item]}}
+
+
+def test_instagram_hashtag_post_matches_its_keyword_without_caption_text(col):
+    # The hashtag was in a comment; the caption does not repeat it.
+    fake = use(col, {**base_routes(ig_settings(), [keyword_row("Kapital Bank", USER_A)]),
+                     ("GET", "media"): FakeResponse(200, ig_media("Yeni filial açıldı!", created=False)),
+                     ("POST", "monitored_items"): FakeResponse(201, [{"id": "item-ig"}])})
+    col.run_tick(NOW)
+    assert fake.find("POST", "monitor_matches")[0]["json"]["matched_keyword"] == "Kapital Bank"
+    assert len(fake.find("POST", "sendMessage")) == 1
+    stats = fake.find("POST", "social_keyword_state")[0]["json"][0]["last_stats"]
+    assert stats["stored"] == 1 and stats["no_date"] == 0
+
+
+def test_facebook_suffix_and_hashtag_match_multiword_keyword(col):
+    items = [fb_item("1", "Kapital Bankın yeni tətbiqi", 1, query="Kapital Bank"),
+             fb_item("2", "#kapitalbank endirim", 1, query="Kapital Bank"),
+             fb_item("3", "Tamam başqa mövzu", 1, query="Kapital Bank")]
+    ids = iter(["item-1", "item-2"])
+    fake = use(col, {**base_routes(FB_SETTINGS, [keyword_row("Kapital Bank", USER_A)]), **apify_routes(items),
+                     ("POST", "monitored_items"): lambda kw: FakeResponse(201, [{"id": next(ids)}])})
+    col.run_tick(NOW)
+    assert len(fake.find("POST", "monitored_items")) == 2
+    stats = fake.find("POST", "social_keyword_state")[0]["json"][0]["last_stats"]
+    assert stats["stored"] == 2 and stats["no_match"] == 1
+
+
+def test_social_post_does_not_reach_users_without_social(col):
+    # USER_B tracks the same word but did not get it for FB/IG (plan or choice).
+    rows = [keyword_row("BDU", USER_A), keyword_row("BDU", USER_B, chat="888")]
+    fake = use(col, {**base_routes(FB_SETTINGS, rows, social_ids=["k-BDU-user-a"]),
+                     **apify_routes([fb_item("1", "BDU xəbəri", 1)]),
+                     ("POST", "monitored_items"): FakeResponse(201, [{"id": "item-1"}])})
+    col.run_tick(NOW)
+    assert [c["json"]["monitor_id"] for c in fake.find("POST", "monitor_matches")] == ["m-user-a"]
+    assert [c["data"]["chat_id"] for c in fake.find("POST", "sendMessage")] == ["777"]
+
+
+def test_state_is_written_without_stats_before_migration(col):
+    calls = []
+
+    def state(kw):
+        calls.append(kw["json"])
+        if "last_stats" in kw["json"][0]:
+            return FakeResponse(400, {"message": "Could not find the 'last_stats' column"})
+        return FakeResponse(201, None)
+
+    fake = use(col, {**base_routes(FB_SETTINGS, [keyword_row("BDU", USER_A)]), **apify_routes([]),
+                     ("POST", "social_keyword_state"): state})
+    col.run_tick(NOW)
+    assert len(calls) == 2 and "last_stats" not in calls[1][0]
+    assert fake.find("POST", "runs")

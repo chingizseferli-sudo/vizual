@@ -11,6 +11,7 @@ matches, alerts and retention behave exactly like news items.
 """
 
 import os
+import re
 import sys
 import time
 import urllib.parse
@@ -56,17 +57,6 @@ def rest_get(table, params):
     if response.status_code != 200:
         raise RuntimeError(f"{table}:{response.status_code}:{response.text[:160]}")
     return response.json() or []
-
-
-def rest_upsert(table, rows):
-    response = requests.post(
-        f"{sm.SUPABASE_URL}/rest/v1/{table}",
-        headers=sm.supabase_headers({"Prefer": "resolution=merge-duplicates,return=minimal"}),
-        json=rows,
-        timeout=sm.REQUEST_TIMEOUT,
-    )
-    if response.status_code not in (200, 201, 204):
-        print(f"{table} yazılmadı: {response.status_code} | {response.text[:160]}", flush=True)
 
 
 def parse_time(value):
@@ -144,18 +134,58 @@ def due_keywords(platform, targets, now):
     return due
 
 
-def record_keyword_state(platform, folded_keywords, counts, error=None):
+# Until migration 20261023000002 adds last_stats, state is written without it.
+STATS_COLUMN = {"available": True}
+
+
+def record_keyword_state(platform, folded_keywords, stats, error=None):
     now_iso = utcnow().isoformat()
-    rest_upsert("social_keyword_state", [
-        {
+    rows = []
+    for folded in folded_keywords:
+        keyword_stats = stats.get(folded) or new_stats()
+        row = {
             "platform": platform,
             "keyword_fold": folded,
             "last_checked_at": now_iso,
-            "last_result_count": counts.get(folded, 0),
+            "last_result_count": keyword_stats["raw"],
             "last_error": error,
         }
-        for folded in folded_keywords
-    ])
+        if STATS_COLUMN["available"]:
+            row["last_stats"] = {**keyword_stats, "error": error}
+        rows.append(row)
+    response = requests.post(
+        f"{sm.SUPABASE_URL}/rest/v1/social_keyword_state",
+        headers=sm.supabase_headers({"Prefer": "resolution=merge-duplicates,return=minimal"}),
+        json=rows,
+        timeout=sm.REQUEST_TIMEOUT,
+    )
+    if response.status_code in (200, 201, 204):
+        return
+    if STATS_COLUMN["available"] and "last_stats" in (response.text or ""):
+        STATS_COLUMN["available"] = False
+        print("social_keyword_state.last_stats yoxdur (migration 20261023000002); statistika yazılmır.", flush=True)
+        record_keyword_state(platform, folded_keywords, stats, error)
+        return
+    print(f"social_keyword_state yazılmadı: {response.status_code} | {response.text[:160]}", flush=True)
+
+
+STAT_KEYS = ("raw", "no_url", "no_date", "too_old", "no_match", "duplicate", "stored", "matched_users", "alerted")
+
+
+def new_stats():
+    return {**{key: 0 for key in STAT_KEYS}, "samples": []}
+
+
+def stats_line(stats):
+    total = new_stats()
+    for keyword_stats in stats.values():
+        for key in STAT_KEYS:
+            total[key] += keyword_stats[key]
+    return (
+        f"gələn={total['raw']} linksiz={total['no_url']} tarixsiz={total['no_date']} köhnə={total['too_old']} "
+        f"uyğunsuz={total['no_match']} təkrar={total['duplicate']} yeni={total['stored']} "
+        f"müştəri={total['matched_users']} bildiriş={total['alerted']}"
+    )
 
 
 # Monthly budget ---------------------------------------------------------------------
@@ -241,11 +271,11 @@ def apify_facebook_search(targets, folded_keywords):
         folded = by_query.get(item.get("search_query")) or sm.keyword_fold(item.get("search_query") or "").strip()
         posts.append({
             "keyword_fold": folded,
-            "external_id": str(item.get("post_id") or item.get("id") or item.get("url") or ""),
-            "url": item.get("url"),
-            "text": item.get("message") or item.get("text") or "",
+            "external_id": str(item.get("post_id") or item.get("postId") or item.get("id") or item.get("url") or ""),
+            "url": item.get("url") or item.get("postUrl") or item.get("link"),
+            "text": item.get("message") or item.get("text") or item.get("postText") or "",
             "author": author or item.get("author_title"),
-            "published_at": parse_time(item.get("published_at") or item.get("timestamp")),
+            "published_at": parse_time(item.get("published_at") or item.get("timestamp") or item.get("time") or item.get("date")),
         })
     return posts, usd, None
 
@@ -281,7 +311,8 @@ def socialfetch_instagram_hashtag(targets, folded):
             "url": item.get("url"),
             "text": item.get("caption") or "",
             "author": owner.get("handle"),
-            "published_at": parse_time(item.get("createdAt")),
+            # The "recent" tab lists new posts only, so an undated one is new now.
+            "published_at": parse_time(item.get("createdAt") or item.get("takenAt") or item.get("timestamp")) or utcnow(),
         })
     return posts, usd, None
 
@@ -336,19 +367,64 @@ def alert_text(platform, post, keywords):
     )
 
 
+def is_short_keyword(folded):
+    return folded in sm.STRICT_WORDS_FOLDED or len(folded) <= 4
+
+
+# Social posts often drop Azerbaijani letters: "#azerisiq" for "Azərişıq".
+LATIN_FOLD = str.maketrans("əşçğöü", "escgou")
+
+
+def social_keyword_matches(keyword, text):
+    """Looser than news titles: posts write "Kapital Bankın" and "#kapitalbank".
+
+    Short and strict words stay whole-word ("#bdu" matches, "ABDU" does not).
+    A phrase may be written with or without spaces, with a suffix on the end,
+    and in plain Latin letters."""
+    folded = sm.keyword_fold(keyword).strip()
+    if not folded:
+        return False
+    folded_text = sm.keyword_fold(text)
+    if sm.keyword_matches_title(folded, folded_text):
+        return True
+    if is_short_keyword(folded):
+        return False
+    latin, latin_text = folded.translate(LATIN_FOLD), folded_text.translate(LATIN_FOLD)
+    pattern = r"(?<!\w)" + r"[\s\-_.]*".join(re.escape(word) for word in latin.split())
+    return bool(re.search(pattern, latin_text))
+
+
+def post_matcher(platform, post):
+    """A matcher for this post's text. Instagram returned the post for the exact
+    hashtag of its keywords, so those keywords match even when the caption
+    does not repeat them (unless they are short and noisy)."""
+    provider_folds = set(post.get("keyword_folds") or [post.get("keyword_fold")])
+
+    def matches(keyword, text):
+        if social_keyword_matches(keyword, text):
+            return True
+        folded = sm.keyword_fold(keyword).strip()
+        return platform == "instagram" and folded in provider_folds and not is_short_keyword(folded)
+
+    return matches
+
+
 def handle_post(platform, source_id, post, keyword_cache, now):
-    """Returns the number of chats alerted."""
-    if not post.get("url") or not post.get("published_at"):
-        return 0
+    """Returns (outcome, matched_users, chats_alerted)."""
+    if not post.get("url"):
+        return "no_url", 0, 0
+    if not post.get("published_at"):
+        return "no_date", 0, 0
     if now - post["published_at"] > timedelta(hours=SOCIAL_MAX_AGE_HOURS):
-        return 0
+        return "too_old", 0, 0
     text = post_title(post)
-    if not sm.find_matching_user_monitors(text, keyword_cache):
-        return 0
+    matcher = post_matcher(platform, post)
+    if not sm.find_matching_user_monitors(text, keyword_cache, matcher=matcher):
+        return "no_match", 0, 0
     item_id = store_post(platform, source_id, post)
     if not item_id:
-        return 0
-    matches = sm.match_user_monitors(item_id, text, keyword_cache)
+        return "duplicate", 0, 0
+    matches = sm.match_user_monitors(item_id, text, keyword_cache, matcher=matcher)
     sent = 0
     chats = {}
     for match in matches:
@@ -359,7 +435,30 @@ def handle_post(platform, source_id, post, keyword_cache, now):
         keywords = ", ".join(sm.clean_matched_keywords([m.get("keyword") for m in chat_matches]))
         if sm.send_telegram(alert_text(platform, post, keywords), chat_id=chat_id):
             sent += 1
-    return sent
+    return "stored", len(matches), sent
+
+
+def merge_posts(posts):
+    """One entry per post; a post found for several keywords keeps them all."""
+    merged = {}
+    for post in posts:
+        key = post.get("external_id") or post.get("url") or id(post)
+        if key in merged:
+            folds = merged[key]["keyword_folds"]
+            if post["keyword_fold"] not in folds:
+                folds.append(post["keyword_fold"])
+        else:
+            merged[key] = {**post, "keyword_folds": [post["keyword_fold"]]}
+    return list(merged.values())
+
+
+def sample(post):
+    published = post.get("published_at")
+    return {
+        "url": post.get("url"),
+        "text": " ".join(sm.clean_text(post.get("text")).split())[:120],
+        "date": published.isoformat() if published else None,
+    }
 
 
 def collect_platform(platform, settings, targets, source_id, keyword_cache, now):
@@ -381,16 +480,36 @@ def collect_platform(platform, settings, targets, source_id, keyword_cache, now)
                 return
             posts, usd, error = socialfetch_instagram_hashtag(targets, batch[0])
         add_usage(now, usd, 1)
-        counts = {}
-        alerted = 0
+        stats = {folded: new_stats() for folded in batch}
         for post in posts:
-            counts[post["keyword_fold"]] = counts.get(post["keyword_fold"], 0) + 1
-            alerted += handle_post(platform, source_id, post, keyword_cache, now)
-        record_keyword_state(platform, batch, counts, error)
-        print(f"{platform}: {len(batch)} söz | {len(posts)} post | {alerted} bildiriş | xəta={error or '-'}", flush=True)
+            keyword_stats = stats.setdefault(post["keyword_fold"], new_stats())
+            keyword_stats["raw"] += 1
+            if len(keyword_stats["samples"]) < 3:
+                keyword_stats["samples"].append(sample(post))
+        for post in merge_posts(posts):
+            outcome, matched_users, alerted = handle_post(platform, source_id, post, keyword_cache, now)
+            for folded in post["keyword_folds"]:
+                keyword_stats = stats.setdefault(folded, new_stats())
+                keyword_stats[outcome] += 1
+                keyword_stats["matched_users"] += matched_users
+                keyword_stats["alerted"] += alerted
+        record_keyword_state(platform, batch, stats, error)
+        print(f"{platform}: {len(batch)} söz | {stats_line(stats)} | xəta={error or '-'}", flush=True)
         if error and error.endswith((":401", ":402", ":403")):
             print(f"{platform}: açar rədd edildi və ya kredit bitdi, bu dövr dayandırıldı.", flush=True)
             return
+
+
+def write_heartbeat(settings, now, **extra):
+    """Admin page shows whether the social service runs at all. Never secrets."""
+    sm.save_runtime_state("social_heartbeat", {
+        "at": now.isoformat(),
+        "facebook_enabled": bool(settings.get("facebook_enabled")),
+        "instagram_enabled": bool(settings.get("instagram_enabled")),
+        "apify_key": bool(APIFY_TOKEN),
+        "socialfetch_key": bool(SOCIALFETCH_API_KEY),
+        **extra,
+    })
 
 
 def run_tick(now=None):
@@ -401,9 +520,11 @@ def run_tick(now=None):
         "instagram": bool(settings.get("instagram_enabled")) and bool(SOCIALFETCH_API_KEY),
     }
     if not any(enabled.values()):
+        write_heartbeat(settings, now, keywords=0)
         return
     allowed = social_keyword_ids()
     if allowed is None:
+        write_heartbeat(settings, now, keywords=0, problem="social_keyword_ids_for_worker")
         return
     # Only keywords the customer chose for FB/IG are searched, and only their
     # owners are alerted about posts.
@@ -411,6 +532,7 @@ def run_tick(now=None):
     profiles = rest_get("user_profiles", {"select": "user_id,plan_id,social_interval_minutes"})
     plans = rest_get("subscription_plans", {"select": "id,limits"})
     targets = keyword_intervals(keyword_cache, profiles, plans, int(settings.get("default_interval_minutes") or 360))
+    write_heartbeat(settings, now, keywords=len(targets))
     if not targets:
         return
     source_ids = platform_source_ids()

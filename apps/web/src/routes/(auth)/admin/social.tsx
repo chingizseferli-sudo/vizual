@@ -1,7 +1,7 @@
 import { Fragment } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { Loader2, RefreshCw, Share2 } from 'lucide-react'
+import { Activity, Loader2, RefreshCw, Search, Share2 } from 'lucide-react'
 import {
   SOCIAL_INTERVAL_OPTIONS,
   isMissingTableError,
@@ -19,20 +19,60 @@ type SocialSettings = {
   updated_at: string | null
 }
 
+type KeywordStats = {
+  raw?: number
+  no_url?: number
+  no_date?: number
+  too_old?: number
+  no_match?: number
+  duplicate?: number
+  stored?: number
+  matched_users?: number
+  alerted?: number
+  samples?: { url: string | null; text: string; date: string | null }[]
+}
+
 type KeywordState = {
   platform: string
   keyword_fold: string
   last_checked_at: string | null
   last_result_count: number | null
   last_error: string | null
+  last_stats?: KeywordStats | null
+}
+
+type Heartbeat = {
+  at?: string
+  facebook_enabled?: boolean
+  instagram_enabled?: boolean
+  apify_key?: boolean
+  socialfetch_key?: boolean
+  keywords?: number
+  problem?: string
 }
 
 type SocialAdminData = {
   settings: SocialSettings | null
   keywords: KeywordState[]
   usage: { usd?: number; calls?: number } | null
+  heartbeat: Heartbeat | null
   errors: string[]
 }
+
+// The collector wakes every 5 minutes; 15 minutes of silence means it is not running.
+const HEARTBEAT_STALE_MINUTES = 15
+
+const STAT_COLUMNS: { key: keyof KeywordStats; label: string; hint: string }[] = [
+  { key: 'raw', label: 'Gələn', hint: 'Provayderin bu axtarışda qaytardığı post sayı.' },
+  { key: 'stored', label: 'Yeni', hint: 'Yeni və uyğun postlar: bazaya yazıldı.' },
+  { key: 'matched_users', label: 'Müştəri', hint: 'Bu postların düşdüyü müştəri açar sözləri.' },
+  { key: 'alerted', label: 'Bildiriş', hint: 'Telegram-a gedən bildirişlər.' },
+  { key: 'duplicate', label: 'Təkrar', hint: 'Əvvəl yazılmış postlar: yenidən göndərilmir.' },
+  { key: 'too_old', label: 'Köhnə', hint: 'Son 48 saatdan köhnə postlar: göndərilmir.' },
+  { key: 'no_match', label: 'Uyğunsuz', hint: 'Mətnində açar söz tapılmayan postlar (provayderin səs-küyü).' },
+  { key: 'no_date', label: 'Tarixsiz', hint: 'Tarixi olmayan postlar: yaşını bilmədiyimiz üçün göndərilmir.' },
+  { key: 'no_url', label: 'Linksiz', hint: 'Linki olmayan postlar.' },
+]
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '—'
@@ -55,7 +95,7 @@ function usageKey() {
 }
 
 async function fetchSocialAdminData(): Promise<SocialAdminData> {
-  const [settingsResult, keywordsResult, usageResult] = await Promise.all([
+  const [settingsResult, keywordsResult, usageResult, heartbeatResult] = await Promise.all([
     supabase
       .from('social_settings')
       .select(
@@ -65,15 +105,19 @@ async function fetchSocialAdminData(): Promise<SocialAdminData> {
       .maybeSingle(),
     supabase
       .from('social_keyword_state')
-      .select(
-        'platform,keyword_fold,last_checked_at,last_result_count,last_error'
-      )
+      // '*' so the page still loads before last_stats exists.
+      .select('*')
       .order('last_checked_at', { ascending: false, nullsFirst: false })
       .limit(200),
     supabase
       .from('bot_runtime_state')
       .select('value')
       .eq('key', usageKey())
+      .maybeSingle(),
+    supabase
+      .from('bot_runtime_state')
+      .select('value')
+      .eq('key', 'social_heartbeat')
       .maybeSingle(),
   ])
 
@@ -99,8 +143,104 @@ async function fetchSocialAdminData(): Promise<SocialAdminData> {
     usage:
       ((usageResult.data as { value: SocialAdminData['usage'] } | null)
         ?.value as SocialAdminData['usage']) ?? null,
+    heartbeat:
+      ((heartbeatResult.data as { value: Heartbeat | null } | null)?.value as
+        | Heartbeat
+        | null) ?? null,
     errors,
   }
+}
+
+async function checkNow(target: { platform?: string; keyword?: string }) {
+  const { error } = await supabase.rpc('admin_social_check_now', {
+    p_platform: target.platform ?? null,
+    p_keyword_fold: target.keyword ?? null,
+  })
+  if (error) throw error
+}
+
+function minutesSince(value: string | undefined) {
+  if (!value) return null
+  const time = new Date(value).getTime()
+  if (Number.isNaN(time)) return null
+  return Math.max(0, Math.round((Date.now() - time) / 60000))
+}
+
+function ServiceStatus({
+  heartbeat,
+  settings,
+}: {
+  heartbeat: Heartbeat | null
+  settings: SocialSettings | null
+}) {
+  const ago = minutesSince(heartbeat?.at)
+  const running = ago !== null && ago <= HEARTBEAT_STALE_MINUTES
+  const checks: { label: string; ok: boolean; problem: string }[] = [
+    {
+      label: 'Facebook açarı (APIFY_TOKEN)',
+      ok: Boolean(heartbeat?.apify_key),
+      problem: 'Railway-də vizual-social servisinə APIFY_TOKEN əlavə edin.',
+    },
+    {
+      label: 'Instagram açarı (SOCIALFETCH_API_KEY)',
+      ok: Boolean(heartbeat?.socialfetch_key),
+      problem: 'Railway-də vizual-social servisinə SOCIALFETCH_API_KEY əlavə edin.',
+    },
+    {
+      label: 'Facebook aktivdir',
+      ok: Boolean(settings?.facebook_enabled),
+      problem: 'Aşağıda Facebook açarını yandırın.',
+    },
+    {
+      label: 'Instagram aktivdir',
+      ok: Boolean(settings?.instagram_enabled),
+      problem: 'Aşağıda Instagram açarını yandırın.',
+    },
+    {
+      label: `FB/IG üçün seçilmiş açar söz: ${heartbeat?.keywords ?? 0}`,
+      ok: (heartbeat?.keywords ?? 0) > 0,
+      problem:
+        heartbeat?.problem === 'social_keyword_ids_for_worker'
+          ? 'Bazada sosial açar söz funksiyası yoxdur: «npx supabase db push» edin.'
+          : 'Müştərilər Açar sözlər səhifəsində sözlərin FB/IG açarını yandırmalıdır (planda FB/IG limiti olmalıdır).',
+    },
+  ]
+
+  return (
+    <section className='grid gap-3 rounded-lg border bg-card p-4 md:p-5'>
+      <div className='flex items-center gap-2'>
+        <Activity className='h-5 w-5 text-muted-foreground' />
+        <h2 className='text-lg font-semibold'>Sosial servisin vəziyyəti</h2>
+      </div>
+      {heartbeat ? (
+        <p className={running ? 'text-sm text-success' : 'text-sm text-destructive'}>
+          {running
+            ? `Servis işləyir: son dövr ${ago} dəqiqə əvvəl (${formatDate(heartbeat.at)}).`
+            : `Servis ${ago ?? '?'} dəqiqədir işləmir (son dövr ${formatDate(heartbeat.at)}). Railway-də vizual-social servisinin loglarına baxın.`}
+        </p>
+      ) : (
+        <p className='text-sm text-destructive'>
+          Servis heç işləməyib. Railway-də vizual-social servisini yaradın (Root
+          Directory /apps/worker, WORKER=social).
+        </p>
+      )}
+      {heartbeat ? (
+        <ul className='grid gap-1.5 text-sm'>
+          {checks.map((check) => (
+            <li key={check.label} className='flex flex-wrap gap-x-2'>
+              <span className={check.ok ? 'text-success' : 'text-destructive'}>
+                {check.ok ? '✓' : '✗'}
+              </span>
+              <span>{check.label}</span>
+              {check.ok ? null : (
+                <span className='text-muted-foreground'>— {check.problem}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  )
 }
 
 async function updateSocialSettings(patch: Partial<SocialSettings>) {
@@ -168,6 +308,11 @@ function SocialAdminPage() {
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: socialAdminQueryKey }),
   })
+  const checkMutation = useMutation({
+    mutationFn: checkNow,
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: socialAdminQueryKey }),
+  })
   if (isLoading || !data) {
     return (
       <div className='flex min-h-[320px] items-center justify-center p-6 text-sm text-muted-foreground'>
@@ -230,6 +375,8 @@ function SocialAdminPage() {
           Dəyişmədi: {friendlyError(mutation.error)}
         </p>
       ) : null}
+
+      <ServiceStatus heartbeat={data.heartbeat} settings={settings} />
 
       <div className='grid gap-4 lg:grid-cols-3'>
         <section className='grid content-start gap-3 rounded-lg border bg-card p-4 md:p-5'>
@@ -313,64 +460,160 @@ function SocialAdminPage() {
       </div>
 
       <section className='rounded-lg border bg-card p-4 md:p-5'>
-        <h2 className='text-lg font-semibold'>Açar sözlərin son yoxlanışı</h2>
-        <p className='mb-4 text-sm text-muted-foreground'>
-          Eyni açar söz bütün müştərilər üçün bir dəfə axtarılır.
-        </p>
+        <div className='flex flex-wrap items-start justify-between gap-3'>
+          <div>
+            <h2 className='text-lg font-semibold'>Diaqnostika</h2>
+            <p className='text-sm text-muted-foreground'>
+              Hər açar sözün son axtarışında postlara nə olduğunu göstərir. Eyni
+              açar söz bütün müştərilər üçün bir dəfə axtarılır.
+            </p>
+          </div>
+          <button
+            type='button'
+            onClick={() => checkMutation.mutate({})}
+            disabled={checkMutation.isPending || data.keywords.length === 0}
+            className='inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60'
+          >
+            <Search className='h-4 w-4' />
+            Hamısını indi yoxla
+          </button>
+        </div>
+        {checkMutation.isSuccess ? (
+          <p className='mt-2 text-sm text-success'>
+            Növbəti dövrdə (5 dəqiqəyə qədər) yenidən axtarılacaq.
+          </p>
+        ) : null}
+        {checkMutation.isError ? (
+          <p className='mt-2 text-sm text-destructive' role='alert'>
+            {friendlyError(checkMutation.error)}
+          </p>
+        ) : null}
+        <details className='mt-3 text-sm text-muted-foreground'>
+          <summary className='cursor-pointer font-medium text-foreground'>
+            Sütunlar nə deməkdir?
+          </summary>
+          <ul className='mt-2 grid gap-1'>
+            {STAT_COLUMNS.map((column) => (
+              <li key={column.key}>
+                <span className='font-medium text-foreground'>{column.label}:</span>{' '}
+                {column.hint}
+              </li>
+            ))}
+            <li>
+              <span className='font-medium text-foreground'>Instagram:</span>{' '}
+              yalnız hashtag axtarılır (#kapitalbank). Hashtag qoyulmayan postlar
+              tapılmır.
+            </li>
+          </ul>
+        </details>
         {data.keywords.length === 0 ? (
-          <div className='rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground'>
+          <div className='mt-4 rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground'>
             Hələ axtarış olmayıb.
           </div>
         ) : (
-          <div className='overflow-x-auto'>
+          <div className='mt-4 overflow-x-auto'>
             <table className='w-full text-sm'>
               <thead className='text-left text-muted-foreground'>
                 <tr className='border-b'>
-                  <th className='py-2 pr-4 font-medium'>Platforma</th>
-                  <th className='py-2 pr-4 font-medium'>Açar söz</th>
-                  <th className='py-2 pr-4 font-medium'>Son yoxlama</th>
-                  <th className='py-2 pr-4 font-medium'>Nəticə</th>
-                  <th className='hidden py-2 font-medium lg:table-cell'>
-                    Xəta
+                  <th className='py-2 pr-3 font-medium'>Platforma</th>
+                  <th className='py-2 pr-3 font-medium'>Açar söz</th>
+                  <th className='py-2 pr-3 font-medium'>Son yoxlama</th>
+                  {STAT_COLUMNS.map((column) => (
+                    <th
+                      key={column.key}
+                      className='py-2 pr-3 text-right font-medium'
+                      title={column.hint}
+                    >
+                      {column.label}
+                    </th>
+                  ))}
+                  <th className='py-2 font-medium'>
+                    <span className='sr-only'>Əməliyyat</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {data.keywords.map((row) => (
-                  <Fragment key={`${row.platform}:${row.keyword_fold}`}>
-                    <tr
-                      className={
-                        row.last_error
-                          ? 'border-b last:border-0 max-lg:border-b-0'
-                          : 'border-b last:border-0'
-                      }
-                    >
-                      <td className='py-2 pr-4 capitalize'>{row.platform}</td>
-                      <td className='py-2 pr-4 wrap-anywhere'>
-                        {row.keyword_fold}
-                      </td>
-                      <td className='py-2 pr-4 whitespace-nowrap'>
-                        {formatDate(row.last_checked_at)}
-                      </td>
-                      <td className='py-2 pr-4'>
-                        {row.last_result_count ?? '—'}
-                      </td>
-                      <td className='hidden py-2 font-mono text-xs wrap-anywhere text-destructive lg:table-cell'>
-                        {row.last_error || ''}
-                      </td>
-                    </tr>
-                    {row.last_error ? (
-                      <tr className='border-b last:border-0 lg:hidden'>
-                        <td
-                          colSpan={4}
-                          className='pb-2 font-mono text-xs wrap-anywhere text-destructive'
-                        >
-                          {row.last_error}
+                {data.keywords.map((row) => {
+                  const stats = row.last_stats
+                  const samples = stats?.samples ?? []
+                  return (
+                    <Fragment key={`${row.platform}:${row.keyword_fold}`}>
+                      <tr className='border-t align-top'>
+                        <td className='py-2 pr-3 capitalize'>{row.platform}</td>
+                        <td className='py-2 pr-3 wrap-anywhere'>
+                          {row.keyword_fold}
+                        </td>
+                        <td className='py-2 pr-3 whitespace-nowrap'>
+                          {formatDate(row.last_checked_at)}
+                        </td>
+                        {STAT_COLUMNS.map((column) => (
+                          <td
+                            key={column.key}
+                            className='py-2 pr-3 text-right tabular-nums'
+                          >
+                            {column.key === 'raw'
+                              ? (stats?.raw ?? row.last_result_count ?? '—')
+                              : stats
+                                ? Number(stats[column.key] ?? 0)
+                                : '—'}
+                          </td>
+                        ))}
+                        <td className='py-2'>
+                          <button
+                            type='button'
+                            onClick={() =>
+                              checkMutation.mutate({
+                                platform: row.platform,
+                                keyword: row.keyword_fold,
+                              })
+                            }
+                            disabled={checkMutation.isPending}
+                            className='rounded-md border px-2 py-1 text-xs font-medium whitespace-nowrap hover:bg-muted disabled:opacity-60'
+                          >
+                            İndi yoxla
+                          </button>
                         </td>
                       </tr>
-                    ) : null}
-                  </Fragment>
-                ))}
+                      {row.last_error || samples.length > 0 ? (
+                        <tr>
+                          <td colSpan={STAT_COLUMNS.length + 4} className='pb-3'>
+                            {row.last_error ? (
+                              <div className='font-mono text-xs wrap-anywhere text-destructive'>
+                                Xəta: {row.last_error}
+                              </div>
+                            ) : null}
+                            {samples.length > 0 ? (
+                              <details className='text-xs text-muted-foreground'>
+                                <summary className='cursor-pointer'>
+                                  Gələn postlardan nümunələr ({samples.length})
+                                </summary>
+                                <ul className='mt-1 grid gap-1'>
+                                  {samples.map((item, index) => (
+                                    <li key={`${item.url}-${index}`} className='wrap-anywhere'>
+                                      {formatDate(item.date)} ·{' '}
+                                      {item.url ? (
+                                        <a
+                                          href={item.url}
+                                          target='_blank'
+                                          rel='noreferrer'
+                                          className='underline underline-offset-2'
+                                        >
+                                          {item.text || item.url}
+                                        </a>
+                                      ) : (
+                                        item.text || '—'
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>

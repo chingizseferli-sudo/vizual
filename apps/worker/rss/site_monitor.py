@@ -4712,9 +4712,10 @@ def load_active_monitor_keywords():
         print(f"Monitor keyword cache istisnasi: {exc}", flush=True)
         return None
 
-def find_matching_user_monitors(title, monitor_keywords_cache=None):
+def find_matching_user_monitors(title, monitor_keywords_cache=None, matcher=None):
     if not supabase_ready():
         return []
+    matcher = matcher or keyword_matches_title
     title_text = normalize_text(title)
     try:
         keywords = load_active_monitor_keywords() if monitor_keywords_cache is None else monitor_keywords_cache
@@ -4728,7 +4729,7 @@ def find_matching_user_monitors(title, monitor_keywords_cache=None):
                 continue
             keyword_original = row.get("keyword", "")
             keyword = normalize_text(keyword_original)
-            if not keyword_matches_title(keyword, title_text):
+            if not matcher(keyword, title_text):
                 continue
             match_key = (row.get("monitor_id"), keyword)
             if match_key in seen_matches:
@@ -4749,9 +4750,10 @@ def find_matching_user_monitors(title, monitor_keywords_cache=None):
         return []
 
 
-def match_user_monitors(item_id, title, monitor_keywords_cache=None):
+def match_user_monitors(item_id, title, monitor_keywords_cache=None, matcher=None):
     if not supabase_ready() or not item_id:
         return []
+    matcher = matcher or keyword_matches_title
     title_text = normalize_text(title)
     try:
         keywords = load_active_monitor_keywords() if monitor_keywords_cache is None else monitor_keywords_cache
@@ -4765,7 +4767,7 @@ def match_user_monitors(item_id, title, monitor_keywords_cache=None):
                 continue
             keyword_original = row.get("keyword", "")
             keyword = normalize_text(keyword_original)
-            if not keyword_matches_title(keyword, title_text):
+            if not matcher(keyword, title_text):
                 continue
             match_key = (row.get("monitor_id"), keyword)
             if match_key not in seen_matches:
