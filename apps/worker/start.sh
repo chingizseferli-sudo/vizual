@@ -1,7 +1,7 @@
 #!/bin/sh
 # Single image, several Railway services: pick the process with WORKER.
 #   rss            long-running news/RSS keyword monitor (site_monitor.py)
-#   social         long-running Facebook/Instagram keyword collector (social/collector.py)
+#   social         long-running social keyword collector: FB, IG, YouTube, X, LinkedIn, Telegram (social/collector.py)
 #   discovery      one-shot fast source discovery   (Railway cron, e.g. "0 */6 * * *")
 #   discovery_deep one-shot deep discovery          (Railway cron, e.g. "0 23 * * *")
 #   sync_sources   one-shot JSON -> Supabase sources sync (manual)

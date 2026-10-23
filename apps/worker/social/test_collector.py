@@ -224,8 +224,8 @@ def test_facebook_tick_alerts_once_for_fresh_whole_word_match(col):
     assert state[0]["last_result_count"] == 3 and state[0]["last_error"] is None
     stats = state[0]["last_stats"]
     assert {k: stats[k] for k in col.STAT_KEYS} == {
-        "raw": 3, "no_url": 0, "no_date": 0, "too_old": 1, "no_match": 1, "duplicate": 0,
-        "stored": 1, "matched_users": 1, "alerted": 1}
+        "raw": 3, "no_url": 0, "no_date": 0, "too_old": 1, "no_match": 1, "not_az": 0, "excluded": 0,
+        "duplicate": 0, "stored": 1, "matched_users": 1, "alerted": 1}
     assert len(stats["samples"]) == 3 and stats["samples"][0]["url"].endswith("/1")
     usage = [c for c in fake.find("POST", "bot_runtime_state") if c["json"]["key"].startswith("social_usage_")]
     assert usage[0]["json"]["value"] == {"usd": 0.12, "calls": 1, "facebook_usd": 0.12, "facebook_calls": 1}
@@ -285,7 +285,8 @@ def test_disabled_platforms_make_no_calls(col):
     assert beat["key"] == "social_heartbeat"
     assert beat["value"] == {"at": NOW.isoformat(), "facebook_enabled": False, "instagram_enabled": False,
                              "instagram_accounts_enabled": False, "telegram_channels_enabled": False,
-                             "apify_key": True, "socialfetch_key": True, "keywords": 0}
+                             "apify_key": True, "socialfetch_key": True, "x_enabled": False,
+                             "linkedin_enabled": False, "keywords": 0}
 
 
 def test_instagram_searches_each_keyword_hashtag(col):
@@ -347,7 +348,7 @@ def test_instagram_hashtag_post_matches_its_keyword_without_caption_text(col):
 
 def test_facebook_suffix_and_hashtag_match_multiword_keyword(col):
     items = [fb_item("1", "Kapital Bankın yeni tətbiqi", 1, query="Kapital Bank"),
-             fb_item("2", "#kapitalbank endirim", 1, query="Kapital Bank"),
+             fb_item("2", "#kapitalbank endirimləri", 1, query="Kapital Bank"),
              fb_item("3", "Tamam başqa mövzu", 1, query="Kapital Bank")]
     ids = iter(["item-1", "item-2"])
     fake = use(col, {**base_routes(FB_SETTINGS, [keyword_row("Kapital Bank", USER_A)]), **apify_routes(items),
@@ -815,3 +816,171 @@ def test_old_instagram_hashtag_post_is_not_stored(col):
     col.run_tick(NOW)
     assert not fake.find("POST", "monitored_items")
     assert fake.find("POST", "social_keyword_state")[0]["json"][0]["last_stats"]["too_old"] == 1
+
+
+# "Yalnız Azərbaycan" and exclude words, per customer keyword ----------------------------
+
+
+def test_international_keyword_keeps_only_azerbaijani_posts(col):
+    items = [fb_item("1", "MyGov India launches new citizen portal", 1, query="mygov"),
+             fb_item("2", "Mygov portalında yeni xidmət", 1, query="mygov"),
+             fb_item("3", "Mygov портал теперь работает в Баку", 1, query="mygov")]
+    stored = []
+
+    def insert_item(kwargs):
+        stored.append(kwargs["json"])
+        return FakeResponse(201, [{"id": f"item-{len(stored)}"}])
+
+    fake = use(col, {**base_routes(FB_SETTINGS, [keyword_row("mygov", USER_A)]), **apify_routes(items),
+                     ("POST", "monitored_items"): insert_item})
+    col.run_tick(NOW)
+    assert [row["item_hash"] for row in stored] == ["facebook:2", "facebook:3"]
+    stats = fake.find("POST", "social_keyword_state")[0]["json"][0]["last_stats"]
+    assert stats["not_az"] == 1 and stats["stored"] == 2 and stats["excluded"] == 0
+
+
+def test_each_customer_keyword_filters_for_itself(col):
+    fake = use(col, {("POST", "monitored_items"): FakeResponse(201, [{"id": "item-1"}]),
+                     ("POST", "monitor_matches"): FakeResponse(201, [{"id": "match-1"}]),
+                     ("GET", "monitor_alerts"): FakeResponse(200, []),
+                     ("POST", "monitor_alerts"): FakeResponse(201, [{"id": "alert-1"}]),
+                     ("GET", "user_profiles"): FakeResponse(200, [{"telegram_chat_id": "777"}]),
+                     ("GET", "bot_settings"): FakeResponse(200, [{"notifications_paused": False}]),
+                     ("POST", "sendMessage"): FakeResponse(200, {"ok": True})})
+    post = {"keyword_fold": "mygov", "external_id": "1", "url": "https://x.com/a/status/1",
+            "text": "MyGov India launches new portal", "author": "A", "published_at": NOW - timedelta(hours=1)}
+    strict = keyword_row("mygov", USER_A)
+    loose = {**keyword_row("mygov", USER_B, chat="888"), "az_only": False}
+    outcome, matched, _sent = col.handle_post("x", "src-x", post, [strict, loose], NOW)
+    assert outcome == "stored" and matched == 1
+    assert [c["json"]["monitor_id"] for c in fake.find("POST", "monitor_matches")] == [f"m-{USER_B}"]
+
+    excluded = {**loose, "exclude_words": ["India"]}
+    assert col.handle_post("x", "src-x", {**post, "external_id": "2"}, [strict, excluded], NOW)[0] == "excluded"
+    assert col.handle_post("x", "src-x", {**post, "external_id": "3"}, [strict], NOW)[0] == "not_az"
+
+
+def test_watched_account_posts_count_as_azerbaijani(col, monkeypatch):
+    html = TG_HTML.replace("Kapital Bank", "Kapital Bank launches card", 1)
+    fake_telegram(col, monkeypatch, html)
+    fake = use(col, {**account_routes(TG_SETTINGS, [keyword_row("Kapital Bank", USER_A)],
+                                      [{"id": "acc-1", "platform": "telegram", "handle": "apa_az"}], social_ids=[]),
+                     ("POST", "monitored_items"): FakeResponse(201, [{"id": "item-1"}])})
+    col.run_tick(NOW)
+    stats = fake.find("PATCH", "social_watched_accounts")[0]["json"]["last_stats"]
+    assert stats["stored"] == 1 and stats["not_az"] == 0
+
+
+# X and LinkedIn (Apify) --------------------------------------------------------------
+
+
+APIFY_NET_SETTINGS = {"facebook_enabled": False, "instagram_enabled": False, "x_enabled": True,
+                      "linkedin_enabled": True, "default_interval_minutes": 360, "monthly_budget_usd": None}
+NET_PLANS = [{"id": PLAN_BUSINESS, "limits": {"social_platforms": ["facebook", "x", "linkedin"]}},
+             {"id": PLAN_PRO, "limits": {}}]
+
+
+def apify_net_routes(rows, x_items=(), li_items=()):
+    routes = yt_routes(APIFY_NET_SETTINGS, rows, yt_profiles(), NET_PLANS)
+    routes[("GET", "sources")] = FakeResponse(200, [{"id": "src-x", "base_url": "https://x.com"},
+                                                    {"id": "src-li", "base_url": "https://www.linkedin.com"}])
+    runs = []
+
+    def start(kwargs):
+        runs.append(kwargs)
+        return FakeResponse(201, {"data": {"id": f"run-{len(runs)}", "status": "SUCCEEDED",
+                                           "defaultDatasetId": f"ds-{len(runs)}", "usageTotalUsd": 0}})
+
+    routes[("POST", "runs")] = start
+    routes[("GET", "items")] = lambda kw: FakeResponse(
+        200, list(x_items) if "searchTerms" in runs[-1]["json"] else list(li_items))
+    return routes, runs
+
+
+def tweet(tweet_id, text, hours_ago, location=""):
+    created = (NOW - timedelta(hours=hours_ago)).strftime("%a %b %d %H:%M:%S +0000 %Y")
+    return {"id": tweet_id, "url": f"https://x.com/user/status/{tweet_id}", "text": text, "createdAt": created,
+            "author": {"userName": "user", "name": "User", "location": location}}
+
+
+def li_post(post_id, text, hours_ago, headline=""):
+    return {"id": post_id, "linkedinUrl": f"https://www.linkedin.com/posts/{post_id}", "content": text,
+            "postedAt": {"timestamp": int((NOW - timedelta(hours=hours_ago)).timestamp() * 1000)},
+            "author": {"name": "Ali", "headline": headline}}
+
+
+def test_x_and_linkedin_search_plan_keywords(col):
+    rows = [keyword_row("Kapital Bank", USER_A), keyword_row("SOCAR", USER_B, chat="888")]
+    x_items = [tweet("1", "Kapital Bank'ın yeni kartı", 2), tweet("2", "Kapital Bank in Delhi", 2),
+               tweet("3", "Kapital Bank news", 2, location="Bakı, Azərbaycan"), {"noResults": True}]
+    li_items = [li_post("a", "Kapital Bank hiring", 3, headline="HR at Kapital Bank | Baku"),
+                li_post("b", "Kapital Bank old", 80)]
+    routes, runs = apify_net_routes(rows, x_items, li_items)
+    stored = []
+
+    def insert_item(kwargs):
+        stored.append(kwargs["json"])
+        return FakeResponse(201, [{"id": f"item-{len(stored)}"}])
+
+    fake = use(col, {**routes, ("POST", "monitored_items"): insert_item})
+    col.run_tick(NOW)
+
+    # SOCAR's plan has no X or LinkedIn: only Kapital Bank is searched, once per network.
+    assert [c["url"].split("/acts/")[1].split("/")[0] for c in fake.find("POST", "runs")] == [
+        "apidojo~tweet-scraper", "harvestapi~linkedin-post-search"]
+    assert runs[0]["json"] == {"searchTerms": ['"Kapital Bank" since:2026-10-18 -filter:retweets'],
+                               "sort": "Latest", "maxItems": 50}
+    assert runs[1]["json"] == {"searchQueries": ['"Kapital Bank"'], "postedLimit": "week",
+                               "sortBy": "date", "maxPosts": 10}
+    assert [row["item_hash"] for row in stored] == ["x:1", "x:3", "linkedin:a"]
+    assert {row["source_id"] for row in stored} == {"src-x", "src-li"}
+    sends = fake.find("POST", "sendMessage")
+    assert len(sends) == 3 and all(s["data"]["chat_id"] == "777" for s in sends)
+
+    states = {c["json"][0]["platform"]: c["json"][0]["last_stats"] for c in fake.find("POST", "social_keyword_state")}
+    assert states["x"]["raw"] == 3 and states["x"]["not_az"] == 1 and states["x"]["stored"] == 2
+    assert states["linkedin"]["too_old"] == 1 and states["linkedin"]["stored"] == 1
+    # 4 dataset rows × $0.0004; 2 × $0.002 (usage is read back empty in this fake).
+    usage = [c["json"]["value"] for c in fake.find("POST", "bot_runtime_state") if c["json"]["key"].startswith("social_usage_")]
+    assert usage[0]["x_usd"] == 0.0016 and usage[1]["linkedin_usd"] == 0.004
+    beat = [c["json"]["value"] for c in fake.find("POST", "bot_runtime_state") if c["json"]["key"] == "social_heartbeat"][0]
+    assert beat["x_keywords"] == 1 and beat["linkedin_keywords"] == 1
+
+
+def test_x_and_linkedin_off_or_without_token_make_no_calls(col):
+    rows = [keyword_row("Kapital Bank", USER_A)]
+    routes, _runs = apify_net_routes(rows)
+    routes[("GET", "social_settings")] = FakeResponse(200, [{**APIFY_NET_SETTINGS, "x_enabled": False, "linkedin_enabled": False}])
+    fake = use(col, routes)
+    col.run_tick(NOW)
+    assert not fake.find("POST", "runs")
+    col.APIFY_TOKEN = ""
+    routes[("GET", "social_settings")] = FakeResponse(200, [APIFY_NET_SETTINGS])
+    fake = use(col, routes)
+    col.run_tick(NOW)
+    assert not fake.find("POST", "runs")
+
+
+def test_x_floor_and_budget(col):
+    settings = {"x_min_interval_minutes": 360, "x_monthly_budget_usd": 5}
+    targets = {"kapital bank": {"keyword": "Kapital Bank", "interval": 60, "custom": False}}
+    state = {"kapital bank": {"last_checked_at": (NOW - timedelta(minutes=120)).isoformat()}}
+    assert col.due_keywords("x", targets, NOW, state, settings) == []
+    custom = {"kapital bank": {**targets["kapital bank"], "custom": True}}
+    assert col.due_keywords("x", custom, NOW, state, settings) == ["kapital bank"]
+    use(col, {("GET", "bot_runtime_state"): FakeResponse(200, [{"value": {"usd": 6, "x_usd": 5}}])})
+    assert col.budget_exhausted(settings, NOW, "x")
+    assert not col.budget_exhausted(settings, NOW, "linkedin")
+
+
+def test_parse_time_handles_provider_formats(col):
+    assert col.parse_time("Tue Oct 20 07:00:00 +0000 2026") == NOW - timedelta(hours=2)
+    assert col.parse_time({"timestamp": int(NOW.timestamp() * 1000)}) == NOW
+    assert col.parse_time(str(int(NOW.timestamp()))) == NOW
+    assert col.parse_time("garbage") is None
+
+
+def test_x_posts_build_url_from_author(col):
+    posts = col.x_posts([{"id_str": "9", "full_text": "Salam", "created_at": "Tue Oct 20 07:00:00 +0000 2026",
+                          "author": {"userName": "apa"}}], "salam")
+    assert posts[0]["url"] == "https://x.com/apa/status/9" and posts[0]["text"] == "Salam"

@@ -1,5 +1,6 @@
-"""Facebook (Apify), Instagram (SocialFetch) and YouTube (YouTube Data API v3)
-keyword collector, plus watched Instagram pages and public Telegram channels.
+"""Facebook, X and LinkedIn (Apify), Instagram (SocialFetch) and YouTube
+(YouTube Data API v3) keyword collector, plus watched Instagram pages and
+public Telegram channels.
 
 Every tick: read social_settings, collect the active monitor keywords, and
 search each unique folded keyword once when it is due. A keyword is due when
@@ -21,6 +22,10 @@ searched on; unset means Facebook and Instagram. YouTube is free but has a daily
 quota (10 000 units, one search = 100), counted per Pacific day.
 
 Posts older than SOCIAL_MAX_AGE_HOURS are never stored, on any platform.
+
+A customer's keyword with az_only (default) gets only posts with an
+Azerbaijani signal, and none containing its exclude_words (relevance.py).
+Posts of watched accounts count as Azerbaijani: the admin picked the accounts.
 """
 
 import html
@@ -30,6 +35,7 @@ import sys
 import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "rss"))
@@ -38,10 +44,14 @@ import requests  # noqa: E402
 
 import site_monitor as sm  # noqa: E402
 
+from relevance import keyword_row_allows, post_is_azerbaijani  # noqa: E402
+
 APIFY_TOKEN = os.getenv("APIFY_TOKEN", "").strip()
 SOCIALFETCH_API_KEY = os.getenv("SOCIALFETCH_API_KEY", "").strip()
 APIFY_BASE = "https://api.apify.com/v2"
 APIFY_FB_ACTOR = "topapi~facebook-search-posts-scraper"
+APIFY_X_ACTOR = "apidojo~tweet-scraper"
+APIFY_LINKEDIN_ACTOR = "harvestapi~linkedin-post-search"
 SOCIALFETCH_BASE = "https://api.socialfetch.dev"
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
 YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
@@ -58,6 +68,9 @@ APIFY_RUN_TIMEOUT_SECONDS = int(os.getenv("APIFY_RUN_TIMEOUT_SECONDS", "600"))
 # Budget estimates, used when the provider does not report the actual cost.
 # The Facebook actor bills per delivered post ($2.40 / 1000), no start fee.
 APIFY_FB_USD_PER_POST = float(os.getenv("APIFY_FB_USD_PER_POST", "0.0024"))
+# apidojo/tweet-scraper: from $0.40 / 1000 tweets; harvestapi/linkedin-post-search: ~$2 / 1000.
+APIFY_X_USD_PER_POST = float(os.getenv("APIFY_X_USD_PER_POST", "0.0004"))
+APIFY_LINKEDIN_USD_PER_POST = float(os.getenv("APIFY_LINKEDIN_USD_PER_POST", "0.002"))
 # SocialFetch Starter: $29 for 18 000 credits.
 SOCIALFETCH_USD_PER_CREDIT_ESTIMATE = float(os.getenv("SOCIALFETCH_USD_PER_CREDIT_ESTIMATE", str(29 / 18000)))
 # Own monitor memory, so other uses of the actor on this Apify account don't share it.
@@ -71,6 +84,18 @@ FB_DEFAULTS = {
 }
 # Used until migration 20261023000005 adds the YouTube settings.
 YOUTUBE_DEFAULTS = {"youtube_daily_quota": 9000, "youtube_min_interval_minutes": 360}
+# Used until migration 20261023000007 adds the X and LinkedIn settings.
+APIFY_PLATFORM_DEFAULTS = {
+    "x_max_posts_per_query": 50,
+    "x_min_interval_minutes": 360,
+    "linkedin_max_posts_per_query": 10,
+    "linkedin_min_interval_minutes": 720,
+}
+APIFY_POST_PRICES = {
+    "facebook": APIFY_FB_USD_PER_POST,
+    "x": APIFY_X_USD_PER_POST,
+    "linkedin": APIFY_LINKEDIN_USD_PER_POST,
+}
 # Networks a plan searches when its limits.social_platforms is unset.
 DEFAULT_SOCIAL_PLATFORMS = ("facebook", "instagram")
 
@@ -79,8 +104,19 @@ PLATFORM_BASE_URLS = {
     "instagram": "https://www.instagram.com",
     "telegram": "https://t.me",
     "youtube": "https://www.youtube.com",
+    "x": "https://x.com",
+    "linkedin": "https://www.linkedin.com",
 }
-PLATFORM_LABELS = {"facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "youtube": "YouTube"}
+PLATFORM_LABELS = {
+    "facebook": "Facebook",
+    "instagram": "Instagram",
+    "telegram": "Telegram",
+    "youtube": "YouTube",
+    "x": "X",
+    "linkedin": "LinkedIn",
+}
+# Keyword-search networks, in the order a tick runs them.
+KEYWORD_PLATFORMS = ("facebook", "instagram", "youtube", "x", "linkedin")
 # Minutes between reads of a watched account when the admin set none.
 ACCOUNT_DEFAULT_INTERVALS = {"instagram": 180, "telegram": 10}
 HTTP_TIMEOUT = 90
@@ -107,10 +143,23 @@ def parse_time(value):
         return None
     if isinstance(value, (int, float)):
         return datetime.fromtimestamp(value / 1000 if value > 1e11 else value, timezone.utc)
+    if isinstance(value, dict):
+        # LinkedIn actors nest it: {"timestamp": ms, "date": "..."}.
+        return parse_time(value.get("timestamp") or value.get("date"))
+    text = str(value).strip()
+    if text.isdigit():
+        return parse_time(int(text))
     try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
-        return None
+        # X: "Wed Oct 23 10:00:00 +0000 2026".
+        try:
+            parsed = datetime.strptime(text, "%a %b %d %H:%M:%S %z %Y")
+        except ValueError:
+            try:
+                parsed = parsedate_to_datetime(text)
+            except (TypeError, ValueError):
+                return None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
@@ -146,6 +195,11 @@ def fb_max_posts_per_query(settings):
     if SOCIAL_MAX_POSTS_PER_QUERY_ENV:
         return max(1, int(SOCIAL_MAX_POSTS_PER_QUERY_ENV))
     return max(1, min(50, int(fb_setting(settings, "fb_max_posts_per_query"))))
+
+
+def apify_setting(settings, key):
+    value = settings.get(key)
+    return APIFY_PLATFORM_DEFAULTS[key] if value is None else value
 
 
 def youtube_setting(settings, key):
@@ -226,6 +280,8 @@ def due_keywords(platform, targets, now, state=None, settings=None):
     floor = 0
     if platform == "facebook":
         floor = int(fb_setting(settings, "fb_min_interval_minutes"))
+    elif platform in ("x", "linkedin"):
+        floor = int(apify_setting(settings, f"{platform}_min_interval_minutes"))
     elif platform == "youtube":
         floor = int(youtube_setting(settings, "youtube_min_interval_minutes"))
     daily_cap = fb_setting(settings, "fb_daily_posts_per_keyword") if platform == "facebook" else None
@@ -294,7 +350,10 @@ def record_keyword_state(platform, folded_keywords, stats, error=None):
     print(f"social_keyword_state yazılmadı: {response.status_code} | {response.text[:160]}", flush=True)
 
 
-STAT_KEYS = ("raw", "no_url", "no_date", "too_old", "no_match", "duplicate", "stored", "matched_users", "alerted")
+STAT_KEYS = (
+    "raw", "no_url", "no_date", "too_old", "no_match", "not_az", "excluded",
+    "duplicate", "stored", "matched_users", "alerted",
+)
 
 
 def new_stats():
@@ -308,7 +367,8 @@ def stats_line(stats):
             total[key] += keyword_stats[key]
     return (
         f"gələn={total['raw']} linksiz={total['no_url']} tarixsiz={total['no_date']} köhnə={total['too_old']} "
-        f"uyğunsuz={total['no_match']} təkrar={total['duplicate']} yeni={total['stored']} "
+        f"uyğunsuz={total['no_match']} az-deyil={total['not_az']} istisna={total['excluded']} "
+        f"təkrar={total['duplicate']} yeni={total['stored']} "
         f"müştəri={total['matched_users']} bildiriş={total['alerted']}"
     )
 
@@ -393,13 +453,11 @@ def apify_facebook_input(queries, settings):
     }
 
 
-def apify_facebook_search(targets, folded_keywords, settings=None):
-    """One actor run for all due keywords. Returns (posts, usd, error)."""
+def apify_run(actor, run_input):
+    """Runs an Apify actor to the end. Returns (dataset items, reported usd, error)."""
     headers = {"Authorization": f"Bearer {APIFY_TOKEN}"}
-    by_query = {targets[folded]["keyword"]: folded for folded in folded_keywords}
-    run_input = apify_facebook_input(by_query, settings or {})
     response = requests.post(
-        f"{APIFY_BASE}/acts/{APIFY_FB_ACTOR}/runs",
+        f"{APIFY_BASE}/acts/{actor}/runs",
         params={"waitForFinish": "60"},
         headers=headers,
         json=run_input,
@@ -431,6 +489,15 @@ def apify_facebook_search(targets, folded_keywords, settings=None):
     if response.status_code != 200:
         return [], reported, f"apify_dataset:{response.status_code}"
     items = response.json() or []
+    return [item for item in items if isinstance(item, dict)], reported, None
+
+
+def apify_facebook_search(targets, folded_keywords, settings=None):
+    """One actor run for all due keywords. Returns (posts, usd, error)."""
+    by_query = {targets[folded]["keyword"]: folded for folded in folded_keywords}
+    items, reported, error = apify_run(APIFY_FB_ACTOR, apify_facebook_input(by_query, settings or {}))
+    if error:
+        return [], reported, error
     # Pay-per-result: the bill is the delivered posts; usageTotalUsd may leave it out.
     usd = max(reported, len(items) * APIFY_FB_USD_PER_POST)
     posts = []
@@ -448,6 +515,106 @@ def apify_facebook_search(targets, folded_keywords, settings=None):
             "published_at": parse_time(item.get("published_at") or item.get("timestamp") or item.get("time") or item.get("date")),
         })
     return posts, usd, None
+
+
+def search_phrase(keyword):
+    """A multi-word keyword is searched as an exact phrase."""
+    keyword = " ".join(sm.clean_text(keyword).replace('"', " ").split())
+    return f'"{keyword}"' if " " in keyword else keyword
+
+
+def apify_x_input(keyword, settings, now):
+    since = (now - timedelta(hours=SOCIAL_MAX_AGE_HOURS)).strftime("%Y-%m-%d")
+    return {
+        # Advanced search syntax; retweets repeat other posts.
+        "searchTerms": [f"{search_phrase(keyword)} since:{since} -filter:retweets"],
+        "sort": "Latest",
+        "maxItems": max(1, min(200, int(apify_setting(settings, "x_max_posts_per_query")))),
+    }
+
+
+def first_value(item, *keys):
+    for key in keys:
+        value = item.get(key)
+        if value not in (None, "", [], {}):
+            return value
+    return None
+
+
+def x_posts(items, folded):
+    posts = []
+    for item in items:
+        # The actor returns a placeholder row when nothing was found.
+        if item.get("noResults") or item.get("type") == "mock_tweet":
+            continue
+        tweet_id = first_value(item, "id", "id_str", "tweetId")
+        author = item.get("author") if isinstance(item.get("author"), dict) else {}
+        handle = first_value(author, "userName", "username", "screen_name")
+        url = first_value(item, "url", "twitterUrl", "tweetUrl")
+        if not url and tweet_id and handle:
+            url = f"https://x.com/{handle}/status/{tweet_id}"
+        if not url and not tweet_id:
+            continue
+        posts.append({
+            "keyword_fold": folded,
+            "external_id": str(tweet_id or url),
+            "url": url,
+            "text": first_value(item, "fullText", "full_text", "text") or "",
+            "author": first_value(author, "name", "userName", "username") or handle,
+            "author_location": first_value(author, "location"),
+            "published_at": parse_time(first_value(item, "createdAt", "created_at", "date")),
+        })
+    return posts
+
+
+def apify_x_search(targets, folded, settings, now):
+    """Newest tweets for one keyword. Returns (posts, usd, error)."""
+    items, reported, error = apify_run(APIFY_X_ACTOR, apify_x_input(targets[folded]["keyword"], settings, now))
+    if error:
+        return [], reported, error
+    posts = x_posts(items, folded)
+    return posts, max(reported, len(items) * APIFY_X_USD_PER_POST), None
+
+
+def apify_linkedin_input(keyword, settings):
+    return {
+        "searchQueries": [search_phrase(keyword)],
+        "postedLimit": "24h" if SOCIAL_MAX_AGE_HOURS <= 24 else "week",
+        "sortBy": "date",
+        "maxPosts": max(1, min(100, int(apify_setting(settings, "linkedin_max_posts_per_query")))),
+    }
+
+
+def linkedin_posts(items, folded):
+    posts = []
+    for item in items:
+        author = item.get("author") if isinstance(item.get("author"), dict) else {}
+        url = first_value(item, "linkedinUrl", "url", "postUrl", "shareUrl")
+        post_id = first_value(item, "id", "urn", "postId", "entityId")
+        if not url:
+            continue
+        location = " ".join(
+            str(part) for part in (author.get("location"), author.get("headline"), author.get("info")) if part
+        )
+        posts.append({
+            "keyword_fold": folded,
+            "external_id": str(post_id or url),
+            "url": url,
+            "text": first_value(item, "content", "text", "commentary", "postText") or "",
+            "author": first_value(author, "name", "fullName", "publicIdentifier") or item.get("authorName"),
+            "author_location": location or None,
+            "published_at": parse_time(first_value(item, "postedAt", "postedDate", "publishedAt", "createdAt", "date")),
+        })
+    return posts
+
+
+def apify_linkedin_search(targets, folded, settings):
+    """Newest LinkedIn posts for one keyword (no login). Returns (posts, usd, error)."""
+    items, reported, error = apify_run(APIFY_LINKEDIN_ACTOR, apify_linkedin_input(targets[folded]["keyword"], settings))
+    if error:
+        return [], reported, error
+    posts = linkedin_posts(items, folded)
+    return posts, max(reported, len(items) * APIFY_LINKEDIN_USD_PER_POST), None
 
 
 def instagram_hashtag(keyword):
@@ -695,6 +862,28 @@ def post_matcher(platform, post):
     return matches
 
 
+def relevant_keyword_rows(post, keyword_cache, matcher, text):
+    """(rows that match the post and accept it, reason when none does).
+
+    Each customer's keyword decides for itself: az_only drops a post with no
+    Azerbaijani signal, exclude_words drop it whatever the language. The reason
+    is "excluded" when an exclude word stopped a match, else "not_az"."""
+    title = sm.normalize_text(text)
+    is_az = post.get("az_source") or post_is_azerbaijani(post)
+    kept, reasons = [], set()
+    for row in keyword_cache:
+        if not sm.keyword_is_active(row) or not matcher(sm.normalize_text(row.get("keyword", "")), title):
+            continue
+        reason = keyword_row_allows(row, post, is_az, social_keyword_matches)
+        if reason:
+            reasons.add(reason)
+        else:
+            kept.append(row)
+    if kept:
+        return kept, None
+    return [], ("excluded" if "excluded" in reasons else "not_az") if reasons else "no_match"
+
+
 def handle_post(platform, source_id, post, keyword_cache, now):
     """Returns (outcome, matched_users, chats_alerted)."""
     if not post.get("url"):
@@ -707,10 +896,13 @@ def handle_post(platform, source_id, post, keyword_cache, now):
     matcher = post_matcher(platform, post)
     if not sm.find_matching_user_monitors(text, keyword_cache, matcher=matcher):
         return "no_match", 0, 0
+    rows, reason = relevant_keyword_rows(post, keyword_cache, matcher, text)
+    if not rows:
+        return reason, 0, 0
     item_id = store_post(platform, source_id, post)
     if not item_id:
         return "duplicate", 0, 0
-    matches = sm.match_user_monitors(item_id, text, keyword_cache, matcher=matcher)
+    matches = sm.match_user_monitors(item_id, text, rows, matcher=matcher)
     sent = 0
     chats = {}
     for match in matches:
@@ -747,6 +939,17 @@ def sample(post):
     }
 
 
+def search_keywords(platform, settings, targets, batch, now):
+    """One provider call for a batch of due keywords. Returns (posts, usd, error)."""
+    if platform == "facebook":
+        return apify_facebook_search(targets, batch, settings)
+    if platform == "x":
+        return apify_x_search(targets, batch[0], settings, now)
+    if platform == "linkedin":
+        return apify_linkedin_search(targets, batch[0], settings)
+    return socialfetch_instagram_hashtag(targets, batch[0])
+
+
 def collect_platform(platform, settings, targets, source_id, keyword_cache, now):
     # YouTube costs no money, only its daily quota.
     if platform != "youtube" and budget_exhausted(settings, now, platform):
@@ -760,9 +963,7 @@ def collect_platform(platform, settings, targets, source_id, keyword_cache, now)
 
     batches = [due] if platform == "facebook" else [[folded] for folded in due]
     for batch in batches:
-        if platform == "facebook":
-            posts, usd, error = apify_facebook_search(targets, batch, settings)
-        elif platform == "youtube":
+        if platform == "youtube":
             if youtube_quota_left(settings, now) < YOUTUBE_UNITS_PER_SEARCH:
                 print("youtube: gündəlik kvota dolub, qalan açar sözlər sabaha (Sakit okean vaxtı) qaldı.", flush=True)
                 return
@@ -774,9 +975,9 @@ def collect_platform(platform, settings, targets, source_id, keyword_cache, now)
                 add_youtube_units(now, YOUTUBE_UNITS_PER_SEARCH)
         else:
             if budget_exhausted(settings, now, platform):
-                print("instagram: aylıq büdcə limiti dolub, qalan açar sözlər keçildi.", flush=True)
+                print(f"{platform}: aylıq büdcə limiti dolub, qalan açar sözlər keçildi.", flush=True)
                 return
-            posts, usd, error = socialfetch_instagram_hashtag(targets, batch[0])
+            posts, usd, error = search_keywords(platform, settings, targets, batch, now)
         add_usage(now, usd, 1, platform)
         stats = {folded: new_stats() for folded in batch}
         for post in posts:
@@ -793,8 +994,8 @@ def collect_platform(platform, settings, targets, source_id, keyword_cache, now)
                 keyword_stats["alerted"] += alerted
         for folded in batch:
             keyword_stats = stats.setdefault(folded, new_stats())
-            # Facebook bills per delivered post; Instagram per call (one keyword per call);
-            # YouTube is free.
+            # Facebook bills per delivered post; Instagram, X and LinkedIn are one
+            # keyword per call; YouTube is free.
             if platform == "facebook":
                 keyword_usd = keyword_stats["raw"] * APIFY_FB_USD_PER_POST
             else:
@@ -871,6 +1072,8 @@ def collect_accounts(platform, settings, source_id, keyword_cache, now):
         stats["raw"] = len(posts)
         stats["samples"] = [sample(post) for post in posts[:3]]
         for post in merge_posts(posts):
+            # The admin picked these accounts for Azerbaijan; exclude words still apply.
+            post["az_source"] = True
             outcome, matched_users, alerted = handle_post(platform, source_id, post, keyword_cache, now)
             stats[outcome] += 1
             stats["matched_users"] += matched_users
@@ -895,6 +1098,8 @@ def write_heartbeat(settings, now, **extra):
         "telegram_channels_enabled": bool(settings.get("telegram_channels_enabled")),
         "apify_key": bool(APIFY_TOKEN),
         "socialfetch_key": bool(SOCIALFETCH_API_KEY),
+        "x_enabled": bool(settings.get("x_enabled")),
+        "linkedin_enabled": bool(settings.get("linkedin_enabled")),
     }
     if settings.get("youtube_enabled"):
         beat.update({
@@ -913,6 +1118,8 @@ def run_tick(now=None):
         "facebook": bool(settings.get("facebook_enabled")) and bool(APIFY_TOKEN),
         "instagram": bool(settings.get("instagram_enabled")) and bool(SOCIALFETCH_API_KEY),
         "youtube": bool(settings.get("youtube_enabled")) and bool(YOUTUBE_API_KEY),
+        "x": bool(settings.get("x_enabled")) and bool(APIFY_TOKEN),
+        "linkedin": bool(settings.get("linkedin_enabled")) and bool(APIFY_TOKEN),
     }
     instagram_pages = bool(settings.get("instagram_accounts_enabled")) and bool(SOCIALFETCH_API_KEY)
     telegram_channels = bool(settings.get("telegram_channels_enabled"))
@@ -940,7 +1147,7 @@ def run_tick(now=None):
         profiles = rest_get("user_profiles", {"select": "user_id,plan_id,social_interval_minutes"})
         plans = rest_get("subscription_plans", {"select": "id,limits"})
         default_interval = int(settings.get("default_interval_minutes") or 360)
-        for platform in ("facebook", "instagram", "youtube"):
+        for platform in KEYWORD_PLATFORMS:
             platform_caches[platform] = keywords_for_platform(platform, keyword_cache, profiles, plans)
             if enabled[platform]:
                 targets[platform] = keyword_intervals(platform_caches[platform], profiles, plans, default_interval)
@@ -949,8 +1156,9 @@ def run_tick(now=None):
                 set(keyword_intervals(platform_caches["facebook"], profiles, plans, default_interval))
                 | set(keyword_intervals(platform_caches["instagram"], profiles, plans, default_interval))
             )
-        if enabled["youtube"]:
-            extra["youtube_keywords"] = len(targets["youtube"])
+        for platform in ("youtube", "x", "linkedin"):
+            if enabled[platform]:
+                extra[f"{platform}_keywords"] = len(targets[platform])
     write_heartbeat(settings, now, **extra)
     instagram_cache = platform_caches.get("instagram") or []
     if not any(targets.values()) and not (instagram_pages and instagram_cache) and not telegram_channels:
@@ -964,7 +1172,7 @@ def run_tick(now=None):
         jobs.append(("telegram", "accounts"))
     for platform, kind in jobs:
         if not source_ids.get(platform):
-            print(f"{platform}: sources sətri yoxdur (migration 20261020000001 / 20261023000003 / 20261023000005).", flush=True)
+            print(f"{platform}: sources sətri yoxdur (migration 20261020000001 / 20261023000003 / 20261023000005 / 20261023000007).", flush=True)
             continue
         try:
             if kind == "keywords":
