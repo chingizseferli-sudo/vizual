@@ -99,7 +99,10 @@ def test_interval_is_shortest_of_override_plan_and_default(col):
     ]
     plans = [{"id": PLAN_PRO, "limits": {"social_interval_minutes": 180}}]
     targets = col.keyword_intervals(rows, profiles, plans, 360)
-    assert targets == {"bdu": {"keyword": "BDU", "interval": 180}, "azal": {"keyword": "AZAL", "interval": 360}}
+    assert targets == {
+        "bdu": {"keyword": "BDU", "interval": 180, "custom": False},
+        "azal": {"keyword": "AZAL", "interval": 360, "custom": False},
+    }
 
     profiles[0]["social_interval_minutes"] = 60
     assert col.keyword_intervals(rows, profiles, plans, 360)["bdu"]["interval"] == 60
@@ -617,3 +620,29 @@ def test_platform_budget_stops_only_that_platform(col):
     assert col.budget_exhausted(settings, NOW, "facebook") is True
     assert col.budget_exhausted(settings, NOW, "instagram") is False
     assert col.budget_exhausted({**settings, "monthly_budget_usd": 6}, NOW, "instagram") is True
+
+
+def test_custom_offer_bypasses_facebook_floor(col):
+    import datetime as dt
+    now = dt.datetime(2026, 10, 23, 12, tzinfo=dt.timezone.utc)
+    targets = {
+        "plan": {"keyword": "plan", "interval": 60, "custom": False},
+        "paid": {"keyword": "paid", "interval": 60, "custom": True},
+    }
+    state = {
+        folded: {"last_checked_at": (now - dt.timedelta(minutes=90)).isoformat()}
+        for folded in targets
+    }
+    settings = {"fb_min_interval_minutes": 360}
+    assert col.due_keywords("facebook", targets, now, state=state, settings=settings) == ["paid"]
+
+
+def test_custom_offer_marks_shared_keyword(col):
+    rows = [keyword_row("SOCAR", USER_A), keyword_row("SOCAR", USER_B)]
+    profiles = [
+        {"user_id": USER_A, "plan_id": PLAN_PRO, "social_interval_minutes": None},
+        {"user_id": USER_B, "plan_id": PLAN_PRO, "social_interval_minutes": 30},
+    ]
+    plans = [{"id": PLAN_PRO, "limits": {"social_interval_minutes": 1440}}]
+    target = col.keyword_intervals(rows, profiles, plans, 360)["socar"]
+    assert target == {"keyword": "SOCAR", "interval": 30, "custom": True}

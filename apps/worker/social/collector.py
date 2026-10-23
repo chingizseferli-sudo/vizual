@@ -142,7 +142,10 @@ def keyword_intervals(keyword_rows, profiles, plans, default_interval):
         if isinstance(value, int) and value > 0:
             plan_intervals[plan.get("id")] = value
     user_intervals = {}
+    custom_users = set()
     for profile in profiles:
+        if profile.get("social_interval_minutes"):
+            custom_users.add(profile.get("user_id"))
         interval = profile.get("social_interval_minutes") or plan_intervals.get(profile.get("plan_id")) or default_interval
         user_intervals[profile.get("user_id")] = interval
 
@@ -155,9 +158,15 @@ def keyword_intervals(keyword_rows, profiles, plans, default_interval):
         folded = sm.keyword_fold(original).strip()
         if not folded:
             continue
-        interval = user_intervals.get(monitor.get("user_id"), default_interval)
-        target = targets.setdefault(folded, {"keyword": original, "interval": interval})
-        target["interval"] = min(target["interval"], interval)
+        user_id = monitor.get("user_id")
+        interval = user_intervals.get(user_id, default_interval)
+        # custom: an admin's per-customer offer ("Fərdi təklif"), which the
+        # Facebook floor does not override.
+        custom = user_id in custom_users
+        target = targets.setdefault(folded, {"keyword": original, "interval": interval, "custom": custom})
+        if interval < target["interval"] or (interval == target["interval"] and custom):
+            target["interval"] = interval
+            target["custom"] = custom
     return targets
 
 
@@ -172,8 +181,8 @@ def load_keyword_state(platform):
 def due_keywords(platform, targets, now, state=None, settings=None):
     state = load_keyword_state(platform) if state is None else state
     settings = settings or {}
-    # Facebook bills per delivered post, so its keywords are never searched more
-    # often than the admin floor, whatever the plan or a customer's override says.
+    # Facebook bills per delivered post, so plan intervals never go below the
+    # admin floor; only a customer's own paid override ("Fərdi təklif") may.
     floor = int(fb_setting(settings, "fb_min_interval_minutes")) if platform == "facebook" else 0
     daily_cap = fb_setting(settings, "fb_daily_posts_per_keyword") if platform == "facebook" else None
     today = baku_day(now)
@@ -181,7 +190,7 @@ def due_keywords(platform, targets, now, state=None, settings=None):
     for folded, target in sorted(targets.items()):
         row = state.get(folded) or {}
         last = parse_time(row.get("last_checked_at"))
-        interval = max(target["interval"], floor)
+        interval = target["interval"] if target.get("custom") else max(target["interval"], floor)
         if last is not None and now - last < timedelta(minutes=interval):
             continue
         stats = row.get("last_stats") or {}

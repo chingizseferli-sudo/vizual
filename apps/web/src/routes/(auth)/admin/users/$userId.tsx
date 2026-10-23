@@ -1081,14 +1081,15 @@ function CustomSocialIntervalInput({
           : `${CUSTOM_SOCIAL_INTERVAL_RANGE.min}-${CUSTOM_SOCIAL_INTERVAL_RANGE.max} dəqiqə (10 dəqiqədən 7 günə qədər).`}
       </span>
       <span className='text-xs font-normal text-muted-foreground'>
-        Facebook üçün minimum interval: {formatDuration(facebookFloor)}
-        (Sosial monitorinq səhifəsində dəyişilir). Daha qısa tezlik yalnız
-        Instagram-a aiddir.
+        Fərdi təklif Facebook-a da aiddir: planlar üçün minimum interval
+        ({formatDuration(facebookFloor)}) bu müştəriyə tətbiq olunmur. Gündəlik
+        post limiti və aylıq büdcə yenə qüvvədədir. Hər Facebook yoxlaması
+        tapılan yeni postlara görə ödənilir.
       </span>
       {valid && minutes < 60 ? (
         <span className='rounded-md bg-amber-50 px-2 py-1.5 text-xs font-normal text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'>
-          Saatdan tez yoxlama Instagram sorğularını artırır (hər yoxlama ayrıca
-          ödənilir).
+          Saatdan tez yoxlama xərci artırır: Instagram-da hər yoxlama, Facebook-da
+          hər yeni post ayrıca ödənilir.
         </span>
       ) : null}
     </div>
