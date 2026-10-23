@@ -4,7 +4,6 @@ export const customerQueryKeys = {
   workspace: () => [...customerQueryKeys.all, 'workspace'] as const,
   keywords: () => [...customerQueryKeys.all, 'keywords'] as const,
   competitors: () => [...customerQueryKeys.all, 'competitors'] as const,
-  watchMonitor: () => [...customerQueryKeys.all, 'watch-monitor'] as const,
   storyIntelligence: () =>
     [...customerQueryKeys.all, 'story-intelligence'] as const,
   results: () => [...customerQueryKeys.all, 'results'] as const,

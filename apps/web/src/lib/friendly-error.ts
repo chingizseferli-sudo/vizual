@@ -40,8 +40,6 @@ const APP_CODES: Record<string, string> = {
     'Planınıza Facebook və Instagram monitorinqi daxil deyil.',
   PLAN_COMPETITOR_LIMIT_REACHED:
     'Planınızda rəqib limiti dolub. Bir rəqibi silin və ya planınızı yüksəldin.',
-  PLAN_WATCH_LIMIT_REACHED:
-    'Planınızda veb izləmə limiti dolub.',
   KEYWORD_EXISTS: 'Bu açar söz artıq əlavə edilib.',
   KEYWORD_NOT_FOUND: 'Açar söz tapılmadı. Səhifəni yeniləyin.',
   KEYWORD_LENGTH_INVALID: 'Açar söz 1-200 simvol olmalıdır.',
@@ -55,8 +53,6 @@ const APP_CODES: Record<string, string> = {
   COMPETITOR_KEYWORDS_TOO_MANY: 'Hər rəqib üçün ən çox 3 açar söz yazmaq olar.',
   COMPETITOR_KEYWORD_INVALID: 'Hər açar söz 2-100 simvol olmalıdır.',
   COMPETITOR_NAME_INVALID: 'Rəqibin adı 1-80 simvol olmalıdır.',
-  CHANGE_SOURCE_NOT_FOUND: 'İzləmə tapılmadı. Səhifəni yeniləyin.',
-  CHANGE_SOURCE_FORBIDDEN: 'Bu izləməni dəyişməyə icazəniz yoxdur.',
   too_many_requests:
     'Cəhd sayı aşıldı. Bir neçə dəqiqədən sonra yenidən cəhd edin.',
 }

@@ -4,7 +4,6 @@ import { Link, useLocation } from '@tanstack/react-router'
 import {
   BarChart3,
   Bell,
-  Eye,
   LayoutDashboard,
   LogOut,
   MapPinned,
@@ -57,13 +56,6 @@ const customerNavItems = [
     title: t('İş masası'),
     url: '/monitor/workspace-preview',
     icon: ShieldCheck,
-  },
-  {
-    // Web page-change watch is admin-only; customers never see it.
-    title: t('Veb izləmə'),
-    url: '/monitor/watch-monitor',
-    icon: Eye,
-    adminOnly: true,
   },
   {
     title: t('Xəbər xəritəsi'),
@@ -164,11 +156,7 @@ export function CustomerSidebar() {
               Monitorinq
             </SidebarGroupLabel>
             <SidebarMenu>
-              {customerNavItems
-                .filter(
-                  (item) => !('adminOnly' in item) || sessionProfile?.isAdmin
-                )
-                .map((item) => (
+              {customerNavItems.map((item) => (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton
                       asChild

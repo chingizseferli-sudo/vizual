@@ -1,7 +1,6 @@
 ﻿import {
   Calculator,
   CreditCard,
-  Eye,
   Inbox,
   Globe,
   LayoutDashboard,
@@ -56,11 +55,6 @@ export const sidebarData: SidebarData = {
           title: 'Mənbələr',
           url: '/admin/monitor/sources',
           icon: Globe,
-        },
-        {
-          title: 'Veb izləmə',
-          url: '/monitor/watch-monitor',
-          icon: Eye,
         },
         {
           title: 'Telegram bot',

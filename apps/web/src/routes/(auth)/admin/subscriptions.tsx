@@ -451,18 +451,6 @@ function SubscriptionPlansPage() {
             </span>
           </label>
           <label className='grid gap-1.5 text-sm font-medium'>
-            Veb izləmə limiti
-            <input
-              type='number'
-              min='0'
-              step='1'
-              value={form.maxWatches}
-              onChange={(event) => updateForm('maxWatches', event.target.value)}
-              className='rounded-lg border bg-background px-3 py-2 font-normal'
-              placeholder='Limitsiz'
-            />
-          </label>
-          <label className='grid gap-1.5 text-sm font-medium'>
             Minimum interval (dəqiqə)
             <input
               type='number'

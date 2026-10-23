@@ -17,35 +17,6 @@ async function getCurrentUserId() {
   return user?.id || ''
 }
 
-async function prefetchWatchMonitorData() {
-  const userId = await getCurrentUserId()
-  if (!userId) return { userId: '', watches: [], events: [] }
-
-  const { data: watches, error: watchesError } = await supabase
-    .from('change_sources')
-    .select(
-      'id,user_id,name,url,domain,selector,status,interval_minutes,last_checked_at,last_changed_at,last_success_at,last_error,consecutive_fail_count,created_at'
-    )
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-
-  if (watchesError) throw watchesError
-
-  const watchRows = watches || []
-  const watchIds = watchRows.map((watch) => watch.id)
-  if (watchIds.length === 0) return { userId, watches: watchRows, events: [] }
-
-  const { data: events, error: eventsError } = await supabase
-    .from('change_events')
-    .select('id,source_id,diff_summary,created_at')
-    .in('source_id', watchIds)
-    .order('created_at', { ascending: false })
-    .limit(150)
-
-  if (eventsError) throw eventsError
-
-  return { userId, watches: watchRows, events: events || [] }
-}
 async function prefetchResultsData() {
   const userId = await getCurrentUserId()
   if (!userId) {
@@ -181,14 +152,6 @@ export function prefetchCustomerRoute(queryClient: QueryClient, url: string) {
     return
   }
 
-  if (url === '/monitor/watch-monitor') {
-    void queryClient.prefetchQuery({
-      queryKey: customerQueryKeys.watchMonitor(),
-      queryFn: prefetchWatchMonitorData,
-      staleTime: 30 * 1000,
-    })
-    return
-  }
   if (url === '/monitor/results') {
     void queryClient.prefetchQuery({
       queryKey: customerQueryKeys.results(),

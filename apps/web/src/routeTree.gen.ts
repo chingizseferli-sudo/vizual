@@ -35,7 +35,6 @@ import { Route as authMonitorIndexRouteImport } from './routes/(auth)/monitor/in
 import { Route as authAdminIndexRouteImport } from './routes/(auth)/admin/index'
 import { Route as authMonitorWorkspacePreviewRouteImport } from './routes/(auth)/monitor/workspace-preview'
 import { Route as authMonitorWorkspacePrevieRouteImport } from './routes/(auth)/monitor/workspace-previe'
-import { Route as authMonitorWatchMonitorRouteImport } from './routes/(auth)/monitor/watch-monitor'
 import { Route as authMonitorStoryIntelligencePreviewRouteImport } from './routes/(auth)/monitor/story-intelligence-preview'
 import { Route as authMonitorStoryIntelligenceRouteImport } from './routes/(auth)/monitor/story-intelligence'
 import { Route as authMonitorResultsRouteImport } from './routes/(auth)/monitor/results'
@@ -207,11 +206,6 @@ const authMonitorWorkspacePrevieRoute =
     path: '/workspace-previe',
     getParentRoute: () => authMonitorRouteRoute,
   } as any)
-const authMonitorWatchMonitorRoute = authMonitorWatchMonitorRouteImport.update({
-  id: '/watch-monitor',
-  path: '/watch-monitor',
-  getParentRoute: () => authMonitorRouteRoute,
-} as any)
 const authMonitorStoryIntelligencePreviewRoute =
   authMonitorStoryIntelligencePreviewRouteImport.update({
     id: '/story-intelligence-preview',
@@ -454,7 +448,6 @@ export interface FileRoutesByFullPath {
   '/monitor/results': typeof authMonitorResultsRoute
   '/monitor/story-intelligence': typeof authMonitorStoryIntelligenceRoute
   '/monitor/story-intelligence-preview': typeof authMonitorStoryIntelligencePreviewRoute
-  '/monitor/watch-monitor': typeof authMonitorWatchMonitorRoute
   '/monitor/workspace-previe': typeof authMonitorWorkspacePrevieRoute
   '/monitor/workspace-preview': typeof authMonitorWorkspacePreviewRoute
   '/admin/': typeof authAdminIndexRoute
@@ -516,7 +509,6 @@ export interface FileRoutesByTo {
   '/monitor/results': typeof authMonitorResultsRoute
   '/monitor/story-intelligence': typeof authMonitorStoryIntelligenceRoute
   '/monitor/story-intelligence-preview': typeof authMonitorStoryIntelligencePreviewRoute
-  '/monitor/watch-monitor': typeof authMonitorWatchMonitorRoute
   '/monitor/workspace-previe': typeof authMonitorWorkspacePrevieRoute
   '/monitor/workspace-preview': typeof authMonitorWorkspacePreviewRoute
   '/admin': typeof authAdminIndexRoute
@@ -583,7 +575,6 @@ export interface FileRoutesById {
   '/(auth)/monitor/results': typeof authMonitorResultsRoute
   '/(auth)/monitor/story-intelligence': typeof authMonitorStoryIntelligenceRoute
   '/(auth)/monitor/story-intelligence-preview': typeof authMonitorStoryIntelligencePreviewRoute
-  '/(auth)/monitor/watch-monitor': typeof authMonitorWatchMonitorRoute
   '/(auth)/monitor/workspace-previe': typeof authMonitorWorkspacePrevieRoute
   '/(auth)/monitor/workspace-preview': typeof authMonitorWorkspacePreviewRoute
   '/(auth)/admin/': typeof authAdminIndexRoute
@@ -652,7 +643,6 @@ export interface FileRouteTypes {
     | '/monitor/results'
     | '/monitor/story-intelligence'
     | '/monitor/story-intelligence-preview'
-    | '/monitor/watch-monitor'
     | '/monitor/workspace-previe'
     | '/monitor/workspace-preview'
     | '/admin/'
@@ -714,7 +704,6 @@ export interface FileRouteTypes {
     | '/monitor/results'
     | '/monitor/story-intelligence'
     | '/monitor/story-intelligence-preview'
-    | '/monitor/watch-monitor'
     | '/monitor/workspace-previe'
     | '/monitor/workspace-preview'
     | '/admin'
@@ -780,7 +769,6 @@ export interface FileRouteTypes {
     | '/(auth)/monitor/results'
     | '/(auth)/monitor/story-intelligence'
     | '/(auth)/monitor/story-intelligence-preview'
-    | '/(auth)/monitor/watch-monitor'
     | '/(auth)/monitor/workspace-previe'
     | '/(auth)/monitor/workspace-preview'
     | '/(auth)/admin/'
@@ -1016,13 +1004,6 @@ declare module '@tanstack/react-router' {
       path: '/workspace-previe'
       fullPath: '/monitor/workspace-previe'
       preLoaderRoute: typeof authMonitorWorkspacePrevieRouteImport
-      parentRoute: typeof authMonitorRouteRoute
-    }
-    '/(auth)/monitor/watch-monitor': {
-      id: '/(auth)/monitor/watch-monitor'
-      path: '/watch-monitor'
-      fullPath: '/monitor/watch-monitor'
-      preLoaderRoute: typeof authMonitorWatchMonitorRouteImport
       parentRoute: typeof authMonitorRouteRoute
     }
     '/(auth)/monitor/story-intelligence-preview': {
@@ -1421,7 +1402,6 @@ interface authMonitorRouteRouteChildren {
   authMonitorResultsRoute: typeof authMonitorResultsRoute
   authMonitorStoryIntelligenceRoute: typeof authMonitorStoryIntelligenceRoute
   authMonitorStoryIntelligencePreviewRoute: typeof authMonitorStoryIntelligencePreviewRoute
-  authMonitorWatchMonitorRoute: typeof authMonitorWatchMonitorRoute
   authMonitorWorkspacePrevieRoute: typeof authMonitorWorkspacePrevieRoute
   authMonitorWorkspacePreviewRoute: typeof authMonitorWorkspacePreviewRoute
   authMonitorIndexRoute: typeof authMonitorIndexRoute
@@ -1437,7 +1417,6 @@ const authMonitorRouteRouteChildren: authMonitorRouteRouteChildren = {
   authMonitorStoryIntelligenceRoute: authMonitorStoryIntelligenceRoute,
   authMonitorStoryIntelligencePreviewRoute:
     authMonitorStoryIntelligencePreviewRoute,
-  authMonitorWatchMonitorRoute: authMonitorWatchMonitorRoute,
   authMonitorWorkspacePrevieRoute: authMonitorWorkspacePrevieRoute,
   authMonitorWorkspacePreviewRoute: authMonitorWorkspacePreviewRoute,
   authMonitorIndexRoute: authMonitorIndexRoute,

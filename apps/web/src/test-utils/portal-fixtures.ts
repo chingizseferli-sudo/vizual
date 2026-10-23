@@ -181,25 +181,6 @@ const tables: Record<string, Record<string, unknown>[]> = {
     created_at: timestamp,
     monitor_matches: match,
   })),
-  change_sources: [
-    {
-      id: 'fixture-watch',
-      user_id: profile.user_id,
-      name: 'Universitet saytı',
-      url: 'https://university.example.invalid/news',
-      selector: '.news-list',
-      status: 'active',
-      interval_minutes: 10,
-      created_at: timestamp,
-      updated_at: timestamp,
-      last_checked_at: timestamp,
-      last_status: 'unchanged',
-      last_error: null,
-    },
-  ],
-  change_events: [],
-  change_snapshots: [],
-  change_alerts: [],
   news: [
     {
       id: 123,

@@ -325,7 +325,7 @@ function UsersPage() {
   async function deleteUser(row: UserRow) {
     const label = row.email || row.user_id
     const confirmed = window.confirm(
-      `${label} istifadəçisi silinsin?\n\nBu əməliyyat istifadəçinin monitorlarını, açar sözlərini, nəticələrini, bildirişlərini və varsa veb izləmələrini siləcək.`
+      `${label} istifadəçisi silinsin?\n\nBu əməliyyat istifadəçinin monitorlarını, açar sözlərini, nəticələrini və bildirişlərini siləcək.`
     )
 
     if (!confirmed) return

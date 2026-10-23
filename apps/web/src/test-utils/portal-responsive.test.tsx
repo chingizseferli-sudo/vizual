@@ -39,7 +39,6 @@ const routes = [
   '/monitor/results',
   '/monitor/alerts',
   '/monitor/profile',
-  '/monitor/watch-monitor',
   '/monitor/story-intelligence',
   '/monitor/story-intelligence-preview',
   '/admin',
@@ -75,7 +74,6 @@ const visualRoutes = new Set([
   '/admin',
   '/monitor/keywords',
   '/monitor/competitors',
-  '/monitor/watch-monitor',
   '/admin/users',
   '/admin/subscriptions',
 ])
@@ -83,11 +81,7 @@ let queryClient: QueryClient
 const realDateNow = Date.now.bind(Date)
 
 async function openRoute(path: string, waitForData = true) {
-  // Web watch is admin-only, even under /monitor.
-  portalFixture.role =
-    path.startsWith('/admin') || path === '/monitor/watch-monitor'
-      ? 'admin'
-      : 'customer'
+  portalFixture.role = path.startsWith('/admin') ? 'admin' : 'customer'
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   })
@@ -217,19 +211,6 @@ it.each(['customer', 'admin'])(
   }
 )
 
-it('mobile watch cards retain bulk selection', async () => {
-  await page.viewport(320, 700)
-  await openRoute('/monitor/watch-monitor')
-  await userEvent.click(
-    page.getByRole('checkbox', { name: 'Görünən izləmələrin hamısını seç' })
-  )
-  await expect
-    .element(
-      page.getByRole('button', { name: 'Seçilənləri sil (1)', exact: true })
-    )
-    .toBeVisible()
-})
-
 it('news creation drawer fits mobile and closes with Escape', async () => {
   await page.viewport(320, 700)
   await openRoute('/admin/news')
@@ -294,7 +275,6 @@ it('mobile subscription fields keep their visible accessible names', async () =>
   for (const name of [
     'Qiymət',
     'Açar söz limiti',
-    'Veb izləmə limiti',
     'Minimum interval (dəqiqə)',
     'Tarixçə (gün)',
   ]) {
@@ -351,26 +331,3 @@ it('desktop navigation collapses and expands', async () => {
     .toBe('expanded')
 })
 
-it.each([320, 375, 768])(
-  'watch notification dialog stays within %ipx',
-  async (width) => {
-    await page.viewport(width, 700)
-    await openRoute('/monitor/watch-monitor')
-    const trigger = page.getByRole('button', {
-      name: 'Dəyişiklik bildirişləri',
-      exact: true,
-    })
-    await userEvent.click(trigger)
-    const dialog = page.getByRole('dialog', { name: 'Dəyişiklik bildirişləri' })
-    await expect.element(dialog).toBeVisible()
-    const rect = document
-      .querySelector('[role="dialog"]')!
-      .getBoundingClientRect()
-    expect(rect.left).toBeGreaterThanOrEqual(0)
-    expect(rect.right).toBeLessThanOrEqual(width)
-    expect(rect.top).toBeGreaterThanOrEqual(0)
-    expect(rect.bottom).toBeLessThanOrEqual(700)
-    await userEvent.keyboard('{Escape}')
-    await expect.element(trigger).toHaveFocus()
-  }
-)
