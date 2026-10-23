@@ -115,6 +115,26 @@ def test_due_keywords_respects_last_check(col):
     assert col.due_keywords("facebook", targets, NOW) == ["azal", "socar"]
 
 
+def test_custom_minute_override_is_used_and_scheduled(col):
+    rows = [keyword_row("BDU", USER_A), keyword_row("bdu", USER_B)]
+    profiles = [
+        {"user_id": USER_A, "plan_id": PLAN_PRO, "social_interval_minutes": 45},
+        {"user_id": USER_B, "plan_id": PLAN_PRO, "social_interval_minutes": None},
+    ]
+    plans = [{"id": PLAN_PRO, "limits": {"social_interval_minutes": 1440}}]
+    targets = col.keyword_intervals(rows, profiles, plans, 360)
+    assert targets["bdu"]["interval"] == 45
+
+    use(col, {("GET", "social_keyword_state"): FakeResponse(200, [
+        {"keyword_fold": "bdu", "last_checked_at": (NOW - timedelta(minutes=44)).isoformat()},
+    ])})
+    assert col.due_keywords("facebook", targets, NOW) == []
+    use(col, {("GET", "social_keyword_state"): FakeResponse(200, [
+        {"keyword_fold": "bdu", "last_checked_at": (NOW - timedelta(minutes=46)).isoformat()},
+    ])})
+    assert col.due_keywords("facebook", targets, NOW) == ["bdu"]
+
+
 def test_instagram_hashtag_keeps_azerbaijani_letters(col):
     assert col.instagram_hashtag("Azərişıq") == "azərişıq"
     assert col.instagram_hashtag("Bakı metrosu") == "bakımetrosu"

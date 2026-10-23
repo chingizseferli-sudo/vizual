@@ -965,5 +965,10 @@
   "Artıq hesabınız var?": "Уже есть аккаунт?",
   "← Sayta qayıt": "← На сайт",
   "Təsdiq maili göndərilmədi. Bir az sonra yenidən cəhd edin və ya bizimlə əlaqə saxlayın.": "Письмо с подтверждением не отправлено. Повторите попытку позже или свяжитесь с нами.",
-  "Hesab yaradılmadı. Bir az sonra yenidən cəhd edin və ya bizimlə əlaqə saxlayın.": "Аккаунт не создан. Повторите попытку позже или свяжитесь с нами."
+  "Hesab yaradılmadı. Bir az sonra yenidən cəhd edin və ya bizimlə əlaqə saxlayın.": "Аккаунт не создан. Повторите попытку позже или свяжитесь с нами.",
+  "{0} dəqiqə": "{0} мин",
+  "{0} saat": "{0} ч",
+  "{0} saat {1} dəqiqə": "{0} ч {1} мин",
+  "hər {0} dəqiqədən bir": "каждые {0} мин",
+  "hər {0}dən bir": "каждые {0}"
 }

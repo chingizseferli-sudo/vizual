@@ -11,6 +11,7 @@ import {
   closestPlan,
 } from '@/lib/deal-calculator'
 import { supabase } from '@/lib/supabase'
+import { formatSocialInterval } from '@/lib/social-intervals'
 
 export const Route = createFileRoute('/(auth)/admin/calculator')({
   component: CalculatorPage,
@@ -153,7 +154,7 @@ function CalculatorPage() {
     `Platformalar: ${platforms.join(', ')}`,
     `Xəbər açar sözü: ${input.newsKeywords}`,
     social
-      ? `Sosial açar söz: ${input.socialKeywords}, yoxlama: ${input.intervalHours} saatdan bir`
+      ? `Sosial açar söz: ${input.socialKeywords}, yoxlama: ${formatSocialInterval(Math.round(input.intervalHours * 60))}`
       : null,
     `Aylıq qiymət (ƏDV daxil): ${azn(result.finalPriceAzn)}`,
     input.discountPercent > 0 ? `Endirim: ${input.discountPercent}%` : null,
@@ -204,17 +205,36 @@ function CalculatorPage() {
                 />
                 <label className='grid gap-1 text-sm'>
                   <span className='font-medium'>Sosial yoxlama tezliyi</span>
-                  <select
-                    value={input.intervalHours}
-                    onChange={(event) => set('intervalHours', Number(event.target.value))}
-                    className='h-10 w-full rounded-lg border bg-background px-3'
-                  >
-                    {INTERVAL_HOURS.map((hours) => (
-                      <option key={hours} value={hours}>
-                        {hours} saatdan bir
-                      </option>
-                    ))}
-                  </select>
+                  <div className='flex gap-2'>
+                    <select
+                      value={INTERVAL_HOURS.includes(input.intervalHours) ? input.intervalHours : ''}
+                      onChange={(event) => set('intervalHours', Number(event.target.value))}
+                      className='h-10 min-w-0 flex-1 rounded-lg border bg-background px-3'
+                    >
+                      {INTERVAL_HOURS.includes(input.intervalHours) ? null : (
+                        <option value=''>Fərdi</option>
+                      )}
+                      {INTERVAL_HOURS.map((hours) => (
+                        <option key={hours} value={hours}>
+                          {hours} saatdan bir
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type='number'
+                      min={10}
+                      max={10080}
+                      step={1}
+                      aria-label='Dəqiqə ilə'
+                      value={Math.round(input.intervalHours * 60)}
+                      onChange={(event) => {
+                        const minutes = Number(event.target.value)
+                        if (minutes > 0) set('intervalHours', minutes / 60)
+                      }}
+                      className='h-10 w-24 rounded-lg border bg-background px-3'
+                    />
+                  </div>
+                  <span className='text-xs text-muted-foreground'>Sağda dəqiqə ilə fərdi dəyər yaza bilərsiniz.</span>
                 </label>
               </>
             ) : null}

@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import {
+  CUSTOM_SOCIAL_INTERVAL_RANGE,
   SOCIAL_INTERVAL_OPTIONS,
+  formatDuration,
   formatSocialInterval,
+  isValidCustomSocialInterval,
 } from '@/lib/social-intervals'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -112,6 +115,7 @@ function AdminUserDetailsPage() {
   const [subscriptions, setSubscriptions] = useState<UserSubscription[]>([])
   const [telegramChatId, setTelegramChatId] = useState('')
   const [socialInterval, setSocialInterval] = useState('')
+  const [customSocialInterval, setCustomSocialInterval] = useState('')
   const [socialKeywordLimit, setSocialKeywordLimit] = useState('')
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [subscriptionStatus, setSubscriptionStatus] = useState<
@@ -233,7 +237,14 @@ function AdminUserDetailsPage() {
     ).map((plan) => normalizePlanRow(plan))
     setProfile(profileData)
     setTelegramChatId(profileData?.telegram_chat_id || '')
-    setSocialInterval(String(profileData?.social_interval_minutes ?? ''))
+    const savedInterval = profileData?.social_interval_minutes ?? null
+    const isPreset = SOCIAL_INTERVAL_OPTIONS.some(
+      (option) => option.minutes === savedInterval
+    )
+    setSocialInterval(
+      savedInterval === null ? '' : isPreset ? String(savedInterval) : 'custom'
+    )
+    setCustomSocialInterval(savedInterval === null ? '' : String(savedInterval))
     setSocialKeywordLimit(String(profileData?.social_keyword_limit ?? ''))
     setPlans(planData)
     setSubscriptions(
@@ -379,9 +390,25 @@ function AdminUserDetailsPage() {
 
   async function saveSocialInterval(value: string) {
     setSocialInterval(value)
+    if (value === 'custom') return
+    await writeSocialInterval(value ? Number(value) : null)
+  }
+
+  async function saveCustomSocialInterval() {
+    const minutes = Number(customSocialInterval.trim())
+    if (!isValidCustomSocialInterval(minutes)) {
+      setMessage(
+        `Fərdi tezlik ${CUSTOM_SOCIAL_INTERVAL_RANGE.min}-${CUSTOM_SOCIAL_INTERVAL_RANGE.max} dəqiqə arası tam ədəd olmalıdır.`
+      )
+      return
+    }
+    await writeSocialInterval(minutes)
+  }
+
+  async function writeSocialInterval(minutes: number | null) {
     const { error } = await supabase
       .from('user_profiles')
-      .update({ social_interval_minutes: value ? Number(value) : null })
+      .update({ social_interval_minutes: minutes })
       .eq('user_id', userId)
 
     if (error) {
@@ -766,12 +793,22 @@ function AdminUserDetailsPage() {
                 {option.label}
               </option>
             ))}
+            <option value='custom'>Fərdi (dəqiqə)</option>
           </select>
           <span className='text-xs font-normal text-muted-foreground'>
             Facebook və Instagram-da bu müştərinin açar sözləri hansı tezliklə
             axtarılsın. Boş qalsa, plan təyin edir.
           </span>
         </label>
+
+        {socialInterval === 'custom' ? (
+          <CustomSocialIntervalInput
+            value={customSocialInterval}
+            onChange={setCustomSocialInterval}
+            onSave={() => void saveCustomSocialInterval()}
+            disabled={!profile}
+          />
+        ) : null}
 
         {profile && 'social_keyword_limit' in profile ? (
           <div className='mt-4 grid max-w-sm gap-1.5 text-sm font-medium'>
@@ -977,3 +1014,59 @@ function AdminUserDetailsPage() {
 export const Route = createFileRoute('/(auth)/admin/users/$userId')({
   component: AdminUserDetailsPage,
 })
+
+function CustomSocialIntervalInput({
+  value,
+  onChange,
+  onSave,
+  disabled,
+}: {
+  value: string
+  onChange: (value: string) => void
+  onSave: () => void
+  disabled: boolean
+}) {
+  const minutes = Number(value.trim())
+  const valid = value.trim() !== '' && isValidCustomSocialInterval(minutes)
+
+  return (
+    <div className='mt-3 grid max-w-sm gap-1.5 text-sm font-medium'>
+      <label htmlFor='custom-social-interval'>Fərdi tezlik (dəqiqə)</label>
+      <div className='flex gap-2'>
+        <input
+          id='custom-social-interval'
+          type='number'
+          min={CUSTOM_SOCIAL_INTERVAL_RANGE.min}
+          max={CUSTOM_SOCIAL_INTERVAL_RANGE.max}
+          step='1'
+          inputMode='numeric'
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
+          placeholder='Məsələn, 45'
+          className='min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 font-normal'
+        />
+        <button
+          type='button'
+          onClick={onSave}
+          disabled={disabled || !valid}
+          className='rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50'
+        >
+          Saxla
+        </button>
+      </div>
+      <span className='text-xs font-normal text-muted-foreground'>
+        {valid
+          ? `${formatDuration(minutes)} · ${formatSocialInterval(minutes)}`
+          : `${CUSTOM_SOCIAL_INTERVAL_RANGE.min}-${CUSTOM_SOCIAL_INTERVAL_RANGE.max} dəqiqə (10 dəqiqədən 7 günə qədər).`}
+      </span>
+      {valid && minutes < 60 ? (
+        <span className='rounded-md bg-amber-50 px-2 py-1.5 text-xs font-normal text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'>
+          Saatdan tez yoxlama Instagram sorğularını artırır (hər yoxlama ayrıca
+          ödənilir). Facebook yalnız yeni postlara görə ödənir, ona görə az
+          dəyişir.
+        </span>
+      ) : null}
+    </div>
+  )
+}
