@@ -50,7 +50,7 @@ type FilterOption = {
 type ExportRange = '1' | '7' | '30' | 'all'
 
 type SourceCategory = 'web' | 'social'
-const SOCIAL_NETWORKS = ['facebook', 'instagram', 'youtube', 'telegram'] as const
+const SOCIAL_NETWORKS = ['facebook', 'instagram', 'youtube', 'x', 'linkedin', 'telegram'] as const
 type SocialNetwork = (typeof SOCIAL_NETWORKS)[number]
 
 function isSocialNetwork(value: unknown): value is SocialNetwork {
@@ -67,6 +67,8 @@ const socialNetworkLabels: Record<SocialNetwork, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
   youtube: 'YouTube',
+  x: 'X',
+  linkedin: 'LinkedIn',
   telegram: 'Telegram',
 }
 
@@ -128,6 +130,8 @@ function getSocialNetwork(host: string): SocialNetwork | null {
   if (/(^|\.)(facebook\.com|fb\.com|fb\.watch)$/.test(host)) return 'facebook'
   if (/(^|\.)instagram\.com$/.test(host)) return 'instagram'
   if (/(^|\.)(youtube\.com|youtu\.be)$/.test(host)) return 'youtube'
+  if (/(^|\.)(x\.com|twitter\.com)$/.test(host)) return 'x'
+  if (/(^|\.)linkedin\.com$/.test(host)) return 'linkedin'
   if (/^(t\.me|telegram\.me)$/.test(host)) return 'telegram'
   return null
 }

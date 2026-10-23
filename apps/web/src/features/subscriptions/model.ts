@@ -127,12 +127,14 @@ export function planReportFrequencies(
   return REPORT_FREQUENCIES.filter((frequency) => value.includes(frequency))
 }
 
-export const SOCIAL_PLATFORMS = ['facebook', 'instagram', 'youtube'] as const
+export const SOCIAL_PLATFORMS = ['facebook', 'instagram', 'youtube', 'x', 'linkedin'] as const
 export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number]
 export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatform, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
   youtube: 'YouTube',
+  x: 'X',
+  linkedin: 'LinkedIn',
 }
 
 // Social networks the plan's keywords are searched on (limits.social_platforms);

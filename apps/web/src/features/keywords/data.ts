@@ -15,6 +15,10 @@ export type CustomerKeyword = {
   status: KeywordStatus
   // Also searched on Facebook and Instagram (set_keyword_social()).
   social: boolean
+  // Social posts only with an Azerbaijani signal, and none containing an
+  // exclude word (set_keyword_filters(), migration 20261023000007).
+  azOnly: boolean
+  excludeWords: string[]
   created_at: string | null
 }
 
@@ -30,6 +34,8 @@ export type KeywordsData = {
   socialSupported: boolean
   // False until the migration adds monitor_keywords.status: pausing is hidden.
   statusSupported: boolean
+  // False until migration 20261023000007: the social filter is hidden.
+  filtersSupported: boolean
 }
 
 type MonitorRow = { id: string; status: string | null; created_at: string | null }
@@ -39,6 +45,8 @@ type KeywordRow = {
   keyword: string
   status?: string | null
   social_enabled?: boolean | null
+  az_only?: boolean | null
+  exclude_words?: string[] | null
   created_at: string | null
 }
 type PlanLimitsRow = {
@@ -86,6 +94,7 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
       maxSocialKeywords,
       socialSupported,
       statusSupported: true,
+      filtersSupported: false,
     }
   }
 
@@ -99,12 +108,15 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
 
   const rows = (data || []) as KeywordRow[]
   const statusSupported = rows.length === 0 || 'status' in rows[0]
+  const filtersSupported = rows.length > 0 && 'az_only' in rows[0]
   const keywords = rows.map((row) => ({
     id: row.id,
     monitor_id: row.monitor_id,
     keyword: row.keyword,
     created_at: row.created_at,
     social: row.social_enabled === true,
+    azOnly: row.az_only !== false,
+    excludeWords: row.exclude_words || [],
     status:
       monitorStatus.get(row.monitor_id) === 'active' && row.status !== 'paused'
         ? ('active' as const)
@@ -121,6 +133,7 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
     maxSocialKeywords,
     socialSupported,
     statusSupported,
+    filtersSupported,
   }
 }
 
@@ -140,6 +153,12 @@ export function keywordErrorMessage(error: { message: string }) {
   }
   if (message.includes('ACCOUNT_NOT_ACTIVE')) {
     return t("Hesabınız aktiv deyil. Açar söz əlavə etmək üçün hesabın aktiv olması lazımdır.")
+  }
+  if (message.includes('EXCLUDE_WORDS_TOO_MANY')) {
+    return t("İstisna sözlər ən çox 20 ola bilər.")
+  }
+  if (message.includes('EXCLUDE_WORD_TOO_LONG')) {
+    return t("Hər istisna söz ən çox 60 simvol ola bilər.")
   }
   if (message.includes('KEYWORD_LENGTH_INVALID')) {
     return t("Açar söz 1-200 simvol olmalıdır.")
@@ -167,6 +186,33 @@ export async function setKeywordSocial(id: string, enabled: boolean) {
   const { error } = await supabase.rpc('set_keyword_social', {
     p_keyword_id: id,
     p_enabled: enabled,
+  })
+  return error
+}
+
+// Comma or new line separated; trimmed, without empties or repeats.
+export function parseExcludeWords(value: string) {
+  const seen = new Set<string>()
+  return value
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter((item) => {
+      const key = item.toLocaleLowerCase('az-AZ')
+      if (!item || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+}
+
+export async function setKeywordFilters(
+  id: string,
+  azOnly: boolean,
+  excludeWords: string[]
+) {
+  const { error } = await supabase.rpc('set_keyword_filters', {
+    p_keyword_id: id,
+    p_az_only: azOnly,
+    p_exclude_words: excludeWords,
   })
   return error
 }

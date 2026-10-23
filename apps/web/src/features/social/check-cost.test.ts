@@ -13,6 +13,13 @@ describe('check cost estimate', () => {
     expect(cost.youtubeUnits).toBe(300)
   })
 
+  it('prices X and LinkedIn per post with their own caps', () => {
+    const cost = estimateCheckCost({ xKeywords: 2, linkedinKeywords: 3 }, 10, { x: 50, linkedin: 10 })
+    expect(cost.xUsd).toBeCloseTo(2 * 50 * 0.0004)
+    expect(cost.linkedinUsd).toBeCloseTo(3 * 10 * 0.002)
+    expect(cost.totalUsd).toBeCloseTo(0.04 + 0.06)
+  })
+
   it('shows what is left of a budget, never below zero', () => {
     expect(remainingBudget(null, 5)).toBeNull()
     expect(remainingBudget(10, 4.5)).toBe(5.5)

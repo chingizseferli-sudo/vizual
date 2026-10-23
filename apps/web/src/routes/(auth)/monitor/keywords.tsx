@@ -10,6 +10,7 @@ import {
   Play,
   Plus,
   Search,
+  SlidersHorizontal,
   Trash2,
 } from 'lucide-react'
 import {
@@ -18,9 +19,11 @@ import {
   deleteKeyword,
   fetchKeywordsData,
   keywordErrorMessage,
+  setKeywordFilters,
   setKeywordSocial,
   setKeywordStatus,
 } from '@/features/keywords/data'
+import { KeywordFiltersDialog } from '@/features/keywords/keyword-filters-dialog'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -66,6 +69,9 @@ function KeywordsPage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [deleteCandidate, setDeleteCandidate] =
     useState<CustomerKeyword | null>(null)
+  const [filterTarget, setFilterTarget] = useState<CustomerKeyword | null>(
+    null
+  )
 
   const data = query.data
   const keywords = useMemo(() => {
@@ -162,6 +168,23 @@ function KeywordsPage() {
         ? t("Facebook və Instagram-da da axtarılır: {0}", [item.keyword])
         : t("Yalnız xəbər saytlarında axtarılır: {0}", [item.keyword])
     )
+  }
+
+  async function saveFilters(
+    item: CustomerKeyword,
+    azOnly: boolean,
+    excludeWords: string[]
+  ) {
+    setBusyId(item.id)
+    const error = await setKeywordFilters(item.id, azOnly, excludeWords)
+    setBusyId(null)
+    if (error) {
+      setMessage(keywordErrorMessage(error))
+      return
+    }
+    setFilterTarget(null)
+    await refresh()
+    setMessage(t("Sosial filtr saxlanıldı: {0}", [item.keyword]))
   }
 
   async function removeKeyword(item: CustomerKeyword) {
@@ -387,6 +410,34 @@ function KeywordsPage() {
                       </span>
                     </div>
                     <div className='flex shrink-0 items-center gap-1'>
+                      {data?.filtersSupported ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='icon'
+                              aria-label={t("Sosial filtr: {0}", [item.keyword])}
+                              onClick={() => setFilterTarget(item)}
+                              disabled={busy}
+                              className={cn(
+                                (!item.azOnly || item.excludeWords.length > 0) &&
+                                  'text-primary'
+                              )}
+                            >
+                              <SlidersHorizontal />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {item.azOnly
+                              ? t("Sosial filtr: yalnız Azərbaycan")
+                              : t("Sosial filtr: bütün ölkələr")}
+                            {item.excludeWords.length
+                              ? ` · ${t("istisna: {0}", [item.excludeWords.join(', ')])}`
+                              : ''}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : null}
                       {socialShown ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -475,6 +526,18 @@ function KeywordsPage() {
           )}
         </section>
       </div>
+
+      <KeywordFiltersDialog
+        key={filterTarget?.id ?? 'none'}
+        keyword={filterTarget}
+        saving={!!filterTarget && busyId === filterTarget.id}
+        onOpenChange={(open) => {
+          if (!open) setFilterTarget(null)
+        }}
+        onSave={(azOnly, excludeWords) => {
+          if (filterTarget) void saveFilters(filterTarget, azOnly, excludeWords)
+        }}
+      />
 
       <ConfirmDialog
         open={!!deleteCandidate}

@@ -2,10 +2,13 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   FACEBOOK_USD_PER_POST,
   INSTAGRAM_USD_PER_CALL,
+  LINKEDIN_USD_PER_POST,
+  X_USD_PER_POST,
   YOUTUBE_UNITS_PER_SEARCH,
   estimateCheckCost,
   formatCostUsd,
   type CheckScope,
+  type MaxPosts,
 } from './check-cost'
 
 export type CheckBudgets = {
@@ -13,6 +16,8 @@ export type CheckBudgets = {
   total: number | null
   facebook: number | null
   instagram: number | null
+  x?: number | null
+  linkedin?: number | null
   // YouTube quota units left today (Pacific time); null = unknown.
   youtubeUnits?: number | null
 }
@@ -27,6 +32,7 @@ export function CheckCostDialog({
   title,
   scope,
   fbMaxPostsPerQuery,
+  maxPosts = {},
   budgets,
   onConfirm,
   isLoading,
@@ -36,14 +42,17 @@ export function CheckCostDialog({
   title: string
   scope: CheckScope
   fbMaxPostsPerQuery: number
+  maxPosts?: MaxPosts
   budgets: CheckBudgets
   onConfirm: () => void
   isLoading?: boolean
 }) {
-  const cost = estimateCheckCost(scope, fbMaxPostsPerQuery)
+  const cost = estimateCheckCost(scope, fbMaxPostsPerQuery, maxPosts)
   const facebookKeywords = scope.facebookKeywords ?? 0
   const instagramCalls = (scope.instagramKeywords ?? 0) + (scope.instagramPages ?? 0)
   const youtubeKeywords = scope.youtubeKeywords ?? 0
+  const xKeywords = scope.xKeywords ?? 0
+  const linkedinKeywords = scope.linkedinKeywords ?? 0
   const overBudget = budgets.total != null && cost.totalUsd > budgets.total
 
   return (
@@ -70,6 +79,20 @@ export function CheckCostDialog({
                 Instagram: {instagramCalls} sorğu × ~${INSTAGRAM_USD_PER_CALL.toFixed(4)} ={' '}
                 <strong>{formatCostUsd(cost.instagramUsd)}</strong> (qalan aylıq büdcə:{' '}
                 {budgetText(budgets.instagram)})
+              </li>
+            ) : null}
+            {xKeywords > 0 ? (
+              <li>
+                X: {xKeywords} söz × {maxPosts.x ?? 50} post × ${X_USD_PER_POST} ={' '}
+                <strong>{formatCostUsd(cost.xUsd)}</strong> (qalan aylıq büdcə:{' '}
+                {budgetText(budgets.x ?? null)})
+              </li>
+            ) : null}
+            {linkedinKeywords > 0 ? (
+              <li>
+                LinkedIn: {linkedinKeywords} söz × {maxPosts.linkedin ?? 10} post × $
+                {LINKEDIN_USD_PER_POST} = <strong>{formatCostUsd(cost.linkedinUsd)}</strong>{' '}
+                (qalan aylıq büdcə: {budgetText(budgets.linkedin ?? null)})
               </li>
             ) : null}
             {youtubeKeywords > 0 ? (

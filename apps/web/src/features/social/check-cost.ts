@@ -7,30 +7,50 @@ export const FACEBOOK_USD_PER_POST = 0.0024
 export const INSTAGRAM_USD_PER_CALL = 29 / 18000
 // YouTube Data API search.list costs 100 quota units; the API itself is free.
 export const YOUTUBE_UNITS_PER_SEARCH = 100
+// Apify X (apidojo/tweet-scraper, $0.40 / 1000) and LinkedIn
+// (harvestapi/linkedin-post-search, ~$2 / 1000) bill per delivered post.
+export const X_USD_PER_POST = 0.0004
+export const LINKEDIN_USD_PER_POST = 0.002
 
 export type CheckScope = {
   facebookKeywords?: number
   instagramKeywords?: number
   instagramPages?: number
   youtubeKeywords?: number
+  xKeywords?: number
+  linkedinKeywords?: number
 }
+
+// Posts one search may return, per network (admin settings).
+export type MaxPosts = { x?: number; linkedin?: number }
 
 export type CheckCost = {
   facebookUsd: number
   instagramUsd: number
+  xUsd: number
+  linkedinUsd: number
   totalUsd: number
   youtubeUnits: number
 }
 
-export function estimateCheckCost(scope: CheckScope, fbMaxPostsPerQuery: number): CheckCost {
+export function estimateCheckCost(
+  scope: CheckScope,
+  fbMaxPostsPerQuery: number,
+  maxPosts: MaxPosts = {}
+): CheckCost {
   const facebookUsd =
     (scope.facebookKeywords ?? 0) * Math.max(1, fbMaxPostsPerQuery) * FACEBOOK_USD_PER_POST
   const instagramUsd =
     ((scope.instagramKeywords ?? 0) + (scope.instagramPages ?? 0)) * INSTAGRAM_USD_PER_CALL
+  const xUsd = (scope.xKeywords ?? 0) * Math.max(1, maxPosts.x ?? 50) * X_USD_PER_POST
+  const linkedinUsd =
+    (scope.linkedinKeywords ?? 0) * Math.max(1, maxPosts.linkedin ?? 10) * LINKEDIN_USD_PER_POST
   return {
     facebookUsd,
     instagramUsd,
-    totalUsd: facebookUsd + instagramUsd,
+    xUsd,
+    linkedinUsd,
+    totalUsd: facebookUsd + instagramUsd + xUsd + linkedinUsd,
     youtubeUnits: (scope.youtubeKeywords ?? 0) * YOUTUBE_UNITS_PER_SEARCH,
   }
 }

@@ -30,6 +30,14 @@ type SocialSettings = {
   youtube_enabled?: boolean
   youtube_daily_quota?: number
   youtube_min_interval_minutes?: number
+  x_enabled?: boolean
+  x_max_posts_per_query?: number
+  x_min_interval_minutes?: number
+  x_monthly_budget_usd?: number | null
+  linkedin_enabled?: boolean
+  linkedin_max_posts_per_query?: number
+  linkedin_min_interval_minutes?: number
+  linkedin_monthly_budget_usd?: number | null
   updated_at: string | null
 }
 
@@ -41,6 +49,10 @@ type Usage = {
   instagram_usd?: number
   instagram_calls?: number
   youtube_calls?: number
+  x_usd?: number
+  x_calls?: number
+  linkedin_usd?: number
+  linkedin_calls?: number
 }
 
 type KeywordStats = {
@@ -49,6 +61,8 @@ type KeywordStats = {
   no_date?: number
   too_old?: number
   no_match?: number
+  not_az?: number
+  excluded?: number
   duplicate?: number
   stored?: number
   matched_users?: number
@@ -84,6 +98,10 @@ type Heartbeat = {
   youtube_daily_quota?: number
   keywords?: number
   youtube_keywords?: number
+  x_enabled?: boolean
+  linkedin_enabled?: boolean
+  x_keywords?: number
+  linkedin_keywords?: number
   problem?: string
 }
 
@@ -106,6 +124,8 @@ const STAT_COLUMNS: { key: keyof KeywordStats; label: string; hint: string }[] =
   { key: 'duplicate', label: 'Təkrar', hint: 'Əvvəl yazılmış postlar: yenidən göndərilmir.' },
   { key: 'too_old', label: 'Köhnə', hint: 'Son 48 saatdan köhnə postlar: göndərilmir.' },
   { key: 'no_match', label: 'Uyğunsuz', hint: 'Mətnində açar söz tapılmayan postlar (provayderin səs-küyü).' },
+  { key: 'not_az', label: 'AZ deyil', hint: 'Açar sözdə «Yalnız Azərbaycan» seçilib, postda isə Azərbaycan əlaməti yoxdur (dil, ölkə, şəhər, .az link, müəllifin yeri).' },
+  { key: 'excluded', label: 'İstisna', hint: 'Müştərinin istisna sözü olan postlar.' },
   { key: 'no_date', label: 'Tarixsiz', hint: 'Tarixi olmayan postlar: yaşını bilmədiyimiz üçün göndərilmir.' },
   { key: 'no_url', label: 'Linksiz', hint: 'Linki olmayan postlar.' },
 ]
@@ -114,6 +134,8 @@ const PLATFORM_LABELS: Record<string, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
   youtube: 'YouTube',
+  x: 'X',
+  linkedin: 'LinkedIn',
 }
 
 function formatDate(value: string | null | undefined) {
@@ -333,6 +355,15 @@ function ServiceStatus({
           : 'Müştərilər Açar sözlər səhifəsində sözlərin FB/IG açarını yandırmalıdır (planda FB/IG limiti olmalıdır).',
     },
   ]
+  for (const platform of ['x', 'linkedin'] as const) {
+    if (!settings?.[`${platform}_enabled`]) continue
+    const keywords = heartbeat?.[`${platform}_keywords`] ?? 0
+    checks.push({
+      label: `${PLATFORM_LABELS[platform]} planı olan açar söz: ${keywords}`,
+      ok: keywords > 0,
+      problem: `Planında ${PLATFORM_LABELS[platform]} seçilmiş müştərilərin sosial açar sözü yoxdur (Abunəliklər → plan → Sosial şəbəkə axtarışı).`,
+    })
+  }
   if (settings?.youtube_enabled) {
     const quota = heartbeat?.youtube_daily_quota ?? settings.youtube_daily_quota ?? 9000
     const used = heartbeat?.youtube_units_today ?? 0
@@ -481,18 +512,28 @@ function SocialAdminPage() {
   const spent = Number(data.usage?.usd ?? 0)
   const facebookSpent = Number(data.usage?.facebook_usd ?? 0)
   const instagramSpent = Number(data.usage?.instagram_usd ?? 0)
+  const xSpent = Number(data.usage?.x_usd ?? 0)
+  const linkedinSpent = Number(data.usage?.linkedin_usd ?? 0)
+  const maxPosts = {
+    x: settings?.x_max_posts_per_query ?? 50,
+    linkedin: settings?.linkedin_max_posts_per_query ?? 10,
+  }
   const fbMaxPosts = settings?.fb_max_posts_per_query ?? 10
   const youtubeQuota = data.heartbeat?.youtube_daily_quota ?? settings?.youtube_daily_quota ?? 9000
   const checkBudgets: CheckBudgets = {
     total: remainingBudget(settings?.monthly_budget_usd, spent),
     facebook: remainingBudget(settings?.facebook_monthly_budget_usd, facebookSpent),
     instagram: remainingBudget(settings?.instagram_monthly_budget_usd, instagramSpent),
+    x: remainingBudget(settings?.x_monthly_budget_usd, xSpent),
+    linkedin: remainingBudget(settings?.linkedin_monthly_budget_usd, linkedinSpent),
     youtubeUnits: Math.max(0, youtubeQuota - (data.heartbeat?.youtube_units_today ?? 0)),
   }
   const enabledPlatforms: Record<string, boolean> = {
     facebook: Boolean(settings?.facebook_enabled),
     instagram: Boolean(settings?.instagram_enabled),
     youtube: Boolean(settings?.youtube_enabled),
+    x: Boolean(settings?.x_enabled),
+    linkedin: Boolean(settings?.linkedin_enabled),
   }
 
   function checkScope(target: { platform?: string; keyword?: string }): CheckScope {
@@ -507,6 +548,8 @@ function SocialAdminPage() {
       facebookKeywords: count('facebook'),
       instagramKeywords: count('instagram'),
       youtubeKeywords: count('youtube'),
+      xKeywords: count('x'),
+      linkedinKeywords: count('linkedin'),
     }
   }
 
@@ -526,8 +569,8 @@ function SocialAdminPage() {
             Sosial monitorinq
           </h1>
           <p className='text-muted-foreground'>
-            Facebook, Instagram və YouTube axtarışı, yoxlama tezliyi və aylıq
-            xərc limiti.
+            Facebook, Instagram, YouTube, X və LinkedIn axtarışı, yoxlama
+            tezliyi və aylıq xərc limiti.
           </p>
         </div>
         <button
@@ -588,6 +631,20 @@ function SocialAdminPage() {
             checked={Boolean(settings?.youtube_enabled)}
             disabled={disabled}
             onChange={(next) => mutation.mutate({ youtube_enabled: next })}
+          />
+          <PlatformSwitch
+            label='X (Twitter)'
+            hint='Apify açar söz axtarışı, ~$0.40 / 1000 post'
+            checked={Boolean(settings?.x_enabled)}
+            disabled={disabled}
+            onChange={(next) => mutation.mutate({ x_enabled: next })}
+          />
+          <PlatformSwitch
+            label='LinkedIn'
+            hint='Apify açar söz axtarışı (girişsiz), ~$2 / 1000 post'
+            checked={Boolean(settings?.linkedin_enabled)}
+            disabled={disabled}
+            onChange={(next) => mutation.mutate({ linkedin_enabled: next })}
           />
           <PlatformSwitch
             label='Instagram səhifələri'
@@ -675,6 +732,18 @@ function SocialAdminPage() {
                 label: 'Instagram aylıq büdcə ($)',
                 spent: instagramSpent,
                 calls: data.usage?.instagram_calls ?? 0,
+              },
+              {
+                key: 'x_monthly_budget_usd',
+                label: 'X aylıq büdcə ($)',
+                spent: xSpent,
+                calls: data.usage?.x_calls ?? 0,
+              },
+              {
+                key: 'linkedin_monthly_budget_usd',
+                label: 'LinkedIn aylıq büdcə ($)',
+                spent: linkedinSpent,
+                calls: data.usage?.linkedin_calls ?? 0,
               },
             ] as const
           ).map((platform) => (
@@ -792,6 +861,52 @@ function SocialAdminPage() {
         </div>
       </section>
 
+      <section className='grid content-start gap-4 rounded-lg border bg-card p-4 md:p-5'>
+        <div>
+          <h2 className='text-lg font-semibold'>X və LinkedIn xərc nəzarəti</h2>
+          <p className='text-sm text-muted-foreground'>
+            Hər ikisi Apify ilə işləyir və hər gələn post üçün ödəniş alınır. Hər
+            söz ayrıca axtarılır. X aktoru bir axtarışda ən azı ~50 post üçün
+            ödəniş ala bilər.
+          </p>
+        </div>
+        <div className='grid gap-4 md:grid-cols-2'>
+          {(['x', 'linkedin'] as const).map((platform) => (
+            <div key={platform} className='grid gap-4'>
+              <NumberSetting
+                name={`${platform}_max_posts_per_query`}
+                label={`${PLATFORM_LABELS[platform]}: bir yoxlamada maksimum post`}
+                hint={platform === 'x' ? '1–200.' : '1–100.'}
+                value={maxPosts[platform]}
+                min={1}
+                max={platform === 'x' ? 200 : 100}
+                disabled={disabled}
+                onSave={(value) =>
+                  value != null &&
+                  mutation.mutate({ [`${platform}_max_posts_per_query`]: value })
+                }
+              />
+              <NumberSetting
+                name={`${platform}_min_interval_minutes`}
+                label={`${PLATFORM_LABELS[platform]} minimum yoxlama intervalı (dəq)`}
+                hint='Plan tezliyi nə olursa olsun, bundan tez yoxlanmır. Fərdi təklif bunu keçə bilər.'
+                value={
+                  settings?.[`${platform}_min_interval_minutes`] ??
+                  (platform === 'x' ? 360 : 720)
+                }
+                min={10}
+                max={10080}
+                disabled={disabled}
+                onSave={(value) =>
+                  value != null &&
+                  mutation.mutate({ [`${platform}_min_interval_minutes`]: value })
+                }
+              />
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className='rounded-lg border bg-card p-4 md:p-5'>
         <div className='flex flex-wrap items-start justify-between gap-3'>
           <div>
@@ -834,8 +949,9 @@ function SocialAdminPage() {
             ))}
             <li>
               <span className='font-medium text-foreground'>Təxmini xərc:</span>{' '}
-              son yoxlama / bu ay. Facebook: gələn post × $0.0024; Instagram:
-              kredit × təxmini qiymət.
+              son yoxlama / bu ay. Facebook: gələn post × $0.0024; X: gələn post
+              × $0.0004; LinkedIn: gələn post × $0.002; Instagram: kredit ×
+              təxmini qiymət.
             </li>
             <li>
               <span className='font-medium text-foreground'>Instagram:</span>{' '}
@@ -997,6 +1113,7 @@ function SocialAdminPage() {
         }
         scope={pendingCheck ? checkScope(pendingCheck) : {}}
         fbMaxPostsPerQuery={fbMaxPosts}
+        maxPosts={maxPosts}
         budgets={checkBudgets}
         isLoading={checkMutation.isPending}
         onConfirm={() => {

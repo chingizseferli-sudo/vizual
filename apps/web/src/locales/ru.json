@@ -798,5 +798,19 @@
   "{0} saat": "{0} ч",
   "{0} saat {1} dəqiqə": "{0} ч {1} мин",
   "hər {0} dəqiqədən bir": "каждые {0} мин",
-  "hər {0}dən bir": "каждые {0}"
+  "hər {0}dən bir": "каждые {0}",
+  "İstisna sözlər ən çox 20 ola bilər.": "Исключающих слов может быть не больше 20.",
+  "Hər istisna söz ən çox 60 simvol ola bilər.": "Каждое исключающее слово — не длиннее 60 символов.",
+  "Sosial filtr: {0}": "Фильтр соцсетей: {0}",
+  "Sosial şəbəkə nəticələrinə aiddir. Xəbər saytları süzülmür.": "Применяется к результатам из соцсетей. Новостные сайты не фильтруются.",
+  "Yalnız Azərbaycan": "Только Азербайджан",
+  "Azərbaycan dilində olan və ya Azərbaycandan bəhs edən paylaşımlar göstərilir. Məsələn, \"mygov\" üçün Hindistan postları gəlməz.": "Показываются публикации на азербайджанском языке или об Азербайджане. Например, по «mygov» не придут посты из Индии.",
+  "İstisna sözlər": "Исключающие слова",
+  "Vergüllə yazın: India, Modi": "Через запятую: India, Modi",
+  "Bu sözlərdən biri olan paylaşım göstərilmir. Ən çox 20 söz.": "Публикации с любым из этих слов не показываются. Не больше 20 слов.",
+  "Saxla": "Сохранить",
+  "Sosial filtr saxlanıldı: {0}": "Фильтр соцсетей сохранён: {0}",
+  "Sosial filtr: yalnız Azərbaycan": "Фильтр соцсетей: только Азербайджан",
+  "Sosial filtr: bütün ölkələr": "Фильтр соцсетей: все страны",
+  "istisna: {0}": "исключить: {0}"
 }
