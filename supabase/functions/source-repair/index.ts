@@ -1209,7 +1209,7 @@ async function repairSource(source: SourceInput): Promise<RepairResult> {
   const edgeBlocked = isEdgeBlockedDiagnostics(diagnostics);
   const openHtmlWithoutArticles = !edgeBlocked && hasOpenHtmlDiagnostics(diagnostics);
   const reason = edgeBlocked
-    ? `Source repair Edge environment was blocked by the site; bot/Railway verification is required; attempts=${attempts.join(",")}; diagnostics=${diagnostics.join(" | ")}`
+    ? `Sayt Supabase serverindən gələn yoxlamanı blokladı. Railway botu bu mənbəni növbəti dövrədə öz serverindən oxuyacaq, nəticə bir neçə dəqiqəyə "Son nəticə"-də görünəcək. (attempts=${attempts.join(",")}; diagnostics=${diagnostics.join(" | ")})`
     : summarizeRepairFailure(attempts, diagnostics);
   return {
     ok: false,

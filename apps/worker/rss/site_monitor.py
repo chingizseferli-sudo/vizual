@@ -5134,7 +5134,8 @@ def load_sites():
                     method = "xpath_pattern"
 
                 fail_count = int(row.get("consecutive_fail_count") or 0)
-                pending_bot_proof_results = {"repair_readable", "source_added"}
+                # edge_blocked: the site blocked the Supabase repair check; read it from here at once.
+                pending_bot_proof_results = {"repair_readable", "source_added", "edge_blocked"}
                 last_result = clean_text(row.get("last_result", ""))
                 if (
                     SOURCE_HEALTH_ENABLED
