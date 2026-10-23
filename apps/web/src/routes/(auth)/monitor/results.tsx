@@ -50,7 +50,12 @@ type FilterOption = {
 type ExportRange = '1' | '7' | '30' | 'all'
 
 type SourceCategory = 'web' | 'social'
-type SocialNetwork = 'facebook' | 'instagram' | 'telegram'
+const SOCIAL_NETWORKS = ['facebook', 'instagram', 'youtube', 'telegram'] as const
+type SocialNetwork = (typeof SOCIAL_NETWORKS)[number]
+
+function isSocialNetwork(value: unknown): value is SocialNetwork {
+  return SOCIAL_NETWORKS.includes(value as SocialNetwork)
+}
 
 type ResultsSearch = {
   cat?: SourceCategory
@@ -61,6 +66,7 @@ type ResultsSearch = {
 const socialNetworkLabels: Record<SocialNetwork, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
+  youtube: 'YouTube',
   telegram: 'Telegram',
 }
 
@@ -71,12 +77,7 @@ function validateResultsSearch(search: Record<string, unknown>): ResultsSearch {
   if (next.cat === 'web' && typeof search.sites === 'string' && search.sites) {
     next.sites = search.sites
   }
-  if (
-    next.cat === 'social' &&
-    (search.net === 'facebook' || search.net === 'instagram' || search.net === 'telegram')
-  ) {
-    next.net = search.net
-  }
+  if (next.cat === 'social' && isSocialNetwork(search.net)) next.net = search.net
   return next
 }
 
@@ -126,6 +127,7 @@ function getHost(url: string | undefined) {
 function getSocialNetwork(host: string): SocialNetwork | null {
   if (/(^|\.)(facebook\.com|fb\.com|fb\.watch)$/.test(host)) return 'facebook'
   if (/(^|\.)instagram\.com$/.test(host)) return 'instagram'
+  if (/(^|\.)(youtube\.com|youtu\.be)$/.test(host)) return 'youtube'
   if (/^(t\.me|telegram\.me)$/.test(host)) return 'telegram'
   return null
 }
@@ -423,9 +425,7 @@ function ResultsPage() {
         .map((row) => getSocialNetwork(getHost(row.monitored_items?.url)))
         .filter((value): value is SocialNetwork => value !== null)
     )
-    return (['facebook', 'instagram', 'telegram'] as SocialNetwork[]).filter((value) =>
-      values.has(value)
-    )
+    return SOCIAL_NETWORKS.filter((value) => values.has(value))
   }, [periodRows])
 
   const visibleSiteOptions = useMemo(() => {
@@ -871,10 +871,7 @@ function ResultsPage() {
                   const value = event.target.value
                   setSourceSearch({
                     cat: 'social',
-                    net:
-                      value === 'facebook' || value === 'instagram' || value === 'telegram'
-                        ? value
-                        : undefined,
+                    net: isSocialNetwork(value) ? value : undefined,
                   })
                 }}
                 className='h-10 min-w-0 rounded-xl border border-border bg-card px-3 text-sm'

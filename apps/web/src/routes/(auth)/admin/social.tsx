@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Activity, Loader2, RefreshCw, Search, Share2 } from 'lucide-react'
@@ -9,6 +9,8 @@ import {
 import { supabase } from '@/lib/supabase'
 import { friendlyError } from '@/lib/friendly-error'
 import { WatchedAccounts } from '@/features/social/watched-accounts'
+import { CheckCostDialog, type CheckBudgets } from '@/features/social/check-cost-dialog'
+import { remainingBudget, type CheckScope } from '@/features/social/check-cost'
 
 const socialAdminQueryKey = ['admin', 'social'] as const
 
@@ -25,6 +27,9 @@ type SocialSettings = {
   fb_min_interval_minutes?: number
   fb_max_posts_per_query?: number
   fb_daily_posts_per_keyword?: number | null
+  youtube_enabled?: boolean
+  youtube_daily_quota?: number
+  youtube_min_interval_minutes?: number
   updated_at: string | null
 }
 
@@ -35,6 +40,7 @@ type Usage = {
   facebook_calls?: number
   instagram_usd?: number
   instagram_calls?: number
+  youtube_calls?: number
 }
 
 type KeywordStats = {
@@ -72,7 +78,12 @@ type Heartbeat = {
   telegram_channels_enabled?: boolean
   apify_key?: boolean
   socialfetch_key?: boolean
+  youtube_enabled?: boolean
+  youtube_key?: boolean
+  youtube_units_today?: number
+  youtube_daily_quota?: number
   keywords?: number
+  youtube_keywords?: number
   problem?: string
 }
 
@@ -98,6 +109,12 @@ const STAT_COLUMNS: { key: keyof KeywordStats; label: string; hint: string }[] =
   { key: 'no_date', label: 'Tarixsiz', hint: 'Tarixi olmayan postlar: yaşını bilmədiyimiz üçün göndərilmir.' },
   { key: 'no_url', label: 'Linksiz', hint: 'Linki olmayan postlar.' },
 ]
+
+const PLATFORM_LABELS: Record<string, string> = {
+  facebook: 'Facebook',
+  instagram: 'Instagram',
+  youtube: 'YouTube',
+}
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '—'
@@ -316,6 +333,27 @@ function ServiceStatus({
           : 'Müştərilər Açar sözlər səhifəsində sözlərin FB/IG açarını yandırmalıdır (planda FB/IG limiti olmalıdır).',
     },
   ]
+  if (settings?.youtube_enabled) {
+    const quota = heartbeat?.youtube_daily_quota ?? settings.youtube_daily_quota ?? 9000
+    const used = heartbeat?.youtube_units_today ?? 0
+    checks.push(
+      {
+        label: 'YouTube açarı (YOUTUBE_API_KEY)',
+        ok: Boolean(heartbeat?.youtube_key),
+        problem: 'Railway-də vizual-social servisinə YOUTUBE_API_KEY əlavə edin.',
+      },
+      {
+        label: `YouTube kvotası bu gün: ${used} / ${quota} vahid`,
+        ok: used < quota,
+        problem: 'Gündəlik kvota dolub: axtarış Sakit okean vaxtı ilə gecə yarısına qədər dayanır.',
+      },
+      {
+        label: `YouTube planı olan açar söz: ${heartbeat?.youtube_keywords ?? 0}`,
+        ok: (heartbeat?.youtube_keywords ?? 0) > 0,
+        problem: 'Planında YouTube seçilmiş müştərilərin sosial açar sözü yoxdur.',
+      }
+    )
+  }
 
   return (
     <section className='grid gap-3 rounded-lg border bg-card p-4 md:p-5'>
@@ -424,6 +462,11 @@ function SocialAdminPage() {
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: socialAdminQueryKey }),
   })
+  // "İndi yoxla" starts paid searches, so it asks first (with the cost).
+  const [pendingCheck, setPendingCheck] = useState<{
+    platform?: string
+    keyword?: string
+  } | null>(null)
   if (isLoading || !data) {
     return (
       <div className='flex min-h-[320px] items-center justify-center p-6 text-sm text-muted-foreground'>
@@ -438,6 +481,34 @@ function SocialAdminPage() {
   const spent = Number(data.usage?.usd ?? 0)
   const facebookSpent = Number(data.usage?.facebook_usd ?? 0)
   const instagramSpent = Number(data.usage?.instagram_usd ?? 0)
+  const fbMaxPosts = settings?.fb_max_posts_per_query ?? 10
+  const youtubeQuota = data.heartbeat?.youtube_daily_quota ?? settings?.youtube_daily_quota ?? 9000
+  const checkBudgets: CheckBudgets = {
+    total: remainingBudget(settings?.monthly_budget_usd, spent),
+    facebook: remainingBudget(settings?.facebook_monthly_budget_usd, facebookSpent),
+    instagram: remainingBudget(settings?.instagram_monthly_budget_usd, instagramSpent),
+    youtubeUnits: Math.max(0, youtubeQuota - (data.heartbeat?.youtube_units_today ?? 0)),
+  }
+  const enabledPlatforms: Record<string, boolean> = {
+    facebook: Boolean(settings?.facebook_enabled),
+    instagram: Boolean(settings?.instagram_enabled),
+    youtube: Boolean(settings?.youtube_enabled),
+  }
+
+  function checkScope(target: { platform?: string; keyword?: string }): CheckScope {
+    const rows = data!.keywords.filter(
+      (row) =>
+        enabledPlatforms[row.platform] &&
+        (!target.platform || row.platform === target.platform) &&
+        (!target.keyword || row.keyword_fold === target.keyword)
+    )
+    const count = (platform: string) => rows.filter((row) => row.platform === platform).length
+    return {
+      facebookKeywords: count('facebook'),
+      instagramKeywords: count('instagram'),
+      youtubeKeywords: count('youtube'),
+    }
+  }
 
   function saveBudget(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -455,8 +526,8 @@ function SocialAdminPage() {
             Sosial monitorinq
           </h1>
           <p className='text-muted-foreground'>
-            Facebook və Instagram axtarışı, yoxlama tezliyi və aylıq xərc
-            limiti.
+            Facebook, Instagram və YouTube axtarışı, yoxlama tezliyi və aylıq
+            xərc limiti.
           </p>
         </div>
         <button
@@ -510,6 +581,13 @@ function SocialAdminPage() {
             checked={Boolean(settings?.instagram_enabled)}
             disabled={disabled}
             onChange={(next) => mutation.mutate({ instagram_enabled: next })}
+          />
+          <PlatformSwitch
+            label='YouTube'
+            hint='Rəsmi YouTube Data API, pulsuz gündəlik kvota'
+            checked={Boolean(settings?.youtube_enabled)}
+            disabled={disabled}
+            onChange={(next) => mutation.mutate({ youtube_enabled: next })}
           />
           <PlatformSwitch
             label='Instagram səhifələri'
@@ -675,6 +753,45 @@ function SocialAdminPage() {
         </div>
       </section>
 
+      <section className='grid content-start gap-4 rounded-lg border bg-card p-4 md:p-5'>
+        <div>
+          <h2 className='text-lg font-semibold'>YouTube kvotası</h2>
+          <p className='text-sm text-muted-foreground'>
+            YouTube Data API pulsuzdur, amma gündə 10 000 vahid verir. Bir açar söz
+            axtarışı 100 vahiddir. Kvota Sakit okean vaxtı ilə gecə yarısı (Bakı
+            ilə 11:00 və ya 12:00) sıfırlanır. Bu gün:{' '}
+            {data.heartbeat?.youtube_units_today ?? 0} / {youtubeQuota} vahid.
+          </p>
+        </div>
+        <div className='grid gap-4 md:grid-cols-2'>
+          <NumberSetting
+            name='youtube_daily_quota'
+            label='Gündəlik kvota limiti (vahid)'
+            hint='Bu qədər vahid xərclənəndən sonra axtarış növbəti günə qədər dayanır. Google limiti 10 000-dir.'
+            value={settings?.youtube_daily_quota ?? 9000}
+            min={100}
+            max={1000000}
+            step={100}
+            disabled={disabled}
+            onSave={(value) =>
+              value != null && mutation.mutate({ youtube_daily_quota: value })
+            }
+          />
+          <NumberSetting
+            name='youtube_min_interval_minutes'
+            label='YouTube minimum yoxlama intervalı (dəq)'
+            hint='Plan tezliyi nə olursa olsun, bir söz bundan tez axtarılmır.'
+            value={settings?.youtube_min_interval_minutes ?? 360}
+            min={10}
+            max={10080}
+            disabled={disabled}
+            onSave={(value) =>
+              value != null && mutation.mutate({ youtube_min_interval_minutes: value })
+            }
+          />
+        </div>
+      </section>
+
       <section className='rounded-lg border bg-card p-4 md:p-5'>
         <div className='flex flex-wrap items-start justify-between gap-3'>
           <div>
@@ -686,7 +803,7 @@ function SocialAdminPage() {
           </div>
           <button
             type='button'
-            onClick={() => checkMutation.mutate({})}
+            onClick={() => setPendingCheck({})}
             disabled={checkMutation.isPending || data.keywords.length === 0}
             className='inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60'
           >
@@ -766,7 +883,9 @@ function SocialAdminPage() {
                   return (
                     <Fragment key={`${row.platform}:${row.keyword_fold}`}>
                       <tr className='border-t align-top'>
-                        <td className='py-2 pr-3 capitalize'>{row.platform}</td>
+                        <td className='py-2 pr-3'>
+                          {PLATFORM_LABELS[row.platform] ?? row.platform}
+                        </td>
                         <td className='py-2 pr-3 wrap-anywhere'>
                           {row.keyword_fold}
                         </td>
@@ -802,7 +921,7 @@ function SocialAdminPage() {
                           <button
                             type='button'
                             onClick={() =>
-                              checkMutation.mutate({
+                              setPendingCheck({
                                 platform: row.platform,
                                 keyword: row.keyword_fold,
                               })
@@ -863,6 +982,27 @@ function SocialAdminPage() {
       <WatchedAccounts
         instagramEnabled={Boolean(settings?.instagram_accounts_enabled)}
         telegramEnabled={Boolean(settings?.telegram_channels_enabled)}
+        budgets={checkBudgets}
+      />
+
+      <CheckCostDialog
+        open={pendingCheck !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingCheck(null)
+        }}
+        title={
+          pendingCheck?.keyword
+            ? `«${pendingCheck.keyword}» indi yoxlansın?`
+            : 'Bütün açar sözlər indi yoxlansın?'
+        }
+        scope={pendingCheck ? checkScope(pendingCheck) : {}}
+        fbMaxPostsPerQuery={fbMaxPosts}
+        budgets={checkBudgets}
+        isLoading={checkMutation.isPending}
+        onConfirm={() => {
+          if (pendingCheck) checkMutation.mutate(pendingCheck)
+          setPendingCheck(null)
+        }}
       />
     </div>
   )

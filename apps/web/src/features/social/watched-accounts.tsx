@@ -13,6 +13,7 @@ import {
   watchedAccountUrl,
   type WatchedPlatform,
 } from './watched-accounts-model'
+import { CheckCostDialog, type CheckBudgets } from './check-cost-dialog'
 
 const watchedQueryKey = ['admin', 'social', 'watched'] as const
 
@@ -77,9 +78,11 @@ function errorText(error: string | null) {
 export function WatchedAccounts({
   instagramEnabled,
   telegramEnabled,
+  budgets,
 }: {
   instagramEnabled: boolean
   telegramEnabled: boolean
+  budgets: CheckBudgets
 }) {
   const queryClient = useQueryClient()
   const { data, isLoading, error } = useQuery({
@@ -137,6 +140,20 @@ export function WatchedAccounts({
     onSettled: invalidate,
   })
 
+  // Reading Instagram pages costs SocialFetch credits, so it asks first;
+  // Telegram is free and runs at once.
+  const [pendingCheck, setPendingCheck] = useState<{ id?: string; pages: number } | null>(null)
+  function requestCheck(target: { id?: string }) {
+    const pages = (data?.accounts ?? []).filter(
+      (account) =>
+        account.platform === 'instagram' &&
+        account.active &&
+        (!target.id || account.id === target.id)
+    ).length
+    if (instagramEnabled && pages > 0) setPendingCheck({ ...target, pages })
+    else checkMutation.mutate(target)
+  }
+
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const normalized = normalizeWatchedHandle(handle)
@@ -189,7 +206,7 @@ export function WatchedAccounts({
         </div>
         <button
           type='button'
-          onClick={() => checkMutation.mutate({})}
+          onClick={() => requestCheck({})}
           disabled={checkMutation.isPending || !data?.accounts.length}
           className='inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60'
         >
@@ -321,7 +338,7 @@ export function WatchedAccounts({
                       <div className='flex justify-end gap-1'>
                         <button
                           type='button'
-                          onClick={() => checkMutation.mutate({ id: account.id })}
+                          onClick={() => requestCheck({ id: account.id })}
                           disabled={checkMutation.isPending || !account.active}
                           className='rounded-md border px-2 py-1 text-xs font-medium whitespace-nowrap hover:bg-muted disabled:opacity-60'
                         >
@@ -362,6 +379,22 @@ export function WatchedAccounts({
           </table>
         </div>
       ) : null}
+
+      <CheckCostDialog
+        open={pendingCheck !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingCheck(null)
+        }}
+        title={pendingCheck?.id ? 'Bu səhifə indi oxunsun?' : 'Bütün səhifələr indi oxunsun?'}
+        scope={{ instagramPages: pendingCheck?.pages ?? 0 }}
+        fbMaxPostsPerQuery={1}
+        budgets={budgets}
+        isLoading={checkMutation.isPending}
+        onConfirm={() => {
+          if (pendingCheck) checkMutation.mutate({ id: pendingCheck.id })
+          setPendingCheck(null)
+        }}
+      />
     </section>
   )
 }

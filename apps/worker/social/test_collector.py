@@ -646,3 +646,172 @@ def test_custom_offer_marks_shared_keyword(col):
     plans = [{"id": PLAN_PRO, "limits": {"social_interval_minutes": 1440}}]
     target = col.keyword_intervals(rows, profiles, plans, 360)["socar"]
     assert target == {"keyword": "SOCAR", "interval": 30, "custom": True}
+
+
+# YouTube and plan networks -------------------------------------------------------------
+
+PLAN_BUSINESS = "plan-business"
+YT_SETTINGS = {"facebook_enabled": False, "instagram_enabled": False, "youtube_enabled": True,
+               "default_interval_minutes": 360, "monthly_budget_usd": 0}
+
+
+def yt_item(video_id, title, hours_ago, description="", channel="Kanal"):
+    return {"id": {"kind": "youtube#video", "videoId": video_id},
+            "snippet": {"title": title, "description": description, "channelTitle": channel,
+                        "publishedAt": (NOW - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")}}
+
+
+def yt_routes(settings, rows, profiles, plans, items=(), quota_units=None, search=None):
+    routes = base_routes(settings, rows)
+    routes[("GET", "user_profiles")] = lambda kw: FakeResponse(
+        200, [] if kw["params"].get("status") == "neq.active" else profiles)
+    routes[("GET", "subscription_plans")] = FakeResponse(200, plans)
+    routes[("GET", "sources")] = FakeResponse(200, [{"id": "src-yt", "base_url": "https://www.youtube.com"}])
+    routes[("GET", "bot_runtime_state")] = lambda kw: FakeResponse(
+        200, [{"value": {"units": quota_units}}] if quota_units is not None and kw["params"]["key"].startswith("eq.youtube_quota_") else [])
+    routes[("GET", "search")] = search or FakeResponse(200, {"items": list(items)})
+    return routes
+
+
+def yt_profiles():
+    return [{"user_id": USER_A, "plan_id": PLAN_BUSINESS, "social_interval_minutes": None, "telegram_chat_id": "777"},
+            {"user_id": USER_B, "plan_id": PLAN_PRO, "social_interval_minutes": None, "telegram_chat_id": "888"}]
+
+
+YT_PLANS = [{"id": PLAN_BUSINESS, "limits": {"social_platforms": ["facebook", "instagram", "youtube"]}},
+            {"id": PLAN_PRO, "limits": {}}]
+
+
+def test_youtube_searches_new_videos_for_plans_with_youtube(col):
+    col.YOUTUBE_API_KEY = "yt-key"
+    rows = [keyword_row("Kapital Bank", USER_A), keyword_row("Kapital Bank", USER_B, chat="888"),
+            keyword_row("SOCAR", USER_B, chat="888")]
+    stored = []
+
+    def insert_item(kwargs):
+        stored.append(kwargs["json"])
+        return FakeResponse(201, [{"id": "item-yt"}])
+
+    items = [yt_item("v1", "Kapital Bank&#39;ın yeni kartı", 3), yt_item("v2", "Futbol icmalı", 2),
+             yt_item("v3", "Kapital Bank köhnə video", 60)]
+    fake = use(col, {**yt_routes(YT_SETTINGS, rows, yt_profiles(), YT_PLANS, items),
+                     ("POST", "monitored_items"): insert_item})
+    col.run_tick(NOW)
+
+    # SOCAR belongs only to a plan without YouTube: not searched.
+    calls = fake.find("GET", "search")
+    assert len(calls) == 1
+    params = calls[0]["params"]
+    assert params["q"] == "Kapital Bank" and params["type"] == "video" and params["order"] == "date"
+    assert params["part"] == "snippet" and params["regionCode"] == "AZ" and params["relevanceLanguage"] == "az"
+    assert params["maxResults"] == 10 and params["publishedAfter"] == "2026-10-18T09:00:00Z"
+    assert calls[0]["headers"]["X-goog-api-key"] == "yt-key" and "key" not in params
+
+    assert len(stored) == 1
+    assert stored[0]["url"] == "https://www.youtube.com/watch?v=v1"
+    assert stored[0]["item_hash"] == "youtube:v1" and stored[0]["source_id"] == "src-yt"
+    assert stored[0]["title"] == "Kanal: Kapital Bank'ın yeni kartı"
+    # Only the owner whose plan includes YouTube is alerted.
+    sends = fake.find("POST", "sendMessage")
+    assert [s["data"]["chat_id"] for s in sends] == ["777"] and "YouTube" in sends[0]["data"]["text"]
+
+    stats = fake.find("POST", "social_keyword_state")[0]["json"][0]
+    assert stats["platform"] == "youtube" and stats["keyword_fold"] == "kapital bank"
+    assert {k: stats["last_stats"][k] for k in ("raw", "stored", "no_match", "too_old")} == {
+        "raw": 3, "stored": 1, "no_match": 1, "too_old": 1}
+    quota = [c["json"] for c in fake.find("POST", "bot_runtime_state") if c["json"]["key"].startswith("youtube_quota_")]
+    assert quota == [{"key": "youtube_quota_2026-10-20", "value": {"units": 100}, "updated_at": quota[0]["updated_at"]}]
+    beat = [c["json"]["value"] for c in fake.find("POST", "bot_runtime_state") if c["json"]["key"] == "social_heartbeat"][0]
+    assert beat["youtube_key"] is True and beat["youtube_keywords"] == 1 and beat["youtube_daily_quota"] == 9000
+
+
+def test_youtube_stops_when_daily_quota_is_used(col):
+    col.YOUTUBE_API_KEY = "yt-key"
+    fake = use(col, yt_routes({**YT_SETTINGS, "youtube_daily_quota": 1000}, [keyword_row("Kapital Bank", USER_A)],
+                              yt_profiles(), YT_PLANS, quota_units=950))
+    col.run_tick(NOW)
+    assert not fake.find("GET", "search")
+    assert not fake.find("POST", "social_keyword_state")
+
+
+def test_youtube_quota_exceeded_marks_the_day_used(col):
+    col.YOUTUBE_API_KEY = "yt-key"
+    error = FakeResponse(403, {"error": {"errors": [{"reason": "quotaExceeded"}]}})
+    fake = use(col, yt_routes(YT_SETTINGS, [keyword_row("Kapital Bank", USER_A), keyword_row("SOCAR", USER_A)],
+                              yt_profiles(), YT_PLANS, search=error))
+    col.run_tick(NOW)
+    assert len(fake.find("GET", "search")) == 1
+    quota = [c["json"]["value"] for c in fake.find("POST", "bot_runtime_state") if c["json"]["key"].startswith("youtube_quota_")]
+    assert quota == [{"units": 9000}]
+    assert fake.find("POST", "social_keyword_state")[0]["json"][0]["last_error"] == "youtube:quotaExceeded:403"
+
+
+def test_youtube_without_key_or_switch_makes_no_calls(col):
+    col.YOUTUBE_API_KEY = ""
+    fake = use(col, {("GET", "social_settings"): FakeResponse(200, [YT_SETTINGS]),
+                     ("GET", "bot_runtime_state"): FakeResponse(200, []),
+                     ("POST", "bot_runtime_state"): FakeResponse(201, None)})
+    col.run_tick(NOW)
+    assert [c["name"] for c in fake.calls] == ["social_settings", "bot_runtime_state", "bot_runtime_state"]
+    beat = fake.find("POST", "bot_runtime_state")[0]["json"]["value"]
+    assert beat["youtube_enabled"] is True and beat["youtube_key"] is False and beat["youtube_units_today"] == 0
+
+
+def test_youtube_floor_binds_custom_offers_too(col):
+    targets = {"bdu": {"keyword": "BDU", "interval": 30, "custom": True}}
+    state = {"bdu": {"last_checked_at": (NOW - timedelta(minutes=100)).isoformat()}}
+    assert col.due_keywords("youtube", targets, NOW, state, {}) == []
+    assert col.due_keywords("youtube", targets, NOW, state, {"youtube_min_interval_minutes": 60}) == ["bdu"]
+
+
+def test_youtube_quota_day_is_pacific(col):
+    # 06:00 UTC on 21 Oct is still 20 Oct in California.
+    assert col.youtube_quota_key(datetime(2026, 10, 21, 6, 0, tzinfo=timezone.utc)) == "youtube_quota_2026-10-20"
+    assert col.youtube_quota_key(datetime(2026, 10, 21, 8, 0, tzinfo=timezone.utc)) == "youtube_quota_2026-10-21"
+
+
+def test_youtube_posts_skip_channels_and_playlists(col):
+    data = {"items": [yt_item("v1", "A &amp; B", 1, description="Təsvir"),
+                      {"id": {"kind": "youtube#channel", "channelId": "c1"}, "snippet": {"title": "Kanal"}}]}
+    posts = col.youtube_posts(data, "a")
+    assert len(posts) == 1
+    assert posts[0]["text"] == "A & B Təsvir" and posts[0]["published_at"] == NOW - timedelta(hours=1)
+
+
+def test_plan_networks_gate_keywords(col):
+    rows = [keyword_row("BDU", USER_A), keyword_row("AZAL", USER_B), keyword_row("SOCAR", "user-no-profile")]
+    profiles = [{"user_id": USER_A, "plan_id": PLAN_BUSINESS}, {"user_id": USER_B, "plan_id": "plan-yt-only"}]
+    plans = [YT_PLANS[0], {"id": "plan-yt-only", "limits": {"social_platforms": ["youtube"]}}]
+    keywords = lambda platform: [r["keyword"] for r in col.keywords_for_platform(platform, rows, profiles, plans)]
+    # Unset (no profile, or no plan) = Facebook + Instagram, as before.
+    assert keywords("facebook") == ["BDU", "SOCAR"]
+    assert keywords("instagram") == ["BDU", "SOCAR"]
+    assert keywords("youtube") == ["BDU", "AZAL"]
+
+
+# Age guard: nothing older than SOCIAL_MAX_AGE_HOURS is stored, on any platform -----------
+
+
+@pytest.mark.parametrize("platform", ["facebook", "instagram", "telegram", "youtube"])
+def test_old_post_is_never_stored(col, platform):
+    fake = use(col, {})
+    post = {"keyword_fold": "kapital bank", "external_id": "x1", "url": "https://example.com/x1",
+            "text": "Kapital Bank xəbəri", "author": "A",
+            "published_at": NOW - timedelta(hours=col.SOCIAL_MAX_AGE_HOURS, minutes=1)}
+    cache = [keyword_row("Kapital Bank", USER_A)]
+    assert col.handle_post(platform, "src", post, cache, NOW) == ("too_old", 0, 0)
+    assert fake.calls == []
+    fresh = {**post, "published_at": NOW - timedelta(hours=col.SOCIAL_MAX_AGE_HOURS - 1)}
+    assert col.handle_post(platform, "src", fresh, [], NOW)[0] == "no_match"
+
+
+def test_old_instagram_hashtag_post_is_not_stored(col):
+    settings = {"facebook_enabled": False, "instagram_enabled": True, "default_interval_minutes": 360, "monthly_budget_usd": None}
+    media = {"meta": {"creditsCharged": 1}, "data": {"lookupStatus": "found", "media": [
+        {"id": "old", "url": "https://www.instagram.com/p/old", "caption": "Kapital Bank",
+         "createdAt": (NOW - timedelta(hours=49)).isoformat(), "owner": {"handle": "baku"}}]}}
+    fake = use(col, {**base_routes(settings, [keyword_row("Kapital Bank", USER_A)]),
+                     ("GET", "media"): FakeResponse(200, media)})
+    col.run_tick(NOW)
+    assert not fake.find("POST", "monitored_items")
+    assert fake.find("POST", "social_keyword_state")[0]["json"][0]["last_stats"]["too_old"] == 1

@@ -1,5 +1,5 @@
-"""Facebook (Apify) and Instagram (SocialFetch) keyword collector, plus
-watched Instagram pages and public Telegram channels.
+"""Facebook (Apify), Instagram (SocialFetch) and YouTube (YouTube Data API v3)
+keyword collector, plus watched Instagram pages and public Telegram channels.
 
 Every tick: read social_settings, collect the active monitor keywords, and
 search each unique folded keyword once when it is due. A keyword is due when
@@ -15,14 +15,22 @@ matched here, once per account for every customer: Instagram pages find posts
 without a hashtag (only keywords picked for FB/IG match, like hashtag results);
 Telegram channels come from the free t.me/s preview and count as a news source,
 so every active keyword matches.
+
+A plan's limits.social_platforms lists the networks its customers' keywords are
+searched on; unset means Facebook and Instagram. YouTube is free but has a daily
+quota (10 000 units, one search = 100), counted per Pacific day.
+
+Posts older than SOCIAL_MAX_AGE_HOURS are never stored, on any platform.
 """
 
+import html
 import os
 import re
 import sys
 import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "rss"))
 
@@ -35,6 +43,11 @@ SOCIALFETCH_API_KEY = os.getenv("SOCIALFETCH_API_KEY", "").strip()
 APIFY_BASE = "https://api.apify.com/v2"
 APIFY_FB_ACTOR = "topapi~facebook-search-posts-scraper"
 SOCIALFETCH_BASE = "https://api.socialfetch.dev"
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
+YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
+# search.list costs 100 quota units; the quota resets at midnight Pacific time.
+YOUTUBE_UNITS_PER_SEARCH = 100
+PACIFIC_TZ = ZoneInfo("America/Los_Angeles")
 
 SOCIAL_TICK_SECONDS = int(os.getenv("SOCIAL_TICK_SECONDS", "300"))
 # Posts per keyword per Facebook run: admin setting fb_max_posts_per_query, unless this env is set.
@@ -56,13 +69,18 @@ FB_DEFAULTS = {
     "fb_max_posts_per_query": 10,
     "fb_daily_posts_per_keyword": 30,
 }
+# Used until migration 20261023000005 adds the YouTube settings.
+YOUTUBE_DEFAULTS = {"youtube_daily_quota": 9000, "youtube_min_interval_minutes": 360}
+# Networks a plan searches when its limits.social_platforms is unset.
+DEFAULT_SOCIAL_PLATFORMS = ("facebook", "instagram")
 
 PLATFORM_BASE_URLS = {
     "facebook": "https://www.facebook.com",
     "instagram": "https://www.instagram.com",
     "telegram": "https://t.me",
+    "youtube": "https://www.youtube.com",
 }
-PLATFORM_LABELS = {"facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram"}
+PLATFORM_LABELS = {"facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "youtube": "YouTube"}
 # Minutes between reads of a watched account when the admin set none.
 ACCOUNT_DEFAULT_INTERVALS = {"instagram": 180, "telegram": 10}
 HTTP_TIMEOUT = 90
@@ -130,8 +148,29 @@ def fb_max_posts_per_query(settings):
     return max(1, min(50, int(fb_setting(settings, "fb_max_posts_per_query"))))
 
 
+def youtube_setting(settings, key):
+    value = settings.get(key)
+    return YOUTUBE_DEFAULTS[key] if value is None else value
+
+
 def baku_day(now):
     return now.astimezone(sm.BAKU_TZ).strftime("%Y-%m-%d")
+
+
+def plan_platforms(plan):
+    value = (plan.get("limits") or {}).get("social_platforms") if plan else None
+    return set(value) if isinstance(value, list) else set(DEFAULT_SOCIAL_PLATFORMS)
+
+
+def keywords_for_platform(platform, keyword_rows, profiles, plans):
+    """Keyword rows whose owner's plan searches this network (limits.social_platforms).
+    Owners without a profile or plan get the default networks."""
+    by_plan = {plan.get("id"): plan for plan in plans}
+    user_plans = {profile.get("user_id"): by_plan.get(profile.get("plan_id")) for profile in profiles}
+    return [
+        row for row in keyword_rows
+        if platform in plan_platforms(user_plans.get((row.get("user_monitors") or {}).get("user_id")))
+    ]
 
 
 def keyword_intervals(keyword_rows, profiles, plans, default_interval):
@@ -183,14 +222,20 @@ def due_keywords(platform, targets, now, state=None, settings=None):
     settings = settings or {}
     # Facebook bills per delivered post, so plan intervals never go below the
     # admin floor; only a customer's own paid override ("Fərdi təklif") may.
-    floor = int(fb_setting(settings, "fb_min_interval_minutes")) if platform == "facebook" else 0
+    # YouTube's daily quota is a hard limit, so its floor binds everyone.
+    floor = 0
+    if platform == "facebook":
+        floor = int(fb_setting(settings, "fb_min_interval_minutes"))
+    elif platform == "youtube":
+        floor = int(youtube_setting(settings, "youtube_min_interval_minutes"))
     daily_cap = fb_setting(settings, "fb_daily_posts_per_keyword") if platform == "facebook" else None
     today = baku_day(now)
     due = []
     for folded, target in sorted(targets.items()):
         row = state.get(folded) or {}
         last = parse_time(row.get("last_checked_at"))
-        interval = target["interval"] if target.get("custom") else max(target["interval"], floor)
+        custom = target.get("custom") and platform != "youtube"
+        interval = target["interval"] if custom else max(target["interval"], floor)
         if last is not None and now - last < timedelta(minutes=interval):
             continue
         stats = row.get("last_stats") or {}
@@ -302,6 +347,32 @@ def budget_exhausted(settings, now, platform=None):
         if platform_budget not in (None, "") and float(usage.get(f"{platform}_usd") or 0) >= float(platform_budget):
             return True
     return False
+
+
+# YouTube daily quota ----------------------------------------------------------------
+
+
+def pacific_day(now):
+    return now.astimezone(PACIFIC_TZ).strftime("%Y-%m-%d")
+
+
+def youtube_quota_key(now):
+    return f"youtube_quota_{pacific_day(now)}"
+
+
+def youtube_units_used(now):
+    ok, value = sm.load_runtime_state(youtube_quota_key(now))
+    return int(value.get("units") or 0) if ok and isinstance(value, dict) else 0
+
+
+def add_youtube_units(now, units, exhausted_at=None):
+    used = youtube_units_used(now) + units if exhausted_at is None else exhausted_at
+    sm.save_runtime_state(youtube_quota_key(now), {"units": used})
+    return used
+
+
+def youtube_quota_left(settings, now):
+    return int(youtube_setting(settings, "youtube_daily_quota")) - youtube_units_used(now)
 
 
 # Providers ----------------------------------------------------------------------------
@@ -442,6 +513,55 @@ def socialfetch_instagram_profile(handle):
         return [], usd, f"profile:{status}"
     # Pinned posts can be old; undated ones are not guessed (counted as no_date).
     return socialfetch_media_posts(body), usd, None
+
+
+def youtube_search(targets, folded, now):
+    """Newest videos for one keyword (search.list, 100 units). Returns (posts, usd, error).
+    The key goes in a header so it never appears in a logged URL."""
+    response = requests.get(
+        YOUTUBE_SEARCH_URL,
+        params={
+            "part": "snippet",
+            "q": targets[folded]["keyword"],
+            "type": "video",
+            "order": "date",
+            "publishedAfter": (now - timedelta(hours=SOCIAL_MAX_AGE_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "regionCode": "AZ",
+            "relevanceLanguage": "az",
+            "maxResults": 10,
+        },
+        headers={"X-goog-api-key": YOUTUBE_API_KEY, "Accept": "application/json"},
+        timeout=HTTP_TIMEOUT,
+    )
+    if response.status_code != 200:
+        try:
+            errors = ((response.json() or {}).get("error") or {}).get("errors") or [{}]
+            reason = errors[0].get("reason") or "error"
+        except (ValueError, AttributeError):
+            reason = "error"
+        return [], 0.0, f"youtube:{reason}:{response.status_code}"
+    return youtube_posts(response.json() or {}, folded), 0.0, None
+
+
+def youtube_posts(data, folded):
+    posts = []
+    for item in data.get("items") or []:
+        video_id = (item.get("id") or {}).get("videoId")
+        if not video_id:
+            continue
+        snippet = item.get("snippet") or {}
+        # Titles and descriptions come HTML-escaped (&quot;, &#39;).
+        title = html.unescape(snippet.get("title") or "")
+        description = html.unescape(snippet.get("description") or "")
+        posts.append({
+            "keyword_fold": folded,
+            "external_id": video_id,
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+            "text": f"{title} {description}".strip(),
+            "author": html.unescape(snippet.get("channelTitle") or ""),
+            "published_at": parse_time(snippet.get("publishedAt")),
+        })
+    return posts
 
 
 def parse_telegram_preview(page_html, channel):
@@ -628,7 +748,8 @@ def sample(post):
 
 
 def collect_platform(platform, settings, targets, source_id, keyword_cache, now):
-    if budget_exhausted(settings, now, platform):
+    # YouTube costs no money, only its daily quota.
+    if platform != "youtube" and budget_exhausted(settings, now, platform):
         print(f"{platform}: aylıq büdcə limiti dolub, axtarış dayandırıldı.", flush=True)
         return
     state = load_keyword_state(platform)
@@ -641,6 +762,16 @@ def collect_platform(platform, settings, targets, source_id, keyword_cache, now)
     for batch in batches:
         if platform == "facebook":
             posts, usd, error = apify_facebook_search(targets, batch, settings)
+        elif platform == "youtube":
+            if youtube_quota_left(settings, now) < YOUTUBE_UNITS_PER_SEARCH:
+                print("youtube: gündəlik kvota dolub, qalan açar sözlər sabaha (Sakit okean vaxtı) qaldı.", flush=True)
+                return
+            posts, usd, error = youtube_search(targets, batch[0], now)
+            if error and "quotaExceeded" in error:
+                # Google says the day's quota is gone: stop until it resets.
+                add_youtube_units(now, 0, exhausted_at=int(youtube_setting(settings, "youtube_daily_quota")))
+            else:
+                add_youtube_units(now, YOUTUBE_UNITS_PER_SEARCH)
         else:
             if budget_exhausted(settings, now, platform):
                 print("instagram: aylıq büdcə limiti dolub, qalan açar sözlər keçildi.", flush=True)
@@ -662,7 +793,8 @@ def collect_platform(platform, settings, targets, source_id, keyword_cache, now)
                 keyword_stats["alerted"] += alerted
         for folded in batch:
             keyword_stats = stats.setdefault(folded, new_stats())
-            # Facebook bills per delivered post; Instagram per call (one keyword per call).
+            # Facebook bills per delivered post; Instagram per call (one keyword per call);
+            # YouTube is free.
             if platform == "facebook":
                 keyword_usd = keyword_stats["raw"] * APIFY_FB_USD_PER_POST
             else:
@@ -670,8 +802,9 @@ def collect_platform(platform, settings, targets, source_id, keyword_cache, now)
             carry_totals(keyword_stats, (state.get(folded) or {}).get("last_stats"), now, keyword_usd)
         record_keyword_state(platform, batch, stats, error)
         print(f"{platform}: {len(batch)} söz | {stats_line(stats)} | xəta={error or '-'}", flush=True)
-        if error and error.endswith((":401", ":402", ":403")):
-            print(f"{platform}: açar rədd edildi və ya kredit bitdi, bu dövr dayandırıldı.", flush=True)
+        # YouTube answers a bad key with 400 keyInvalid.
+        if error and (error.endswith((":401", ":402", ":403")) or "keyInvalid" in error):
+            print(f"{platform}: açar rədd edildi və ya kredit/kvota bitdi, bu dövr dayandırıldı.", flush=True)
             return
 
 
@@ -754,7 +887,7 @@ def collect_accounts(platform, settings, source_id, keyword_cache, now):
 
 def write_heartbeat(settings, now, **extra):
     """Admin page shows whether the social service runs at all. Never secrets."""
-    sm.save_runtime_state("social_heartbeat", {
+    beat = {
         "at": now.isoformat(),
         "facebook_enabled": bool(settings.get("facebook_enabled")),
         "instagram_enabled": bool(settings.get("instagram_enabled")),
@@ -762,8 +895,15 @@ def write_heartbeat(settings, now, **extra):
         "telegram_channels_enabled": bool(settings.get("telegram_channels_enabled")),
         "apify_key": bool(APIFY_TOKEN),
         "socialfetch_key": bool(SOCIALFETCH_API_KEY),
-        **extra,
-    })
+    }
+    if settings.get("youtube_enabled"):
+        beat.update({
+            "youtube_enabled": True,
+            "youtube_key": bool(YOUTUBE_API_KEY),
+            "youtube_units_today": youtube_units_used(now),
+            "youtube_daily_quota": int(youtube_setting(settings, "youtube_daily_quota")),
+        })
+    sm.save_runtime_state("social_heartbeat", {**beat, **extra})
 
 
 def run_tick(now=None):
@@ -772,6 +912,7 @@ def run_tick(now=None):
     enabled = {
         "facebook": bool(settings.get("facebook_enabled")) and bool(APIFY_TOKEN),
         "instagram": bool(settings.get("instagram_enabled")) and bool(SOCIALFETCH_API_KEY),
+        "youtube": bool(settings.get("youtube_enabled")) and bool(YOUTUBE_API_KEY),
     }
     instagram_pages = bool(settings.get("instagram_accounts_enabled")) and bool(SOCIALFETCH_API_KEY)
     telegram_channels = bool(settings.get("telegram_channels_enabled"))
@@ -788,37 +929,48 @@ def run_tick(now=None):
             enabled = {platform: False for platform in enabled}
             instagram_pages = False
         else:
-            # Only keywords the customer chose for FB/IG are searched, and only
-            # their owners are alerted about FB/IG posts.
+            # Only keywords the customer chose for social search are searched,
+            # and only their owners are alerted about social posts.
             keyword_cache = [row for row in sm.load_active_monitor_keywords() or [] if row.get("id") in allowed]
 
+    # Each network searches (and alerts) only the keywords of plans that include it.
+    platform_caches = {}
     targets = {}
-    if any(enabled.values()) and keyword_cache:
+    if keyword_cache:
         profiles = rest_get("user_profiles", {"select": "user_id,plan_id,social_interval_minutes"})
         plans = rest_get("subscription_plans", {"select": "id,limits"})
-        targets = keyword_intervals(keyword_cache, profiles, plans, int(settings.get("default_interval_minutes") or 360))
-        extra["keywords"] = len(targets)
+        default_interval = int(settings.get("default_interval_minutes") or 360)
+        for platform in ("facebook", "instagram", "youtube"):
+            platform_caches[platform] = keywords_for_platform(platform, keyword_cache, profiles, plans)
+            if enabled[platform]:
+                targets[platform] = keyword_intervals(platform_caches[platform], profiles, plans, default_interval)
+        if enabled["facebook"] or enabled["instagram"]:
+            extra["keywords"] = len(
+                set(keyword_intervals(platform_caches["facebook"], profiles, plans, default_interval))
+                | set(keyword_intervals(platform_caches["instagram"], profiles, plans, default_interval))
+            )
+        if enabled["youtube"]:
+            extra["youtube_keywords"] = len(targets["youtube"])
     write_heartbeat(settings, now, **extra)
-    if not targets and not (instagram_pages and keyword_cache) and not telegram_channels:
+    instagram_cache = platform_caches.get("instagram") or []
+    if not any(targets.values()) and not (instagram_pages and instagram_cache) and not telegram_channels:
         return
 
     source_ids = platform_source_ids()
-    jobs = []
-    if targets:
-        jobs += [(platform, "keywords") for platform, is_enabled in enabled.items() if is_enabled]
-    if instagram_pages and keyword_cache:
+    jobs = [(platform, "keywords") for platform, platform_targets in targets.items() if platform_targets]
+    if instagram_pages and instagram_cache:
         jobs.append(("instagram", "accounts"))
     if telegram_channels:
         jobs.append(("telegram", "accounts"))
     for platform, kind in jobs:
         if not source_ids.get(platform):
-            print(f"{platform}: sources sətri yoxdur (migration 20261020000001 / 20261023000003).", flush=True)
+            print(f"{platform}: sources sətri yoxdur (migration 20261020000001 / 20261023000003 / 20261023000005).", flush=True)
             continue
         try:
             if kind == "keywords":
-                collect_platform(platform, settings, targets, source_ids[platform], keyword_cache, now)
+                collect_platform(platform, settings, targets[platform], source_ids[platform], platform_caches[platform], now)
             elif platform == "instagram":
-                collect_accounts(platform, settings, source_ids[platform], keyword_cache, now)
+                collect_accounts(platform, settings, source_ids[platform], instagram_cache, now)
             else:
                 # Telegram channels are a news source: every active keyword matches.
                 collect_accounts(platform, settings, source_ids[platform], sm.load_active_monitor_keywords() or [], now)

@@ -8,6 +8,7 @@ import {
   planKeywordLimit,
   planReportFrequencies,
   planSocialKeywordLimit,
+  planSocialPlatforms,
   planToFormValues,
   normalizePlanRow,
 } from './model'
@@ -170,6 +171,30 @@ describe('subscription plan model', () => {
     expect(
       buildPlanPayload({ ...emptyPlanForm, name: 'Pro', maxSocialKeywords: '2.5' }).error
     ).toContain('Sosial açar söz limiti')
+  })
+
+  it('stores the social platforms only when they differ from FB + IG', () => {
+    const business = buildPlanPayload({
+      ...emptyPlanForm,
+      name: 'Biznes',
+      socialPlatforms: ['youtube', 'facebook', 'instagram'],
+    }).data!
+    expect(business.limits).toEqual({
+      social_platforms: ['facebook', 'instagram', 'youtube'],
+    })
+    expect(planSocialPlatforms(business)).toEqual(['facebook', 'instagram', 'youtube'])
+    expect(
+      planToFormValues(normalizePlanRow({ ...business, id: 'p', is_active: true }))
+        .socialPlatforms
+    ).toEqual(['facebook', 'instagram', 'youtube'])
+
+    const standard = buildPlanPayload(
+      { ...emptyPlanForm, name: 'Pro' },
+      { social_platforms: ['facebook', 'instagram', 'youtube'] }
+    ).data!
+    expect(standard.limits).toEqual({})
+    expect(planSocialPlatforms({ limits: {} })).toEqual(['facebook', 'instagram'])
+    expect(planSocialPlatforms({ limits: { social_platforms: [] } })).toEqual([])
   })
 
   it('formats recurring and custom prices', () => {

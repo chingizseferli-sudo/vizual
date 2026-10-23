@@ -18,6 +18,8 @@ import {
   planSocialIntervalMinutes,
   REPORT_FREQUENCIES,
   REPORT_FREQUENCY_LABELS,
+  SOCIAL_PLATFORM_LABELS,
+  SOCIAL_PLATFORMS,
   planToFormValues,
   type PlanFormValues,
   type SubscriptionPlan,
@@ -575,6 +577,27 @@ function SubscriptionPlansPage() {
                 }
               />
               {REPORT_FREQUENCY_LABELS[frequency]}
+            </label>
+          ))}
+        </fieldset>
+
+        <fieldset className='mt-4 flex flex-wrap items-center gap-5'>
+          <legend className='mb-2 text-sm font-medium'>Sosial şəbəkə axtarışı</legend>
+          {SOCIAL_PLATFORMS.map((platform) => (
+            <label key={platform} className='flex items-center gap-2 text-sm'>
+              <input
+                type='checkbox'
+                checked={form.socialPlatforms.includes(platform)}
+                onChange={(event) =>
+                  updateForm(
+                    'socialPlatforms',
+                    event.target.checked
+                      ? [...form.socialPlatforms, platform]
+                      : form.socialPlatforms.filter((item) => item !== platform)
+                  )
+                }
+              />
+              {SOCIAL_PLATFORM_LABELS[platform]}
             </label>
           ))}
         </fieldset>

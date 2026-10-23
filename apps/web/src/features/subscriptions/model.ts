@@ -62,6 +62,7 @@ export type PlanFormValues = {
   features: string
   socialIntervalMinutes: string
   reportFrequencies: ReportFrequency[]
+  socialPlatforms: SocialPlatform[]
 }
 
 export type PlanWritePayload = {
@@ -109,6 +110,7 @@ export const emptyPlanForm: PlanFormValues = {
   features: '',
   socialIntervalMinutes: '',
   reportFrequencies: [],
+  socialPlatforms: ['facebook', 'instagram'],
 }
 
 export const REPORT_FREQUENCIES = ['daily', 'weekly', 'monthly'] as const
@@ -127,6 +129,25 @@ export function planReportFrequencies(
   const value = plan?.limits?.report_frequencies
   if (!Array.isArray(value)) return []
   return REPORT_FREQUENCIES.filter((frequency) => value.includes(frequency))
+}
+
+export const SOCIAL_PLATFORMS = ['facebook', 'instagram', 'youtube'] as const
+export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number]
+export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatform, string> = {
+  facebook: 'Facebook',
+  instagram: 'Instagram',
+  youtube: 'YouTube',
+}
+
+// Social networks the plan's keywords are searched on (limits.social_platforms);
+// the social collector reads it. Unset means Facebook and Instagram, as before
+// the limit existed.
+export function planSocialPlatforms(
+  plan: Pick<SubscriptionPlan, 'limits'> | undefined
+): SocialPlatform[] {
+  const value = plan?.limits?.social_platforms
+  if (!Array.isArray(value)) return ['facebook', 'instagram']
+  return SOCIAL_PLATFORMS.filter((platform) => value.includes(platform))
 }
 
 const SOCIAL_INTERVAL_MINUTES = [60, 120, 180, 360, 720, 1440]
@@ -306,6 +327,14 @@ export function buildPlanPayload(
   if (reportFrequencies.length) limits.report_frequencies = reportFrequencies
   delete limits.max_competitors
   if (maxCompetitors.value !== null) limits.max_competitors = maxCompetitors.value
+  const socialPlatforms = SOCIAL_PLATFORMS.filter((platform) =>
+    values.socialPlatforms.includes(platform)
+  )
+  delete limits.social_platforms
+  // Unset already means Facebook + Instagram.
+  if (socialPlatforms.join() !== 'facebook,instagram') {
+    limits.social_platforms = socialPlatforms
+  }
   delete limits.max_social_keywords
   if (maxSocialKeywords.value !== null) {
     limits.max_social_keywords = maxSocialKeywords.value
@@ -368,6 +397,7 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     features: plan.features.join('\n'),
     socialIntervalMinutes: String(planSocialIntervalMinutes(plan) ?? ''),
     reportFrequencies: planReportFrequencies(plan),
+    socialPlatforms: planSocialPlatforms(plan),
   }
 }
 
