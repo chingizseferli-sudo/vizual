@@ -1398,7 +1398,6 @@ TELEGRAM_CUSTOMER_COMMANDS = [
 ]
 TELEGRAM_ADMIN_COMMANDS = [
     ("stats", "Admin: ümumi statistika"),
-    ("errors", "Admin: xətalı mənbələr"),
     ("pause_all", "Admin: bütün bildirişləri dayandır"),
     ("resume_all", "Admin: bütün bildirişləri aç"),
 ]
@@ -1792,31 +1791,6 @@ def telegram_admin_stats():
     return "\n".join(lines)
 
 
-def telegram_admin_errors():
-    response = requests.get(
-        f"{SUPABASE_URL}/rest/v1/sources",
-        headers=supabase_headers(),
-        params={
-            "select": "name,consecutive_fail_count,last_error",
-            "status": "eq.active",
-            "consecutive_fail_count": "gte.3",
-            "order": "consecutive_fail_count.desc",
-            "limit": "15",
-        },
-        timeout=REQUEST_TIMEOUT,
-    )
-    if response.status_code != 200:
-        raise RuntimeError(f"sources:{response.status_code}:{response.text[:160]}")
-    rows = response.json() or []
-    if not rows:
-        return "Xətalı mənbə yoxdur."
-    lines = ["Ən çox uğursuz oxunan mənbələr:"]
-    for row in rows:
-        error = clean_text(row.get("last_error"))[:80] or "-"
-        lines.append(f"• {clean_text(row.get('name'))}: {row.get('consecutive_fail_count')} dəfə | {error}")
-    return "\n".join(lines)
-
-
 def set_global_pause(paused):
     response = requests.patch(
         f"{SUPABASE_URL}/rest/v1/bot_settings",
@@ -1836,7 +1810,6 @@ def set_global_pause(paused):
 
 TELEGRAM_ADMIN_HANDLERS = {
     "/stats": telegram_admin_stats,
-    "/errors": telegram_admin_errors,
     "/pause_all": lambda: set_global_pause(True),
     "/resume_all": lambda: set_global_pause(False),
 }

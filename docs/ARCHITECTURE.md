@@ -24,7 +24,7 @@ One Docker image; `WORKER` picks the process (see `start.sh`).
 
 ## Telegram bot
 - Linking: the profile page calls `create_telegram_link_token()` (random, single-use, 15 min) and opens `t.me/<bot>?start=<token>`; the `rss` worker redeems it from `telegram_link_tokens`. Raw `/start <user uuid>` is rejected unless `TELEGRAM_ALLOW_LEGACY_UUID_LINK=true`.
-- Commands: `/start <token>`, `/status`, `/keywords` (alias `/monitors`; keyword list, paused ones marked), `/pause` and `/resume` (this chat's alerts, link kept), `/stop` (unlinks the chat), `/help`. Admins (an active `admin_users` row whose profile has this chat) also get `/stats`, `/errors` (sources with 3+ failed reads), `/pause_all` and `/resume_all` (`bot_settings.notifications_paused`). Replies ignore the global pause.
+- Commands: `/start <token>`, `/status`, `/keywords` (alias `/monitors`; keyword list, paused ones marked), `/pause` and `/resume` (this chat's alerts, link kept), `/stop` (unlinks the chat), `/help`. Admins (an active `admin_users` row whose profile has this chat) also get `/stats`, `/pause_all` and `/resume_all` (`bot_settings.notifications_paused`). Replies ignore the global pause.
 - The `rss` service long-polls commands in its own thread, so replies don't wait for a news cycle. It fills Telegram's "/" menu with `setMyCommands` at start and hourly; admin commands are scoped to admin chats.
 - `/admin/telegram`: `bot_settings.notifications_paused` pauses customer alerts (worker re-reads every 60 s, skipped sends count as `telegram_disabled`); `bot_runtime_state` holds the `getUpdates` offset and heartbeat (`last_poll_at`, `last_error`, `last_send_ok_at`), with `telegram_offset.json` only as fallback before migration `20261019000002` is applied.
 
