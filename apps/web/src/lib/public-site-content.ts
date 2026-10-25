@@ -263,6 +263,7 @@ export const defaultPublicSiteContent: PublicSiteContent = {
         features: [
           t("100 açar söz"),
           t("Facebook və Instagram: 30 söz, gündə 2 dəfə"),
+          t("YouTube, X və LinkedIn: gündə 1 dəfə"),
           t("5 rəqib üzrə AI analizi"),
           t("Gündəlik, həftəlik və aylıq hesabat"),
         ],
