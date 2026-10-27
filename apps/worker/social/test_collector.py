@@ -318,6 +318,10 @@ def test_instagram_searches_each_keyword_hashtag(col):
     ("BDU", "ABDU şirkəti", False),
     ("DİM", "dimensional design", False),
     ("Bakı metrosu", "#bakımetrosu dayandı", True),
+    ("diplom", "diploma görə müraciət", True),
+    ("diplom", "Diplomat Bakıya gəldi", False),
+    ("rektor", "Rektordan açıqlama #rektor", True),
+    ("rektor", "İcraçı direktor dedi", False),
 ])
 def test_social_keyword_matcher(col, keyword, text, expected):
     assert col.social_keyword_matches(keyword, text) is expected
