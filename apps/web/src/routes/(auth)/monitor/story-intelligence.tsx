@@ -20,6 +20,7 @@ import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
 import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
 import { dateLocale, t } from '@/lib/i18n'
+import logoSvg from '../../../../public/images/vizual-logo.svg?raw'
 
 const COLLAPSED_ITEM_COUNT = 5
 const STORY_PAGE_SIZE = 1000
@@ -142,6 +143,9 @@ function safeHref(url: string) {
   return /^https?:\/\//i.test(url) ? escapeHtml(url) : '#'
 }
 
+// The export is one offline file, so the logo is embedded instead of linked.
+const LOGO_DATA_URI = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(logoSvg)}`
+
 function buildStoriesHtml(groups: StoryGroup[]) {
   const generatedAt = formatDate(new Date().toISOString())
   const sections = groups
@@ -180,9 +184,12 @@ function buildStoriesHtml(groups: StoryGroup[]) {
       *{box-sizing:border-box}
       body{margin:0;color:#172033;background:#f5f8ff;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
       .page{max-width:1100px;margin:0 auto;padding:32px 20px}
-      header{border-radius:18px;padding:24px;color:#fff;background:linear-gradient(135deg,#1463ff,#14b8a6)}
-      header h1{margin:0 0 6px;font-size:28px}
-      header p{margin:0;opacity:.9}
+      header{display:flex;align-items:center;gap:20px;flex-wrap:wrap;border:1px solid #dbe4f5;border-top:5px solid #1e63ff;border-radius:18px;padding:20px 24px;background:#fff}
+      header img{display:block;height:56px;width:auto}
+      header div{margin-left:auto;text-align:right}
+      header h1{margin:0 0 4px;font-size:24px;color:#071a44}
+      header p{margin:0;color:#5b6b86;font-size:14px}
+      footer{margin-top:22px;text-align:center;color:#5b6b86;font-size:12px}
       section{margin-top:22px;border:1px solid #dbe4f5;border-radius:16px;background:#fff;padding:20px}
       h2{margin:0;font-size:18px;line-height:1.35}
       .meta{margin:6px 0 14px;color:#5b6b86;font-size:14px}
@@ -198,9 +205,13 @@ function buildStoriesHtml(groups: StoryGroup[]) {
   <body>
     <div class="page">
       <header>
-        <h1>Vizual.Az · ${escapeHtml(t("Xəbər xəritəsi"))}</h1>
-        <p>${escapeHtml(generatedAt)} · ${groups.length} ${escapeHtml(t("mövzu"))}</p>
+        <img src="${LOGO_DATA_URI}" alt="Vizual.Az" />
+        <div>
+          <h1>${escapeHtml(t("Xəbər xəritəsi"))}</h1>
+          <p>${escapeHtml(generatedAt)} · ${groups.length} ${escapeHtml(t("mövzu"))}</p>
+        </div>
       </header>${sections}
+      <footer>Vizual.Az</footer>
     </div>
   </body>
 </html>`
