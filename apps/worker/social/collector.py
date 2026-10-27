@@ -843,7 +843,9 @@ def social_keyword_matches(keyword, text):
     if is_short_keyword(folded):
         return False
     latin, latin_text = folded.translate(LATIN_FOLD), folded_text.translate(LATIN_FOLD)
-    pattern = r"(?<!\w)" + r"[\s\-_.]*".join(re.escape(word) for word in latin.split())
+    # Suffixes are written in keyword_fold form, so their ə ş ç ğ ö ü fold like the text.
+    suffix = sm.AZ_SUFFIX_CHAIN.translate(LATIN_FOLD)
+    pattern = r"(?<!\w)" + r"[\s\-_.]*".join(re.escape(word) for word in latin.split()) + suffix + r"(?!\w)"
     return bool(re.search(pattern, latin_text))
 
 

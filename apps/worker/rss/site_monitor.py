@@ -130,7 +130,7 @@ TELEGRAM_HEARTBEAT = {"last_poll_at": None, "last_poll_ok_at": None, "last_error
 
 STRICT_WORDS = {
     "dim", "tkta", "arti", "pisa", "timss", "pirls", "bağça", "magistr",
-    "peşə", "elm", "miq", "diplom"
+    "peşə", "elm", "miq"
 }
 
 NEWS_CATEGORIES = {
@@ -2387,6 +2387,25 @@ def clean_matched_keywords(keywords):
     return cleaned
 
 
+# Azerbaijani suffixes in keyword_fold form (ı and İ are "i"). A keyword followed by a
+# chain of these is the same word ("rektor" -> rektora, rektordan, rektorluq;
+# "diplom" -> diploma, diplomsuz); anything else is another word ("diplomat",
+# "diplomatiya") and a keyword in the middle of a word ("direktor") is not a match.
+AZ_SUFFIXES = (
+    "lar", "lər", "siz", "suz", "süz", "çiliq", "çilik", "çuluq", "çülük",
+    "liq", "lik", "luq", "lük", "çi", "çu", "çü", "li", "lu", "lü",
+    "imiz", "iniz", "umuz", "unuz", "ümüz", "ünüz",
+    "nin", "nun", "nün", "ndan", "ndən", "nda", "ndə", "dan", "dən", "da", "də",
+    "ya", "yə", "ni", "nu", "nü", "na", "nə", "ila", "ilə", "ca", "cə",
+    "daki", "dəki", "dir", "dur", "dür",
+    "im", "in", "um", "un", "üm", "ün", "si", "su", "sü",
+    "a", "ə", "i", "u", "ü",
+)
+AZ_SUFFIX_CHAIN = r"(?:" + "|".join(sorted(AZ_SUFFIXES, key=len, reverse=True)) + r"){0,3}"
+# "ümumtəhsil": the only compound prefix kept from the old substring match.
+COMPOUND_PREFIX = r"(?:ümum)?"
+
+
 def keyword_matches_title(keyword, title_text):
     keyword = keyword_fold(keyword).strip()
     title_text = keyword_fold(title_text)
@@ -2401,9 +2420,10 @@ def keyword_matches_title(keyword, title_text):
         pattern = r"(?<!\w)" + re.escape(keyword) + r"(?!\w)"
         return bool(re.search(pattern, title_text))
 
-    # Long single-word keywords match as a stem so Azerbaijani suffixes and
-    # compounds still hit ("universitet" -> "Universitetin", "ümumtəhsil").
-    return keyword in title_text
+    # Long single-word keywords match as a stem at the start of a word, followed by
+    # nothing or Azerbaijani suffixes ("universitet" -> "Universitetin").
+    pattern = r"(?<!\w)" + COMPOUND_PREFIX + re.escape(keyword) + AZ_SUFFIX_CHAIN + r"(?!\w)"
+    return bool(re.search(pattern, title_text))
 
 
 def keyword_match(title, keywords):

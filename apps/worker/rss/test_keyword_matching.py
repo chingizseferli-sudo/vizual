@@ -106,3 +106,38 @@ def test_keyword_match_helper_uses_same_rules():
     matched, keywords = site_monitor.keyword_match("BDU-da Universitetin günü", ["BDU", "universitet", "ADA"])
     assert matched
     assert keywords == ["universitet", "bdu"]
+
+
+@pytest.mark.parametrize(
+    "keyword, title",
+    [
+        ("diplom", "Diplom təqdim olundu"),
+        ("diplom", "Diploma görə müraciət"),
+        ("diplom", "Diplomsuz işə qəbul"),
+        ("diplom", "Diplomlar təqdim edildi"),
+        ("diplom", "Diplomun nostrifikasiyası"),
+        ("rektor", "Rektora müraciət etdilər"),
+        ("rektor", "Rektordan açıqlama"),
+        ("rektor", "Rektorun müavini"),
+        ("rektor", "Rektorlar şurası toplandı"),
+        ("rektor", "Rektorluq binasında yanğın"),
+        ("rektor", "REKTOR SEÇİLDİ"),
+    ],
+)
+def test_stem_keyword_matches_its_suffixed_forms(keyword, title):
+    assert match(keyword, title)
+
+
+@pytest.mark.parametrize(
+    "keyword, title",
+    [
+        ("diplom", "Diplomat Bakıya səfər edib"),
+        ("diplom", "Diplomatiya nazirliyi bəyanat yaydı"),
+        ("diplom", "Diplomatik münasibətlər"),
+        ("rektor", "Direktor müavini təyin edildi"),
+        ("rektor", "İcraçı direktor açıqlama verdi"),
+        ("rektor", "Prorektor"),
+    ],
+)
+def test_stem_keyword_ignores_other_words_and_middle_of_a_word(keyword, title):
+    assert not match(keyword, title)
