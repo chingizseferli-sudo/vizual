@@ -143,8 +143,12 @@ class SourceHealthPayloadTests(unittest.TestCase):
             self.assertEqual(site_monitor.source_backoff_interval(reason), timedelta(0), reason)
         self.assertEqual(site_monitor.get_scheduler_base_interval_minutes({"monitor_method": "rss"}), 5)
         self.assertEqual(site_monitor.get_scheduler_base_interval_minutes({"monitor_method": "latest_page"}), 8)
-        # Blocks and dead sites still back off for hours.
-        self.assertGreaterEqual(site_monitor.source_backoff_interval("http_403"), timedelta(hours=24))
+        # Blocks and dead sites back off for hours, but not a whole day.
+        for reason in ("http_403", "http_429", "dns_failure", "ssl_failure", "http_404"):
+            interval = site_monitor.source_backoff_interval(reason)
+            self.assertGreaterEqual(interval, timedelta(hours=2), reason)
+            self.assertLessEqual(interval, timedelta(hours=6), reason)
+        self.assertEqual(site_monitor.source_backoff_interval("unsafe_url"), timedelta(hours=24))
 
     def test_loss_streak_does_not_slow_polling(self):
         notes = site_monitor.merge_crawl_state_notes("", {"last_result": "bad_title"})
@@ -316,6 +320,29 @@ class MethodAdoptionTests(unittest.TestCase):
     def test_google_news_and_rss_are_never_adopted(self):
         self.assertNotIn("monitor_method", self.build(streak=2, method="google_news_fallback"))
         self.assertNotIn("monitor_method", self.build(streak=2, succeeded="rss"))
+
+
+class CatchUpWindowTests(unittest.TestCase):
+    NOW = site_monitor.datetime(2026, 10, 27, 15, 0, tzinfo=site_monitor.BAKU_TZ)
+
+    def window(self, last_success_at):
+        return site_monitor.freshness_window_hours({"last_success_at": last_success_at}, now=self.NOW)
+
+    def test_healthy_source_keeps_the_normal_window(self):
+        self.assertEqual(self.window("2026-10-27T14:50:00+04:00"), site_monitor.NEWS_TIME_LIMIT_HOURS)
+        self.assertEqual(self.window(None), site_monitor.NEWS_TIME_LIMIT_HOURS)
+
+    def test_recovered_source_reaches_back_to_its_last_good_read(self):
+        # Last good read 4h ago: news from the outage is still sent.
+        self.assertAlmostEqual(self.window("2026-10-27T11:00:00+04:00"), 4.25)
+
+    def test_catch_up_is_capped(self):
+        self.assertEqual(self.window("2026-10-20T11:00:00+04:00"), site_monitor.CATCHUP_MAX_HOURS)
+
+    def test_freshness_uses_the_window(self):
+        published = (site_monitor.datetime.now(site_monitor.BAKU_TZ) - site_monitor.timedelta(hours=3)).isoformat()
+        self.assertEqual(site_monitor.get_freshness_status(published), "old_news")
+        self.assertEqual(site_monitor.get_freshness_status(published, 4), "fresh")
 
 
 class StoryDuplicateTests(unittest.TestCase):

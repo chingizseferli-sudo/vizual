@@ -35,6 +35,9 @@ CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", "60"))
 MAX_SEND_PER_RUN = int(os.getenv("MAX_SEND_PER_RUN", "10"))
 MAX_LINKS_PER_SITE = int(os.getenv("MAX_LINKS_PER_SITE", "10"))
 NEWS_TIME_LIMIT_HOURS = int(os.getenv("NEWS_TIME_LIMIT_HOURS", "1"))
+# A source that was unreadable (blocked, down) is caught up when it comes back: news
+# published since its last good read is still sent, up to this many hours.
+CATCHUP_MAX_HOURS = float(os.getenv("CATCHUP_MAX_HOURS", "6"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "10"))
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "10"))
 MONITOR_DATA_RETENTION_DAYS = int(os.getenv("MONITOR_DATA_RETENTION_DAYS", "30"))
@@ -747,16 +750,16 @@ def safe_request(url, *, site=None, method="", **kwargs):
 def source_backoff_interval(reason, fail_count=0):
     reason = clean_text(reason)
     fail_count = int(fail_count or 0)
-    if reason == "http_403":
-        return timedelta(hours=24)
-    if reason == "http_429":
-        return timedelta(hours=18)
+    # Blocks and outages are retried within hours, not a day: with a 1-hour news
+    # window, every extra hour of waiting is news that cannot be caught up.
+    if reason in {"http_403", "http_429"}:
+        return timedelta(hours=3 if fail_count < 3 else 6)
     if reason == "timeout":
         return timedelta(hours=6 if fail_count >= 2 else 1)
-    if reason in {"dns_failure", "ssl_failure", "unsafe_url"}:
+    if reason == "unsafe_url":
         return timedelta(hours=24)
-    if reason in {"http_404", "dead"}:
-        return timedelta(hours=24)
+    if reason in {"dns_failure", "ssl_failure", "http_404", "dead"}:
+        return timedelta(hours=2 if fail_count < 3 else 6)
     if reason.startswith("http_5") or reason in {"site_error"}:
         return timedelta(hours=2 if fail_count < 3 else 6)
     if reason in {"rss_empty", "sitemap_empty", "latest_page_empty", "homepage_empty", "fallback_empty", "no_article"}:
@@ -3131,7 +3134,26 @@ def is_today_news(published_time):
     return True
 
 
-def get_freshness_status(published_time):
+def freshness_window_hours(site, now=None):
+    """How old news may be and still be sent for this source.
+
+    Normally NEWS_TIME_LIMIT_HOURS. After an outage the window reaches back to the
+    last good read (plus a small margin), so news published while the source was
+    unreadable is delivered late instead of lost; capped by CATCHUP_MAX_HOURS.
+    """
+    base = NEWS_TIME_LIMIT_HOURS
+    last_success = parse_baku_datetime((site or {}).get("last_success_at"))
+    if not last_success:
+        return base
+    now = now or datetime.now(BAKU_TZ)
+    gap_hours = (now - last_success).total_seconds() / 3600
+    if gap_hours <= base:
+        return base
+    return min(gap_hours + 0.25, max(base, CATCHUP_MAX_HOURS))
+
+
+def get_freshness_status(published_time, window_hours=None):
+    limit_hours = NEWS_TIME_LIMIT_HOURS if window_hours is None else window_hours
     dt = parse_datetime_to_baku(published_time)
     if not dt:
         return "date_parse_failed"
@@ -3143,7 +3165,7 @@ def get_freshness_status(published_time):
     if diff.total_seconds() < 0:
         print(f"Gələcək tarix kimi göründü, keçildi: {published_time}", flush=True)
         return "future_date"
-    if diff <= timedelta(hours=NEWS_TIME_LIMIT_HOURS):
+    if diff <= timedelta(hours=limit_hours):
         print(f"Tarix uyğundur: {published_time} | fərq: {diff.total_seconds() / 3600:.2f} saat", flush=True)
         return "fresh"
     print(f"Köhnə xəbər keçildi: {published_time} | fərq: {diff.total_seconds() / 3600:.2f} saat", flush=True)
@@ -3195,7 +3217,7 @@ def choose_publish_time(title, article_time, rss_time=None, listing_time=None, s
     return None
 
 
-def evaluate_publish_freshness(title_text, article_time, rss_time=None, listing_time=None, source_context=None, item_position=None):
+def evaluate_publish_freshness(title_text, article_time, rss_time=None, listing_time=None, source_context=None, item_position=None, window_hours=None):
     published_time = choose_publish_time(
         title_text,
         article_time,
@@ -3207,7 +3229,7 @@ def evaluate_publish_freshness(title_text, article_time, rss_time=None, listing_
     if not published_time:
         reason = "date_parse_failed" if has_any_date_signal(title_text, article_time, rss_time, listing_time) else "no_date"
         return None, reason
-    return published_time, get_freshness_status(published_time)
+    return published_time, get_freshness_status(published_time, window_hours)
 
 
 LISTING_DATE_PATTERNS = [
@@ -5310,6 +5332,7 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
             listing_time=listing_time,
             source_context=source_context,
             item_position=item_position,
+            window_hours=freshness_window_hours(site),
         )
 
         print(f"[{index}/{total}] Xəbər: {title[:80]} | title_tarix: {title_time} | rss_tarix: {rss_time} | listing_tarix: {listing_time} | article_tarix: {article_time} | article_date_source={article_date_source} | context={source_context} | sıra={item_position} | seçilən tarix: {published_time} | freshness={freshness_status} | Link: {link}", flush=True)
