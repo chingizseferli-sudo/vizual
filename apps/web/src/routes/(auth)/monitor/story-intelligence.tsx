@@ -154,10 +154,10 @@ function buildStoriesHtml(groups: StoryGroup[]) {
         .map(
           (item) => `
           <tr>
-            <td>${escapeHtml(item.source)}</td>
-            <td><a href="${safeHref(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a></td>
-            <td>${escapeHtml(item.keyword)}</td>
-            <td class="nowrap">${escapeHtml(formatDate(item.detectedAt))}</td>
+            <td data-label="${escapeHtml(t("Sayt"))}">${escapeHtml(item.source)}</td>
+            <td data-label="${escapeHtml(t("Başlıq"))}"><a href="${safeHref(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a></td>
+            <td data-label="${escapeHtml(t("Açar söz"))}">${escapeHtml(item.keyword)}</td>
+            <td data-label="${escapeHtml(t("Yayım vaxtı"))}" class="nowrap">${escapeHtml(formatDate(item.detectedAt))}</td>
           </tr>`
         )
         .join('')
@@ -182,10 +182,11 @@ function buildStoriesHtml(groups: StoryGroup[]) {
     <title>${escapeHtml(t("Xəbər xəritəsi"))}</title>
     <style>
       *{box-sizing:border-box}
+      html{-webkit-text-size-adjust:100%}
       body{margin:0;color:#172033;background:#f5f8ff;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
       .page{max-width:1100px;margin:0 auto;padding:32px 20px}
       header{display:flex;align-items:center;gap:20px;flex-wrap:wrap;border:1px solid #dbe4f5;border-top:5px solid #1e63ff;border-radius:18px;padding:20px 24px;background:#fff}
-      header img{display:block;height:56px;width:auto}
+      header img{display:block;height:56px;width:auto;max-width:100%;border-radius:10px}
       header div{margin-left:auto;text-align:right}
       header h1{margin:0 0 4px;font-size:24px;color:#071a44}
       header p{margin:0;color:#5b6b86;font-size:14px}
@@ -199,6 +200,20 @@ function buildStoriesHtml(groups: StoryGroup[]) {
       a{color:#1463ff;text-decoration:none}
       a:hover{text-decoration:underline}
       .nowrap{white-space:nowrap}
+      @media (max-width:640px){
+        .page{padding:16px 12px}
+        header{flex-direction:column;align-items:flex-start;gap:12px;padding:16px}
+        header div{margin-left:0;text-align:left}
+        header img{height:44px}
+        section{padding:14px}
+        table,tbody,tr,td{display:block;width:100%}
+        thead{display:none}
+        tr{border-top:1px solid #e6ecf8;padding:10px 0}
+        tr:first-child{border-top:0}
+        td{border:0;padding:3px 0}
+        td[data-label]::before{content:attr(data-label);display:block;color:#5b6b86;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+        td a{overflow-wrap:anywhere}
+      }
       @media print{body{background:#fff}section{break-inside:avoid}}
     </style>
   </head>
