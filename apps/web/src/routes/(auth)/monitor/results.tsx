@@ -22,6 +22,10 @@ import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
 import { dateLocale, t } from '@/lib/i18n'
+import iconSvg from '../../../../public/images/vizual-icon.svg?raw'
+
+// The export is one offline file, so the logo is embedded instead of linked.
+const VIZUAL_ICON_URI = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(iconSvg)}`
 
 const PAGE_SIZE = 12
 const RESULT_FETCH_BATCH_SIZE = 1000
@@ -595,7 +599,7 @@ function ResultsPage() {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Visual Monitor Export</title>
+    <title>Vizual.Az · Media Monitorinq Hesabatı</title>
     <style>
       *{box-sizing:border-box}
       body{
@@ -618,17 +622,7 @@ function ResultsPage() {
         box-shadow:0 24px 70px rgba(20,99,255,.2);
       }
       .brand{display:flex;align-items:center;gap:12px;margin-bottom:26px}
-      .logo{
-        display:grid;
-        width:46px;
-        height:46px;
-        place-items:center;
-        border-radius:14px;
-        color:#1463ff;
-        background:white;
-        font-weight:900;
-        letter-spacing:0;
-      }
+      .logo{display:block;width:52px;height:52px;border-radius:14px}
       .brand strong{font-size:20px}
       h1{margin:0;font-size:34px;line-height:1.05;letter-spacing:0}
       .hero p{max-width:760px;margin:12px 0 0;color:rgba(255,255,255,.88);font-size:16px;line-height:1.55}
@@ -700,8 +694,8 @@ function ResultsPage() {
     <main class="page">
       <section class="hero">
         <div class="brand">
-          <div class="logo">VM</div>
-          <strong>Visual Monitor</strong>
+          <img class="logo" src="${VIZUAL_ICON_URI}" alt="Vizual.Az" />
+          <strong>Vizual.Az</strong>
         </div>
         <h1>Media Monitorinq Hesabatı</h1>
         <p>Seçilmiş dövr üzrə tapılan uyğun xəbər nəticələri. Hesabat mənbə, dərc vaxtı, açar söz və keçid məlumatlarını bir yerdə göstərir.</p>
@@ -713,7 +707,7 @@ function ResultsPage() {
       </section>
 
       <section class="table-wrap">${tableSection}</section>
-      <div class="footer">Visual Monitor tərəfindən avtomatik yaradılıb.</div>
+      <div class="footer">Vizual.Az tərəfindən avtomatik yaradılıb.</div>
     </main>
   </body>
 </html>`,
