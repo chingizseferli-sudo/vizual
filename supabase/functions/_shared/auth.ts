@@ -1,4 +1,5 @@
 export type AuthContext = {
+  token: string;
   user: {
     id: string;
     email?: string | null;
@@ -98,6 +99,7 @@ export async function requireAuthenticated(req: Request, json: JsonResponder): P
   }
 
   return {
+    token,
     user: {
       id: user.id,
       email: user.email || null,
@@ -138,6 +140,7 @@ export async function requireAdmin(req: Request, json: JsonResponder): Promise<A
   }
 
   return {
+    token,
     user: {
       id: user.id,
       email: user.email || null,

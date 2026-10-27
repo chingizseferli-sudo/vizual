@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { MoreHorizontal } from 'lucide-react'
+import { FunctionsHttpError } from '@supabase/supabase-js'
+import { MoreHorizontal, UserPlus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,7 +33,46 @@ type UserProfile = {
 
 type SubscriptionPlan = {
   id: string
+  code: string
   name: string
+  is_active: boolean
+}
+
+type NewAccountForm = {
+  email: string
+  password: string
+  planId: string
+  status: 'active' | 'trialing'
+  periodEnd: string
+}
+
+const EMPTY_NEW_ACCOUNT: NewAccountForm = {
+  email: '',
+  password: '',
+  planId: '',
+  status: 'active',
+  periodEnd: '',
+}
+
+function dateInputValue(daysFromToday: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + daysFromToday)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+// supabase-js hides the edge function's JSON body behind error.context.
+async function functionErrorMessage(error: unknown) {
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const body = (await error.context.json()) as { error?: string }
+      if (body?.error) return friendlyError({ message: body.error })
+    } catch {
+      // Fall through to the generic message.
+    }
+  }
+  return friendlyError(error)
 }
 
 type AuthUser = {
@@ -106,7 +154,13 @@ function UsersPage() {
   const [temporaryPassword, setTemporaryPassword] = useState<{
     email: string
     password: string
+    isNewAccount: boolean
   } | null>(null)
+  const [newAccountOpen, setNewAccountOpen] = useState(false)
+  const [newAccount, setNewAccount] =
+    useState<NewAccountForm>(EMPTY_NEW_ACCOUNT)
+  const [newAccountError, setNewAccountError] = useState('')
+  const [creatingAccount, setCreatingAccount] = useState(false)
   const pageSize = 20
 
   async function loadUsers() {
@@ -140,7 +194,11 @@ function UsersPage() {
       supabase.functions.invoke<{ users: AuthUser[] }>('admin-users', {
         body: {},
       }),
-      supabase.from('subscription_plans').select('id,name'),
+      supabase
+        .from('subscription_plans')
+        .select('id,code,name,is_active')
+        .order('display_order')
+        .order('name'),
     ])
 
     const errors = [
@@ -383,11 +441,80 @@ function UsersPage() {
     setTemporaryPassword({
       email: label,
       password: data.temporary_password,
+      isNewAccount: false,
     })
     setMessage(
       'Müvəqqəti parol yaradıldı. Parolu yalnız bir dəfə görünən bu pəncərədən götürün.'
     )
     setResettingUserId(null)
+  }
+
+  function openNewAccount() {
+    setNewAccount(EMPTY_NEW_ACCOUNT)
+    setNewAccountError('')
+    setNewAccountOpen(true)
+  }
+
+  function selectNewAccountPlan(planId: string) {
+    const plan = plans.find((item) => item.id === planId)
+    // Demo is a 7-day trial; other plans start active with no end date.
+    setNewAccount((current) =>
+      plan?.code === 'demo'
+        ? {
+            ...current,
+            planId,
+            status: 'trialing',
+            periodEnd: dateInputValue(7),
+          }
+        : { ...current, planId, status: 'active', periodEnd: '' }
+    )
+  }
+
+  async function createAccount() {
+    setCreatingAccount(true)
+    setNewAccountError('')
+
+    const { data, error } = await supabase.functions.invoke<{
+      email?: string
+      password?: string
+    }>('admin-users', {
+      body: {
+        action: 'create_user',
+        email: newAccount.email,
+        password: newAccount.password,
+        plan_id: newAccount.planId,
+        subscription_status: newAccount.status,
+        current_period_end: newAccount.periodEnd
+          ? new Date(`${newAccount.periodEnd}T23:59:59`).toISOString()
+          : null,
+      },
+    })
+
+    setCreatingAccount(false)
+
+    if (error || !data?.password) {
+      setNewAccountError(
+        `Hesab yaradılmadı: ${await functionErrorMessage(error)}`
+      )
+      return
+    }
+
+    setNewAccountOpen(false)
+    setTemporaryPassword({
+      email: data.email || newAccount.email,
+      password: data.password,
+      isNewAccount: true,
+    })
+    setMessage('')
+    await loadUsers()
+  }
+
+  function copyLoginDetails() {
+    if (!temporaryPassword) return
+    const text = temporaryPassword.isNewAccount
+      ? `Giriş: ${window.location.origin}/sign-in\nEmail: ${temporaryPassword.email}\nParol: ${temporaryPassword.password}`
+      : temporaryPassword.password
+    void navigator.clipboard?.writeText(text)
   }
 
   useEffect(() => {
@@ -408,12 +535,148 @@ function UsersPage() {
 
   return (
     <div className='grid gap-4 p-4 md:p-6'>
-      <div>
-        <h1 className='text-xl font-semibold tracking-tight'>İstifadəçilər</h1>
-        <p className='mt-1 text-sm text-muted-foreground'>
-          Hesablar, monitorlar və bağlantı vəziyyəti.
-        </p>
+      <div className='flex flex-wrap items-start justify-between gap-3'>
+        <div>
+          <h1 className='text-xl font-semibold tracking-tight'>
+            İstifadəçilər
+          </h1>
+          <p className='mt-1 text-sm text-muted-foreground'>
+            Hesablar, monitorlar və bağlantı vəziyyəti.
+          </p>
+        </div>
+        <Button onClick={openNewAccount}>
+          <UserPlus className='size-4' />
+          Yeni hesab
+        </Button>
       </div>
+
+      <Dialog open={newAccountOpen} onOpenChange={setNewAccountOpen}>
+        <DialogContent>
+          <form
+            className='grid gap-4'
+            onSubmit={(event) => {
+              event.preventDefault()
+              void createAccount()
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Yeni müştəri hesabı</DialogTitle>
+              <DialogDescription>
+                Hesab təsdiq gözləmədən aktiv olur. Email təsdiqi tələb
+                olunmur; giriş məlumatlarını müştəriyə özünüz verin.
+              </DialogDescription>
+            </DialogHeader>
+
+            <label className='grid gap-1.5 text-sm font-medium'>
+              Email
+              <input
+                type='email'
+                required
+                autoComplete='off'
+                value={newAccount.email}
+                onChange={(event) =>
+                  setNewAccount((current) => ({
+                    ...current,
+                    email: event.target.value,
+                  }))
+                }
+                className='rounded-lg border bg-background px-3 py-2 font-normal'
+                placeholder='musteri@sirket.az'
+              />
+            </label>
+
+            <label className='grid gap-1.5 text-sm font-medium'>
+              Parol
+              <input
+                type='text'
+                autoComplete='new-password'
+                minLength={8}
+                maxLength={72}
+                value={newAccount.password}
+                onChange={(event) =>
+                  setNewAccount((current) => ({
+                    ...current,
+                    password: event.target.value,
+                  }))
+                }
+                className='rounded-lg border bg-background px-3 py-2 font-mono font-normal'
+                placeholder='Boş qalsa təsadüfi parol yaradılacaq'
+              />
+            </label>
+
+            <div className='grid gap-3 sm:grid-cols-2'>
+              <label className='grid gap-1.5 text-sm font-medium sm:col-span-2'>
+                Plan
+                <select
+                  required
+                  value={newAccount.planId}
+                  onChange={(event) => selectNewAccountPlan(event.target.value)}
+                  className='rounded-lg border bg-background px-3 py-2 font-normal'
+                >
+                  <option value=''>Plan seçin</option>
+                  {plans
+                    .filter((plan) => plan.is_active)
+                    .map((plan) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className='grid gap-1.5 text-sm font-medium'>
+                Status
+                <select
+                  value={newAccount.status}
+                  onChange={(event) =>
+                    setNewAccount((current) => ({
+                      ...current,
+                      status: event.target.value as 'active' | 'trialing',
+                    }))
+                  }
+                  className='rounded-lg border bg-background px-3 py-2 font-normal'
+                >
+                  <option value='active'>Aktiv</option>
+                  <option value='trialing'>Sınaq</option>
+                </select>
+              </label>
+              <label className='grid gap-1.5 text-sm font-medium'>
+                Dövrün sonu
+                <input
+                  type='date'
+                  min={dateInputValue(0)}
+                  value={newAccount.periodEnd}
+                  onChange={(event) =>
+                    setNewAccount((current) => ({
+                      ...current,
+                      periodEnd: event.target.value,
+                    }))
+                  }
+                  className='rounded-lg border bg-background px-3 py-2 font-normal'
+                />
+              </label>
+            </div>
+
+            {newAccountError ? (
+              <div className='rounded-lg border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive'>
+                {newAccountError}
+              </div>
+            ) : null}
+
+            <DialogFooter>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setNewAccountOpen(false)}
+              >
+                Ləğv et
+              </Button>
+              <Button type='submit' disabled={creatingAccount}>
+                {creatingAccount ? 'Yaradılır...' : 'Hesabı yarat'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {message ? (
         <div className='rounded-lg border bg-card p-4 text-sm text-warning'>
@@ -423,7 +686,11 @@ function UsersPage() {
 
       {temporaryPassword ? (
         <div className='rounded-lg border border-success/25 bg-success/10 p-4 text-sm text-success'>
-          <div className='font-semibold'>Müvəqqəti parol yaradıldı</div>
+          <div className='font-semibold'>
+            {temporaryPassword.isNewAccount
+              ? 'Hesab yaradıldı'
+              : 'Müvəqqəti parol yaradıldı'}
+          </div>
           <div className='mt-1'>İstifadəçi: {temporaryPassword.email}</div>
           <div className='mt-2 flex flex-wrap items-center gap-2'>
             <code className='rounded-md bg-background px-3 py-2 font-mono text-base'>
@@ -431,12 +698,12 @@ function UsersPage() {
             </code>
             <button
               type='button'
-              onClick={() =>
-                void navigator.clipboard?.writeText(temporaryPassword.password)
-              }
+              onClick={copyLoginDetails}
               className='rounded-lg border border-success/25 bg-background px-3 py-2 font-medium hover:bg-success/10'
             >
-              Kopyala
+              {temporaryPassword.isNewAccount
+                ? 'Giriş məlumatlarını kopyala'
+                : 'Kopyala'}
             </button>
             <button
               type='button'
