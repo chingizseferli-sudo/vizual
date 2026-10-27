@@ -572,7 +572,7 @@ function StoryIntelligence() {
                     value={
                       fastest
                         ? `${fastest.source} · ${formatTime(fastest.detectedAt)}${
-                            fastestGap === null ? '' : ` (+${fastestGap} dəq)`
+                            fastestGap === null ? '' : ` (+${fastestGap} ${t('dəq')})`
                           }`
                         : '-'
                     }
