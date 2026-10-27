@@ -10,7 +10,8 @@ import { friendlyError } from '@/lib/friendly-error'
 // page only reads them. States:
 //   trial    new source, read silently by the bot, promoted automatically
 //   active   sending news
-//   degraded active but failing or silent for too long
+//   degraded active but failing, or no article could be read from the page for too long
+//            (articles not matching any keyword are fine: only an unreadable page counts)
 //   review   needs a human decision
 //   off      switched off
 type Source = {
@@ -317,7 +318,7 @@ function getSourceState(
   if (silent !== null && silent > SILENT_HOURS) {
     return {
       state: 'degraded',
-      reason: `${formatHours(silent)}dir yeni xəbər tapılmayıb`,
+      reason: `${formatHours(silent)}dir saytdan heç bir məqalə oxunmayıb`,
     }
   }
 
