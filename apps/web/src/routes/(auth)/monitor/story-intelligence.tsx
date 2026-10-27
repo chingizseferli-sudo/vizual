@@ -4,6 +4,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import {
   AlertCircle,
   Clock3,
+  Download,
   FileText,
   Globe2,
   Layers3,
@@ -108,6 +109,85 @@ function formatDate(value: string | null) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+// Cells starting with = + - @ would run as formulas when opened in Excel.
+function csvCell(value: string | number | null | undefined) {
+  let text = String(value ?? '')
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`
+  return `"${text.replace(/"/g, '""')}"`
+}
+
+function downloadFile(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function exportStories(groups: StoryGroup[], format: 'csv' | 'json') {
+  const stamp = new Date().toISOString().slice(0, 10)
+
+  if (format === 'json') {
+    const data = groups.map((group, index) => ({
+      topic_number: index + 1,
+      title: group.title,
+      first_source: group.firstSource,
+      first_published_at: group.firstDetectedAt,
+      media_count: group.uniqueSourceCount,
+      items: group.items.map((item) => ({
+        source: item.source,
+        title: item.title,
+        url: item.url,
+        published_at: item.detectedAt,
+        keywords: item.keyword,
+      })),
+    }))
+    downloadFile(
+      `xeber-xeritesi-${stamp}.json`,
+      JSON.stringify(data, null, 2),
+      'application/json;charset=utf-8'
+    )
+    return
+  }
+
+  const rows: Array<Array<string | number | null>> = [
+    [
+      t("Mövzu №"),
+      t("Mövzu"),
+      t("İlk mənbə"),
+      t("Media əhatəsi"),
+      t("Sayt"),
+      t("Başlıq"),
+      t("Link"),
+      t("Yayım vaxtı"),
+      t("Açar söz"),
+    ],
+  ]
+  groups.forEach((group, index) => {
+    for (const item of group.items) {
+      rows.push([
+        index + 1,
+        group.title,
+        group.firstSource,
+        group.uniqueSourceCount,
+        item.source,
+        item.title,
+        item.url,
+        formatDate(item.detectedAt),
+        item.keyword,
+      ])
+    }
+  })
+  const csv = rows.map((row) => row.map(csvCell).join(',')).join('\n')
+  downloadFile(
+    `xeber-xeritesi-${stamp}.csv`,
+    `\ufeff${csv}`,
+    'text/csv;charset=utf-8'
+  )
 }
 
 function formatTime(value: string | null) {
@@ -476,6 +556,22 @@ function StoryIntelligence() {
                 <div className='flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center'>
                   <span className='rounded-full border border-border bg-muted/50 px-3 py-2 text-sm font-semibold text-foreground'>
                     {storyData.groups.length}{' '}{t("mövzu")}</span>
+                  <button
+                    type='button'
+                    onClick={() => exportStories(storyData.groups, 'csv')}
+                    className='inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted/50'
+                  >
+                    <Download className='h-4 w-4' />
+                    {t("Hamısını yüklə (CSV)")}
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => exportStories(storyData.groups, 'json')}
+                    className='inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted/50'
+                  >
+                    <Download className='h-4 w-4' />
+                    JSON
+                  </button>
                   <button
                     type='button'
                     onClick={() => setIsTopicListOpen((value) => !value)}
