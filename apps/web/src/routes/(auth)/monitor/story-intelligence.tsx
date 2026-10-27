@@ -28,7 +28,10 @@ const STORY_MAX_PAGES = 3
 // Headlines of one story are close in time; the same words weeks later are a new story.
 const STORY_WINDOW_MS = 72 * 60 * 60 * 1000
 const STORY_MIN_SHARED_WORDS = 3
-const STORY_MIN_OVERLAP = 0.6
+const STORY_MIN_OVERLAP = 0.7
+// A word in more than this share of all headlines ("yeni", "təyin", "direktor") says nothing about the story.
+const STORY_COMMON_WORD_SHARE = 0.04
+const STORY_COMMON_WORD_MIN_ITEMS = 20
 
 type StoryMatchRow = {
   id: string
@@ -358,13 +361,11 @@ function sharedWordCount(a: Set<string>, b: Set<string>) {
   return shared
 }
 
-function sameStory(a: StoryItem, b: StoryItem) {
-  if (a.words.size === 0 || b.words.size === 0) return false
-  const shared = sharedWordCount(a.words, b.words)
-  if (shared < Math.min(STORY_MIN_SHARED_WORDS, a.words.size, b.words.size)) {
-    return false
-  }
-  return shared / Math.min(a.words.size, b.words.size) >= STORY_MIN_OVERLAP
+function sameStory(a: Set<string>, b: Set<string>) {
+  if (a.size === 0 || b.size === 0) return false
+  const shared = sharedWordCount(a, b)
+  if (shared < Math.min(STORY_MIN_SHARED_WORDS, a.size, b.size)) return false
+  return shared / Math.min(a.size, b.size) >= STORY_MIN_OVERLAP
 }
 
 function timeMs(value: string | null) {
@@ -445,15 +446,39 @@ function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
   const items = [...unique.values()].sort(
     (a, b) => timeMs(a.detectedAt) - timeMs(b.detectedAt)
   )
+
+  // Words that appear in many unrelated headlines must not join stories.
+  const common = new Set<string>()
+  if (items.length >= STORY_COMMON_WORD_MIN_ITEMS) {
+    const counts = new Map<string, number>()
+    for (const item of items)
+      for (const word of item.words) counts.set(word, (counts.get(word) || 0) + 1)
+    for (const [word, count] of counts)
+      if (count / items.length > STORY_COMMON_WORD_SHARE) common.add(word)
+  }
+  const distinct = new Map(
+    items.map((item) => [
+      item,
+      new Set([...item.words].filter((word) => !common.has(word))),
+    ])
+  )
+
+  // A headline joins a story only if it resembles most of its members, so a
+  // chain of look-alikes cannot glue different stories together.
   const clusters: StoryItem[][] = []
 
   for (const item of items) {
+    const mine = distinct.get(item) as Set<string>
     const cluster = clusters.find((members) => {
-      const anchor = members[0]
-      return (
-        Math.abs(timeMs(item.detectedAt) - timeMs(anchor.detectedAt)) <=
-          STORY_WINDOW_MS && members.some((member) => sameStory(item, member))
+      if (
+        Math.abs(timeMs(item.detectedAt) - timeMs(members[0].detectedAt)) >
+        STORY_WINDOW_MS
       )
+        return false
+      const similar = members.filter((member) =>
+        sameStory(mine, distinct.get(member) as Set<string>)
+      ).length
+      return similar >= Math.floor(members.length / 2) + 1
     })
     if (cluster) cluster.push(item)
     else clusters.push([item])
