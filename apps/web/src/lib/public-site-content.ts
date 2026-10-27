@@ -108,6 +108,35 @@ const CACHE_TTL_MS = 5 * 60 * 1000
 let contentCache: { value: PublicSiteContent; expiresAt: number } | null = null
 let pendingContent: Promise<PublicSiteContent> | null = null
 
+// The last content loaded from the database is kept in this browser so a
+// refresh starts from it. Without it every refresh first paints the built-in
+// defaults and then swaps in the edited texts, so the page looks different.
+const STORED_CONTENT_KEY = 'vizual-public-site-v1'
+
+function readStoredContent(): PublicSiteContent | null {
+  try {
+    const raw = localStorage.getItem(STORED_CONTENT_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : null
+    if (!isRecord(parsed)) return null
+    return mergeWithDefaults(defaultPublicSiteContent, parsed)
+  } catch {
+    return null
+  }
+}
+
+function storeContent(value: PublicSiteContent) {
+  try {
+    localStorage.setItem(STORED_CONTENT_KEY, JSON.stringify(value))
+  } catch {
+    // Private mode or full storage: the page still works, it just repaints.
+  }
+}
+
+export function initialPublicSiteContent(): PublicSiteContent {
+  if (getLang() === 'ru') return defaultPublicSiteContent
+  return contentCache?.value ?? readStoredContent() ?? defaultPublicSiteContent
+}
+
 export const defaultPublicSiteContent: PublicSiteContent = {
   hero: {
     badge: t("Kommunikasiya və Media Monitorinq Platforması"),
@@ -372,7 +401,7 @@ export async function loadPublicSiteContent(): Promise<PublicSiteContent> {
       })
 
       if (!data) {
-        return defaultPublicSiteContent
+        return initialPublicSiteContent()
       }
 
       const value = data.reduce<PublicSiteContent>((content, row) => {
@@ -389,6 +418,7 @@ export async function loadPublicSiteContent(): Promise<PublicSiteContent> {
       }, defaultPublicSiteContent)
 
       contentCache = { value, expiresAt: Date.now() + CACHE_TTL_MS }
+      storeContent(value)
       return value
     })().finally(() => {
       pendingContent = null
@@ -400,4 +430,9 @@ export async function loadPublicSiteContent(): Promise<PublicSiteContent> {
 
 export function invalidatePublicSiteContentCache() {
   contentCache = null
+  try {
+    localStorage.removeItem(STORED_CONTENT_KEY)
+  } catch {
+    // Nothing stored or storage unavailable.
+  }
 }

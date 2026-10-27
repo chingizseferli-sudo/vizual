@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import {
-  defaultPublicSiteContent,
+  initialPublicSiteContent,
   loadPublicSiteContent,
 } from '@/lib/public-site-content'
 import {
@@ -12,7 +12,7 @@ import {
 import { t } from '@/lib/i18n'
 
 function BlogPage() {
-  const [content, setContent] = useState(defaultPublicSiteContent)
+  const [content, setContent] = useState(initialPublicSiteContent)
 
   useEffect(() => {
     loadPublicSiteContent().then(setContent)

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Check } from 'lucide-react'
 import {
-  defaultPublicSiteContent,
+  initialPublicSiteContent,
   loadPublicSiteContent,
 } from '@/lib/public-site-content'
 import {
@@ -13,7 +13,7 @@ import {
 import { t } from '@/lib/i18n'
 
 function PricingPage() {
-  const [content, setContent] = useState(defaultPublicSiteContent)
+  const [content, setContent] = useState(initialPublicSiteContent)
 
   useEffect(() => {
     loadPublicSiteContent().then(setContent)

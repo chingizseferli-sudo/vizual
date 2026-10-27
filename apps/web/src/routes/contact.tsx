@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Mail, MessageCircle, Phone } from 'lucide-react'
 import {
-  defaultPublicSiteContent,
+  initialPublicSiteContent,
   loadPublicSiteContent,
 } from '@/lib/public-site-content'
 import {
@@ -14,7 +14,7 @@ import { DemoRequestForm } from '@/components/public-site/demo-request-form'
 import { t } from '@/lib/i18n'
 
 function ContactPage() {
-  const [content, setContent] = useState(defaultPublicSiteContent)
+  const [content, setContent] = useState(initialPublicSiteContent)
 
   useEffect(() => {
     loadPublicSiteContent().then(setContent)
