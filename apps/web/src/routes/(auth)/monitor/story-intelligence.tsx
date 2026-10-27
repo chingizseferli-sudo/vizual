@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase'
 import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
 import { dateLocale, t } from '@/lib/i18n'
 
+const COLLAPSED_ITEM_COUNT = 5
 const STORY_PAGE_SIZE = 1000
 const STORY_MAX_PAGES = 3
 // Headlines of one story are close in time; the same words weeks later are a new story.
@@ -365,6 +366,8 @@ async function fetchStoryData(): Promise<StoryData> {
 function StoryIntelligence() {
   const [selectedStoryKey, setSelectedStoryKey] = useState<string | null>(null)
   const [isTopicListOpen, setIsTopicListOpen] = useState(false)
+  // The story whose full list is open; picking another story collapses it again.
+  const [expandedStoryKey, setExpandedStoryKey] = useState<string | null>(null)
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: customerQueryKeys.storyIntelligence(),
     queryFn: fetchStoryData,
@@ -382,6 +385,13 @@ function StoryIntelligence() {
   }, [selectedStoryKey, storyData.groups])
 
   const firstItem = story?.items[0] || null
+  const showAll = Boolean(story) && expandedStoryKey === story?.key
+  const visibleItems = story
+    ? showAll
+      ? story.items
+      : story.items.slice(0, COLLAPSED_ITEM_COUNT)
+    : []
+  const canExpand = Boolean(story) && (story?.items.length ?? 0) > COLLAPSED_ITEM_COUNT
   // Fastest follower: the earliest item from a different site than the first.
   const fastest =
     story?.items.find((item) => item.source !== firstItem?.source) || null
@@ -599,13 +609,13 @@ function StoryIntelligence() {
                   {t("Yayılma xətti")}
                 </div>
                 <div className='mt-5 space-y-4'>
-                  {story.items.slice(0, 10).map((item, index) => (
+                  {visibleItems.map((item, index) => (
                     <div key={item.id} className='flex gap-3'>
                       <div className='flex flex-col items-center'>
                         <div className='flex h-9 w-9 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-sm font-bold text-primary'>
                           {index + 1}
                         </div>
-                        {index < Math.min(story.items.length, 10) - 1 ? (
+                        {index < visibleItems.length - 1 ? (
                           <div className='mt-2 h-full min-h-7 w-px bg-slate-200' />
                         ) : null}
                       </div>
@@ -628,7 +638,7 @@ function StoryIntelligence() {
                   {t("Əlaqəli media materialları")}
                 </div>
                 <div className='mt-5 grid gap-3'>
-                  {story.items.slice(0, 12).map((item) => (
+                  {visibleItems.map((item) => (
                     <a
                       key={item.id}
                       href={item.url}
@@ -656,6 +666,19 @@ function StoryIntelligence() {
                     </a>
                   ))}
                 </div>
+                {canExpand ? (
+                  <button
+                    type='button'
+                    onClick={() =>
+                      setExpandedStoryKey(showAll ? null : story.key)
+                    }
+                    className='mt-4 inline-flex w-full items-center justify-center rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted/50'
+                  >
+                    {showAll
+                      ? t("Daha az göstər")
+                      : t("Hamısına bax ({0})", [story.items.length])}
+                  </button>
+                ) : null}
               </article>
             </section>
 
