@@ -195,7 +195,7 @@ function formatSpread(minutes: number | null, total: number) {
 
 function getCoverageLevel(count: number) {
   if (count >= 20) return t("Yüksək")
-  if (count >= 8) return 'Orta'
+  if (count >= 8) return t("Orta")
   return t("Aşağı")
 }
 
@@ -411,7 +411,7 @@ function StoryIntelligence() {
           <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
             <div className='max-w-3xl'>
               <h1 className='text-3xl font-bold tracking-tight sm:text-4xl'>
-                Story Intelligence
+                {t("Xəbər xəritəsi")}
               </h1>
               <p className='mt-2 text-lg text-muted-foreground'>{t("Xəbərin ilk harada yayımlandığını və mediada necə yayıldığını izləyin.")}</p>
               <p className='mt-3 text-sm text-muted-foreground'>{t("Son 30 gündə tapılan nəticələr mövzular üzrə qruplaşdırılır. Aşağıdakı siyahıdan konkret mövzunu seçib yayılma xəritəsinə baxa bilərsiniz.")}</p>
@@ -460,7 +460,7 @@ function StoryIntelligence() {
                   </h2>
                   <p className='mt-1 text-sm text-muted-foreground'>{t("İlk mənbə:")}{' '}{story.firstSource} ·{' '}
                     {formatTime(story.firstDetectedAt)} ·{' '}
-                    {story.uniqueSourceCount} media
+                    {t("{0} media", [story.uniqueSourceCount])}
                   </p>
                 </div>
                 <div className='flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center'>
@@ -508,7 +508,7 @@ function StoryIntelligence() {
                             </p>
                           </div>
                           <span className='shrink-0 rounded-full border border-border bg-card px-3 py-1 text-sm font-semibold text-foreground'>
-                            {group.uniqueSourceCount} media
+                            {t("{0} media", [group.uniqueSourceCount])}
                           </span>
                         </button>
                       )
@@ -522,7 +522,7 @@ function StoryIntelligence() {
               <article className='rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6'>
                 <div className='flex items-center gap-2 text-sm font-medium text-primary'>
                   <Newspaper className='h-4 w-4' />
-                  Story Summary
+                  {t("Mövzunun xülasəsi")}
                 </div>
                 <h2 className='mt-3 text-2xl leading-tight font-bold'>
                   {story.title}
@@ -535,7 +535,7 @@ function StoryIntelligence() {
                   />
                   <SummaryItem
                     label={t("Media əhatəsi")}
-                    value={`${story.uniqueSourceCount} media`}
+                    value={t("{0} media", [story.uniqueSourceCount])}
                   />
                   <SummaryItem
                     label={t("Yayılma sürəti")}
@@ -559,7 +559,7 @@ function StoryIntelligence() {
               <article className='rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6'>
                 <div className='flex items-center gap-2 text-sm font-medium text-primary'>
                   <MapPinned className='h-4 w-4' />
-                  Coverage Insights
+                  {t("Əhatə göstəriciləri")}
                 </div>
                 <div className='mt-4 grid gap-3'>
                   <InsightItem
@@ -580,12 +580,12 @@ function StoryIntelligence() {
                   />
                   <InsightItem
                     title={t("Başlığı dəyişən media sayı")}
-                    value={`${changedTitleCount} media`}
+                    value={t("{0} media", [changedTitleCount])}
                     icon={FileText}
                   />
                   <InsightItem
                     title={t("Mətnə əlavə edən media sayı")}
-                    value={`${addedInfoCount} media`}
+                    value={t("{0} media", [addedInfoCount])}
                     icon={Layers3}
                   />
                 </div>
@@ -596,7 +596,7 @@ function StoryIntelligence() {
               <article className='rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6'>
                 <div className='flex items-center gap-2 text-sm font-medium text-primary'>
                   <TrendingUp className='h-4 w-4' />
-                  Spread Timeline
+                  {t("Yayılma xətti")}
                 </div>
                 <div className='mt-5 space-y-4'>
                   {story.items.slice(0, 10).map((item, index) => (
@@ -625,7 +625,7 @@ function StoryIntelligence() {
               <article className='rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6'>
                 <div className='flex items-center gap-2 text-sm font-medium text-primary'>
                   <Globe2 className='h-4 w-4' />
-                  Related Media Items
+                  {t("Əlaqəli media materialları")}
                 </div>
                 <div className='mt-5 grid gap-3'>
                   {story.items.slice(0, 12).map((item) => (
