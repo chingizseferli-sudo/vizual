@@ -4,6 +4,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import {
   AlertCircle,
   Clock3,
+  Download,
   FileText,
   Globe2,
   Layers3,
@@ -108,6 +109,172 @@ function formatDate(value: string | null) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+// Cells starting with = + - @ would run as formulas when opened in Excel.
+function csvCell(value: string | number | null | undefined) {
+  let text = String(value ?? '')
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`
+  return `"${text.replace(/"/g, '""')}"`
+}
+
+function downloadFile(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function escapeHtml(value: string | number | null | undefined) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+// Only web links become clickable in the exported page.
+function safeHref(url: string) {
+  return /^https?:\/\//i.test(url) ? escapeHtml(url) : '#'
+}
+
+function buildStoriesHtml(groups: StoryGroup[]) {
+  const generatedAt = formatDate(new Date().toISOString())
+  const sections = groups
+    .map((group, index) => {
+      const rows = group.items
+        .map(
+          (item) => `
+          <tr>
+            <td>${escapeHtml(item.source)}</td>
+            <td><a href="${safeHref(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a></td>
+            <td>${escapeHtml(item.keyword)}</td>
+            <td class="nowrap">${escapeHtml(formatDate(item.detectedAt))}</td>
+          </tr>`
+        )
+        .join('')
+
+      return `
+      <section>
+        <h2>${index + 1}. ${escapeHtml(group.title)}</h2>
+        <p class="meta">${escapeHtml(t("İlk mənbə:"))} ${escapeHtml(group.firstSource)} · ${escapeHtml(formatDate(group.firstDetectedAt))} · ${escapeHtml(t("{0} media", [group.uniqueSourceCount]))}</p>
+        <table>
+          <thead><tr><th>${escapeHtml(t("Sayt"))}</th><th>${escapeHtml(t("Başlıq"))}</th><th>${escapeHtml(t("Açar söz"))}</th><th>${escapeHtml(t("Yayım vaxtı"))}</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </section>`
+    })
+    .join('')
+
+  return `<!doctype html>
+<html lang="az">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(t("Xəbər xəritəsi"))}</title>
+    <style>
+      *{box-sizing:border-box}
+      body{margin:0;color:#172033;background:#f5f8ff;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+      .page{max-width:1100px;margin:0 auto;padding:32px 20px}
+      header{border-radius:18px;padding:24px;color:#fff;background:linear-gradient(135deg,#1463ff,#14b8a6)}
+      header h1{margin:0 0 6px;font-size:28px}
+      header p{margin:0;opacity:.9}
+      section{margin-top:22px;border:1px solid #dbe4f5;border-radius:16px;background:#fff;padding:20px}
+      h2{margin:0;font-size:18px;line-height:1.35}
+      .meta{margin:6px 0 14px;color:#5b6b86;font-size:14px}
+      table{width:100%;border-collapse:collapse;font-size:14px}
+      th,td{padding:9px 10px;border-top:1px solid #e6ecf8;text-align:left;vertical-align:top}
+      th{border-top:0;color:#5b6b86;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+      a{color:#1463ff;text-decoration:none}
+      a:hover{text-decoration:underline}
+      .nowrap{white-space:nowrap}
+      @media print{body{background:#fff}section{break-inside:avoid}}
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <h1>Vizual.Az · ${escapeHtml(t("Xəbər xəritəsi"))}</h1>
+        <p>${escapeHtml(generatedAt)} · ${groups.length} ${escapeHtml(t("mövzu"))}</p>
+      </header>${sections}
+    </div>
+  </body>
+</html>`
+}
+
+function exportStories(groups: StoryGroup[], format: 'csv' | 'json' | 'html') {
+  const stamp = new Date().toISOString().slice(0, 10)
+
+  if (format === 'html') {
+    downloadFile(
+      `xeber-xeritesi-${stamp}.html`,
+      buildStoriesHtml(groups),
+      'text/html;charset=utf-8'
+    )
+    return
+  }
+
+  if (format === 'json') {
+    const data = groups.map((group, index) => ({
+      topic_number: index + 1,
+      title: group.title,
+      first_source: group.firstSource,
+      first_published_at: group.firstDetectedAt,
+      media_count: group.uniqueSourceCount,
+      items: group.items.map((item) => ({
+        source: item.source,
+        title: item.title,
+        url: item.url,
+        published_at: item.detectedAt,
+        keywords: item.keyword,
+      })),
+    }))
+    downloadFile(
+      `xeber-xeritesi-${stamp}.json`,
+      JSON.stringify(data, null, 2),
+      'application/json;charset=utf-8'
+    )
+    return
+  }
+
+  const rows: Array<Array<string | number | null>> = [
+    [
+      t("Mövzu №"),
+      t("Mövzu"),
+      t("İlk mənbə"),
+      t("Media əhatəsi"),
+      t("Sayt"),
+      t("Başlıq"),
+      t("Link"),
+      t("Yayım vaxtı"),
+      t("Açar söz"),
+    ],
+  ]
+  groups.forEach((group, index) => {
+    for (const item of group.items) {
+      rows.push([
+        index + 1,
+        group.title,
+        group.firstSource,
+        group.uniqueSourceCount,
+        item.source,
+        item.title,
+        item.url,
+        formatDate(item.detectedAt),
+        item.keyword,
+      ])
+    }
+  })
+  const csv = rows.map((row) => row.map(csvCell).join(',')).join('\n')
+  downloadFile(
+    `xeber-xeritesi-${stamp}.csv`,
+    `\ufeff${csv}`,
+    'text/csv;charset=utf-8'
+  )
 }
 
 function formatTime(value: string | null) {
@@ -476,6 +643,30 @@ function StoryIntelligence() {
                 <div className='flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center'>
                   <span className='rounded-full border border-border bg-muted/50 px-3 py-2 text-sm font-semibold text-foreground'>
                     {storyData.groups.length}{' '}{t("mövzu")}</span>
+                  <button
+                    type='button'
+                    onClick={() => exportStories(storyData.groups, 'csv')}
+                    className='inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted/50'
+                  >
+                    <Download className='h-4 w-4' />
+                    {t("Hamısını yüklə (CSV)")}
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => exportStories(storyData.groups, 'json')}
+                    className='inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted/50'
+                  >
+                    <Download className='h-4 w-4' />
+                    JSON
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => exportStories(storyData.groups, 'html')}
+                    className='inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted/50'
+                  >
+                    <Download className='h-4 w-4' />
+                    HTML
+                  </button>
                   <button
                     type='button'
                     onClick={() => setIsTopicListOpen((value) => !value)}
