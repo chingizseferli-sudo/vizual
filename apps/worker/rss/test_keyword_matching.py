@@ -76,7 +76,7 @@ def test_no_match_inside_longer_words(keyword, title):
     "keyword, title",
     [
         ("bdu", "BDU elan etdi"),
-        ("BDU", "bdu elan etdi"),
+        ("bdu", "Bdu elan etdi"),
         ("UNICEF", "Unicef nümayəndəsi Bakıda"),
         ("İLHAM", "ilham əliyev"),
         ("ilham", "İLHAM ƏLİYEV"),
@@ -106,3 +106,53 @@ def test_keyword_match_helper_uses_same_rules():
     matched, keywords = site_monitor.keyword_match("BDU-da Universitetin günü", ["BDU", "universitet", "ADA"])
     assert matched
     assert keywords == ["universitet", "bdu"]
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "DİM-də vacib xəbər",
+        "DİM-in qərarı",
+        "DİM-ə müraciət etdilər",
+        "DIM açıqladı",
+        "BU GÜN DİM QƏBUL ELAN ETDİ",
+    ],
+)
+def test_uppercase_acronym_keyword_matches_capitals_only(title):
+    assert match("DİM", title)
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Dim xəbəri",
+        "dim elan etdi",
+        "Mən bunu istədim",
+        "Heç nə görmədim",
+        "düşmədim",
+        "DİMin qərarı",
+    ],
+)
+def test_uppercase_acronym_keyword_ignores_lowercase_and_glued_words(title):
+    assert not match("DİM", title)
+
+
+def test_lowercase_keyword_stays_case_insensitive():
+    assert match("dim", "DİM-də vacib xəbər")
+    assert match("dim", "Dim xəbəri")
+    assert not match("dim", "Mən bunu istədim")
+
+
+def test_user_monitors_pass_original_case_to_the_matcher(monkeypatch):
+    seen = []
+    monkeypatch.setattr(site_monitor, "supabase_ready", lambda: True)
+    monkeypatch.setattr(site_monitor, "keyword_is_active", lambda row: True)
+    monkeypatch.setattr(site_monitor, "get_user_telegram_chat_id", lambda user_id: None)
+
+    def matcher(keyword, title):
+        seen.append((keyword, title))
+        return False
+
+    rows = [{"keyword": "DİM", "monitor_id": "m1", "user_monitors": {"user_id": "u1"}}]
+    site_monitor.find_matching_user_monitors("DİM-də xəbər", rows, matcher=matcher)
+    assert seen == [("DİM", "DİM-də xəbər")]

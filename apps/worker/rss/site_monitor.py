@@ -2387,7 +2387,27 @@ def clean_matched_keywords(keywords):
     return cleaned
 
 
+def is_uppercase_acronym(keyword):
+    """A short keyword typed in capitals ("DİM", "BDU"): the user means the acronym."""
+    text = unicodedata.normalize("NFC", str(keyword or "")).strip()
+    letters = [char for char in text if char.isalpha()]
+    return 2 <= len(text) <= 4 and " " not in text and bool(letters) and all(char.isupper() for char in letters)
+
+
+def acronym_matches_title(keyword, title_text):
+    """Capitals only, whole word: "DİM-də" matches "DİM", "dim" / "Dim" / "istədim" do not.
+
+    Dotted and dotless capital I are one letter (sites write DIM and DİM alike)."""
+    key = unicodedata.normalize("NFC", str(keyword or "")).strip().replace("İ", "I")
+    text = unicodedata.normalize("NFC", str(title_text or "")).replace("İ", "I")
+    return bool(re.search(r"(?<!\w)" + re.escape(key) + r"(?!\w)", text))
+
+
 def keyword_matches_title(keyword, title_text):
+    # Case matters only for a short keyword typed in capitals, and only while the
+    # caller still passes the original text (not an already lower-cased title).
+    if is_uppercase_acronym(keyword):
+        return acronym_matches_title(keyword, title_text)
     keyword = keyword_fold(keyword).strip()
     title_text = keyword_fold(title_text)
     if not keyword:
@@ -4718,7 +4738,6 @@ def find_matching_user_monitors(title, monitor_keywords_cache=None, matcher=None
     if not supabase_ready():
         return []
     matcher = matcher or keyword_matches_title
-    title_text = normalize_text(title)
     try:
         keywords = load_active_monitor_keywords() if monitor_keywords_cache is None else monitor_keywords_cache
         if keywords is None:
@@ -4732,7 +4751,7 @@ def find_matching_user_monitors(title, monitor_keywords_cache=None, matcher=None
                 continue
             keyword_original = row.get("keyword", "")
             keyword = normalize_text(keyword_original)
-            if not matcher(keyword, title_text):
+            if not matcher(keyword_original, title):
                 continue
             # A user can own the same keyword on two monitors; one story must
             # produce one match and one alert per user and keyword.
@@ -4763,7 +4782,6 @@ def match_user_monitors(item_id, title, monitor_keywords_cache=None, matcher=Non
     if not supabase_ready() or not item_id:
         return []
     matcher = matcher or keyword_matches_title
-    title_text = normalize_text(title)
     try:
         keywords = load_active_monitor_keywords() if monitor_keywords_cache is None else monitor_keywords_cache
         if keywords is None:
@@ -4776,7 +4794,7 @@ def match_user_monitors(item_id, title, monitor_keywords_cache=None, matcher=Non
                 continue
             keyword_original = row.get("keyword", "")
             keyword = normalize_text(keyword_original)
-            if not matcher(keyword, title_text):
+            if not matcher(keyword_original, title):
                 continue
             match_key = (row.get("monitor_id"), keyword)
             if match_key not in seen_matches:
