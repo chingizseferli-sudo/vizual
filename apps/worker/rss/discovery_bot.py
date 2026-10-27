@@ -83,7 +83,24 @@ GENERAL_NEWS_QUERIES_FAST = [
     "site:.az RSS xəbər",
 ]
 
-GENERAL_NEWS_QUERIES_DEEP = GENERAL_NEWS_QUERIES_FAST + [
+# Azərbaycan xəbər saytlarının hamısı .az deyil (.com, .info, .media, .net ...).
+# "site:.az" yalnız .az tapır, ona görə digər uzantılar ayrıca axtarılır;
+# Google News sorğusu hl=az&gl=AZ ilə olduğu üçün nəticələr Azərbaycan dilindədir.
+NON_AZ_NEWS_TLDS = [
+    ".com", ".info", ".net", ".org", ".media", ".news",
+    ".online", ".tv", ".site", ".press", ".live",
+]
+NON_AZ_QUERY_WORDS_FAST = ["xəbər", "son xəbərlər"]
+NON_AZ_QUERY_WORDS_DEEP = NON_AZ_QUERY_WORDS_FAST + ["xəbərlər", "gündəm", "xeber"]
+
+
+def non_az_tld_queries(words: list[str]) -> list[str]:
+    return [f"site:{tld} {word}" for tld in NON_AZ_NEWS_TLDS for word in words]
+
+
+GENERAL_NEWS_QUERIES_FAST = GENERAL_NEWS_QUERIES_FAST + non_az_tld_queries(NON_AZ_QUERY_WORDS_FAST)
+
+GENERAL_NEWS_QUERIES_DEEP = GENERAL_NEWS_QUERIES_FAST + non_az_tld_queries(NON_AZ_QUERY_WORDS_DEEP) + [
     "site:.az xəbər lenti",
     "site:.az son xəbərlər",
     "site:.az bütün xəbərlər",
@@ -730,6 +747,19 @@ def looks_like_commercial_site(name: str | None, url: str, html_text: str = "") 
 def count_az_news_language_signals(html_text: str) -> int:
     value = clean_text((html_text or "")[:12000]).lower()
     return sum(1 for word in AZ_NEWS_LANGUAGE_WORDS if word in value)
+
+
+def is_azerbaijani_source(domain: str, html_text: str = "", reasons=None) -> bool:
+    """.az domains, or any domain whose page reads as Azerbaijani news.
+
+    Google News lists many Azerbaijani outlets on .com/.info/.media; they get the
+    same "keep for review" safety net as .az sites when the page is Azerbaijani.
+    """
+    if (domain or "").endswith(".az"):
+        return True
+    if count_az_news_language_signals(html_text) >= 3:
+        return True
+    return any("Azərbaycan xəbər dili siqnal" in str(reason) for reason in (reasons or []))
 
 def entry_datetime(entry) -> datetime | None:
     parsed = entry.get("published_parsed") or entry.get("updated_parsed")
@@ -1444,7 +1474,7 @@ def analyze_section(session: requests.Session, name: str, section_url: str) -> d
             status = "review"
         elif total_fallback_score >= 30:
             status = "review"
-        elif domain.endswith(".az") and name and name != domain:
+        elif is_azerbaijani_source(domain, html_text) and name and name != domain:
             # Google News bu domeni mənbə kimi veribsə, onu tam itirmirik.
             # Belə saytlar review/manual_needed kimi adminə düşsün, sonra metod seçilər.
             total_fallback_score = max(total_fallback_score, 35)
@@ -1788,7 +1818,16 @@ def discover_sites(mode: str = "fast", add_to_config: bool = False):
                 score = int(analyzed.get("score", 0) or 0)
 
                 # Əgər Google News mənbə veribsə və analiz az bal veribsə belə, onu manual review-də saxlayırıq.
-                if status not in ("approved", "review") and source_name and section_domain.endswith(".az") and not is_hard_rejected(analyzed):
+                if (
+                    status not in ("approved", "review")
+                    and source_name
+                    and is_azerbaijani_source(
+                        section_domain,
+                        "",
+                        (analyzed.get("analysis") or {}).get("reasons"),
+                    )
+                    and not is_hard_rejected(analyzed)
+                ):
                     analyzed["status"] = "review"
                     analyzed["score"] = max(score, 35)
                     analyzed["reason"] = analyzed.get("reason") or "google_news_section_manual_review"

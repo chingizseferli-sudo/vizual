@@ -39,3 +39,20 @@ def test_unreachable_site_is_not_reachable():
 
     assert not d.site_reachable(Dead(), "https://dead.az")
     assert d.site_reachable(Live(), "https://blocks-us.az")
+
+
+def test_queries_cover_domains_other_than_az():
+    for mode in ("fast", "deep"):
+        queries = d.build_search_queries(mode)
+        assert any(q.startswith("site:.com ") for q in queries)
+        assert any(q.startswith("site:.info ") for q in queries)
+        assert any(q.startswith("site:.media ") for q in queries)
+    assert len(d.build_search_queries("fast")) <= d.get_mode_settings("fast")["max_queries"]
+
+
+def test_azerbaijani_language_keeps_non_az_domains_for_review():
+    az_page = "Azərbaycan xəbər gündəm cəmiyyət siyasət"
+    assert d.is_azerbaijani_source("yeni.az")
+    assert d.is_azerbaijani_source("yeni.com", az_page)
+    assert d.is_azerbaijani_source("yeni.info", "", ["Azərbaycan xəbər dili siqnalı var (4)"])
+    assert not d.is_azerbaijani_source("example.com", "latest world headlines and sports")
