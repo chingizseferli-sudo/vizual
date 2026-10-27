@@ -8,7 +8,7 @@ import {
   Search,
 } from 'lucide-react'
 import {
-  defaultPublicSiteContent,
+  initialPublicSiteContent,
   loadPublicSiteContent,
   type PublicService,
 } from '@/lib/public-site-content'
@@ -29,7 +29,7 @@ const serviceIcons: Record<PublicService['icon'], typeof Newspaper> = {
 }
 
 function SolutionsPage() {
-  const [content, setContent] = useState(defaultPublicSiteContent)
+  const [content, setContent] = useState(initialPublicSiteContent)
 
   useEffect(() => {
     let active = true

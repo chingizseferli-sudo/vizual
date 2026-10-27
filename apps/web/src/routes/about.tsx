@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Building2, ShieldCheck, Sparkles } from 'lucide-react'
 import {
-  defaultPublicSiteContent,
+  initialPublicSiteContent,
   loadPublicSiteContent,
 } from '@/lib/public-site-content'
 import {
@@ -16,7 +16,7 @@ import { t } from '@/lib/i18n'
 const principleIcons = [Building2, ShieldCheck, Sparkles]
 
 function AboutPage() {
-  const [content, setContent] = useState(defaultPublicSiteContent)
+  const [content, setContent] = useState(initialPublicSiteContent)
 
   useEffect(() => {
     loadPublicSiteContent().then(setContent)

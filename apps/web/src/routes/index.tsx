@@ -18,7 +18,7 @@ import {
   University,
 } from 'lucide-react'
 import {
-  defaultPublicSiteContent,
+  initialPublicSiteContent,
   loadPublicSiteContent,
   type PublicService,
 } from '@/lib/public-site-content'
@@ -48,7 +48,7 @@ const audienceIcons = [
 ]
 
 function IndexPage() {
-  const [content, setContent] = useState(defaultPublicSiteContent)
+  const [content, setContent] = useState(initialPublicSiteContent)
 
   useEffect(() => {
     let active = true
