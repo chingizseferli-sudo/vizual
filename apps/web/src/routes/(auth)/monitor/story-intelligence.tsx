@@ -633,9 +633,24 @@ function StoryIntelligence() {
               </article>
 
               <article className='rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6'>
-                <div className='flex items-center gap-2 text-sm font-medium text-primary'>
-                  <Globe2 className='h-4 w-4' />
-                  {t("Əlaqəli media materialları")}
+                <div className='flex items-center justify-between gap-3'>
+                  <div className='flex items-center gap-2 text-sm font-medium text-primary'>
+                    <Globe2 className='h-4 w-4' />
+                    {t("Əlaqəli media materialları")}
+                  </div>
+                  {canExpand ? (
+                    <button
+                      type='button'
+                      onClick={() =>
+                        setExpandedStoryKey(showAll ? null : story.key)
+                      }
+                      className='shrink-0 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold hover:bg-muted/50'
+                    >
+                      {showAll
+                        ? t("Daha az göstər")
+                        : t("Hamısına bax ({0})", [story.items.length])}
+                    </button>
+                  ) : null}
                 </div>
                 <div className='mt-5 grid gap-3'>
                   {visibleItems.map((item) => (
@@ -666,19 +681,6 @@ function StoryIntelligence() {
                     </a>
                   ))}
                 </div>
-                {canExpand ? (
-                  <button
-                    type='button'
-                    onClick={() =>
-                      setExpandedStoryKey(showAll ? null : story.key)
-                    }
-                    className='mt-4 inline-flex w-full items-center justify-center rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted/50'
-                  >
-                    {showAll
-                      ? t("Daha az göstər")
-                      : t("Hamısına bax ({0})", [story.items.length])}
-                  </button>
-                ) : null}
               </article>
             </section>
 
