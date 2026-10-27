@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { FunctionsHttpError } from '@supabase/supabase-js'
-import { MoreHorizontal, UserPlus } from 'lucide-react'
+import { MoreHorizontal, RefreshCw, UserPlus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import {
@@ -52,6 +52,36 @@ const EMPTY_NEW_ACCOUNT: NewAccountForm = {
   planId: '',
   status: 'active',
   periodEnd: '',
+}
+
+const PASSWORD_GROUPS = [
+  'ABCDEFGHJKLMNPQRSTUVWXYZ',
+  'abcdefghijkmnopqrstuvwxyz',
+  '23456789',
+  '!@#$%',
+]
+
+// Unbiased random index below max, from the browser's secure generator.
+function randomIndex(max: number) {
+  const limit = 256 - (256 % max)
+  const byte = new Uint8Array(1)
+  do {
+    crypto.getRandomValues(byte)
+  } while (byte[0] >= limit)
+  return byte[0] % max
+}
+
+// One character from every group (upper, lower, digit, symbol), the rest
+// from all of them, then shuffled. No look-alike characters (0/O, 1/l/I).
+function generatePassword(length = 8) {
+  const all = PASSWORD_GROUPS.join('')
+  const chars = PASSWORD_GROUPS.map((group) => group[randomIndex(group.length)])
+  while (chars.length < length) chars.push(all[randomIndex(all.length)])
+  for (let i = chars.length - 1; i > 0; i -= 1) {
+    const j = randomIndex(i + 1)
+    ;[chars[i], chars[j]] = [chars[j], chars[i]]
+  }
+  return chars.join('')
 }
 
 function dateInputValue(daysFromToday: number) {
@@ -450,7 +480,7 @@ function UsersPage() {
   }
 
   function openNewAccount() {
-    setNewAccount(EMPTY_NEW_ACCOUNT)
+    setNewAccount({ ...EMPTY_NEW_ACCOUNT, password: generatePassword() })
     setNewAccountError('')
     setNewAccountOpen(true)
   }
@@ -587,21 +617,36 @@ function UsersPage() {
 
             <label className='grid gap-1.5 text-sm font-medium'>
               Parol
-              <input
-                type='text'
-                autoComplete='new-password'
-                minLength={8}
-                maxLength={72}
-                value={newAccount.password}
-                onChange={(event) =>
-                  setNewAccount((current) => ({
-                    ...current,
-                    password: event.target.value,
-                  }))
-                }
-                className='rounded-lg border bg-background px-3 py-2 font-mono font-normal'
-                placeholder='Boş qalsa təsadüfi parol yaradılacaq'
-              />
+              <div className='flex gap-2'>
+                <input
+                  type='text'
+                  autoComplete='new-password'
+                  minLength={8}
+                  maxLength={72}
+                  value={newAccount.password}
+                  onChange={(event) =>
+                    setNewAccount((current) => ({
+                      ...current,
+                      password: event.target.value,
+                    }))
+                  }
+                  className='min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 font-mono font-normal'
+                  placeholder='Boş qalsa təsadüfi parol yaradılacaq'
+                />
+                <Button
+                  type='button'
+                  variant='outline'
+                  onClick={() =>
+                    setNewAccount((current) => ({
+                      ...current,
+                      password: generatePassword(),
+                    }))
+                  }
+                >
+                  <RefreshCw className='size-4' />
+                  Təsadüfi
+                </Button>
+              </div>
             </label>
 
             <div className='grid gap-3 sm:grid-cols-2'>
