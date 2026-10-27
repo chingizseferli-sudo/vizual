@@ -20,7 +20,12 @@ import { supabase } from '@/lib/supabase'
 import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
 import { dateLocale, t } from '@/lib/i18n'
 
-const STORY_FETCH_LIMIT = 700
+const STORY_PAGE_SIZE = 1000
+const STORY_MAX_PAGES = 3
+// Headlines of one story are close in time; the same words weeks later are a new story.
+const STORY_WINDOW_MS = 72 * 60 * 60 * 1000
+const STORY_MIN_SHARED_WORDS = 3
+const STORY_MIN_OVERLAP = 0.6
 
 type StoryMatchRow = {
   id: string
@@ -41,8 +46,10 @@ type StoryItem = {
   id: string
   title: string
   normalizedTitle: string
+  words: Set<string>
   source: string
   url: string
+  // When the article was published; falls back to when the bot found it.
   detectedAt: string | null
   keyword: string
 }
@@ -89,17 +96,6 @@ function normalizeTitle(title: string) {
     .trim()
 }
 
-function makeStoryKey(title: string, keyword: string) {
-  const normalized = normalizeTitle(title)
-  const tokens = normalized
-    .split(' ')
-    .filter((token) => token.length > 2)
-    .slice(0, 8)
-
-  if (tokens.length >= 4) return tokens.join('-')
-  return `${keyword || 'story'}-${tokens.join('-') || normalized}`
-}
-
 function formatDate(value: string | null) {
   if (!value) return '-'
 
@@ -133,13 +129,53 @@ function getHost(url: string | null | undefined) {
   }
 }
 
+// Order by when the site published the article. The bot's detection time
+// depends on its crawl order and on blocked sites, so it only backs up a
+// missing or implausible publish time (empty, or later than detection).
 function getDetectedAt(row: StoryMatchRow) {
-  return (
-    row.monitored_items?.detected_at ||
-    row.created_at ||
-    row.monitored_items?.published_at ||
-    null
+  const item = row.monitored_items
+  const found = item?.detected_at || row.created_at || null
+  const published = item?.published_at || null
+  if (!published) return found
+  if (!found) return published
+
+  const publishedMs = new Date(published).getTime()
+  const foundMs = new Date(found).getTime()
+  if (!Number.isFinite(publishedMs)) return found
+  if (Number.isFinite(foundMs) && publishedMs > foundMs + 5 * 60 * 1000) {
+    return found
+  }
+  return published
+}
+
+// Word stems (first 5 letters) so Azerbaijani case endings do not split a story.
+function titleWords(normalizedTitle: string) {
+  return new Set(
+    normalizedTitle
+      .split(' ')
+      .filter((word) => word.length > 2)
+      .map((word) => word.slice(0, 5))
   )
+}
+
+function sharedWordCount(a: Set<string>, b: Set<string>) {
+  let shared = 0
+  for (const word of a) if (b.has(word)) shared += 1
+  return shared
+}
+
+function sameStory(a: StoryItem, b: StoryItem) {
+  if (a.words.size === 0 || b.words.size === 0) return false
+  const shared = sharedWordCount(a.words, b.words)
+  if (shared < Math.min(STORY_MIN_SHARED_WORDS, a.words.size, b.words.size)) {
+    return false
+  }
+  return shared / Math.min(a.words.size, b.words.size) >= STORY_MIN_OVERLAP
+}
+
+function timeMs(value: string | null) {
+  const ms = value ? new Date(value).getTime() : NaN
+  return Number.isFinite(ms) ? ms : 0
 }
 
 function minutesBetween(start: string | null, end: string | null) {
@@ -174,42 +210,63 @@ function getSimilarityLabel(item: StoryItem, firstItem: StoryItem) {
 }
 
 function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
-  const items = rows
-    .map((row) => {
-      const title = cleanTitle(row.monitored_items?.title)
-      const url = row.monitored_items?.url || ''
-      const keyword = row.matched_keyword || t("Açar söz")
+  // One article can match several keywords and may be stored under several
+  // URLs: count it once per site and headline and keep every keyword.
+  const unique = new Map<string, StoryItem>()
 
-      if (!title || !url) return null
+  for (const row of rows) {
+    const title = cleanTitle(row.monitored_items?.title)
+    const url = row.monitored_items?.url || ''
+    if (!title || !url) continue
 
-      return {
-        id: row.id,
-        title,
-        normalizedTitle: normalizeTitle(title),
-        source: getHost(url),
-        url,
-        detectedAt: getDetectedAt(row),
-        keyword,
-      } satisfies StoryItem
+    const source = getHost(url)
+    const normalizedTitle = normalizeTitle(title)
+    const keyword = row.matched_keyword || t("Açar söz")
+    const key = `${source}|${normalizedTitle}`
+    const existing = unique.get(key)
+
+    if (existing) {
+      const keywords = existing.keyword.split(', ')
+      if (!keywords.includes(keyword)) existing.keyword += `, ${keyword}`
+      const at = getDetectedAt(row)
+      if (timeMs(at) && (!existing.detectedAt || timeMs(at) < timeMs(existing.detectedAt))) {
+        existing.detectedAt = at
+      }
+      continue
+    }
+
+    unique.set(key, {
+      id: row.id,
+      title,
+      normalizedTitle,
+      words: titleWords(normalizedTitle),
+      source,
+      url,
+      detectedAt: getDetectedAt(row),
+      keyword,
     })
-    .filter(Boolean) as StoryItem[]
-
-  const map = new Map<string, StoryItem[]>()
-
-  for (const item of items) {
-    const key = makeStoryKey(item.title, item.keyword)
-    const current = map.get(key) || []
-    current.push(item)
-    map.set(key, current)
   }
 
-  return [...map.entries()]
-    .map(([key, groupItems]) => {
-      const sorted = [...groupItems].sort((a, b) => {
-        const aTime = a.detectedAt ? new Date(a.detectedAt).getTime() : 0
-        const bTime = b.detectedAt ? new Date(b.detectedAt).getTime() : 0
-        return aTime - bTime
-      })
+  // Cluster by shared headline words, oldest first, within a time window.
+  const items = [...unique.values()].sort(
+    (a, b) => timeMs(a.detectedAt) - timeMs(b.detectedAt)
+  )
+  const clusters: StoryItem[][] = []
+
+  for (const item of items) {
+    const cluster = clusters.find((members) => {
+      const anchor = members[0]
+      return (
+        Math.abs(timeMs(item.detectedAt) - timeMs(anchor.detectedAt)) <=
+          STORY_WINDOW_MS && members.some((member) => sameStory(item, member))
+      )
+    })
+    if (cluster) cluster.push(item)
+    else clusters.push([item])
+  }
+
+  return clusters
+    .map((sorted, index) => {
       const first = sorted[0]
       const last = sorted[sorted.length - 1]
       const sources = new Set(sorted.map((item) => item.source))
@@ -219,7 +276,7 @@ function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
       )
 
       return {
-        key,
+        key: `${index}-${first.normalizedTitle.slice(0, 40)}`,
         title: first?.title || t("Xəbər mövzusu"),
         firstSource: first?.source || '-',
         firstDetectedAt: first?.detectedAt || null,
@@ -236,13 +293,7 @@ function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
         return b.uniqueSourceCount - a.uniqueSourceCount
       if (b.totalCoverage !== a.totalCoverage)
         return b.totalCoverage - a.totalCoverage
-      const aTime = a.firstDetectedAt
-        ? new Date(a.firstDetectedAt).getTime()
-        : 0
-      const bTime = b.firstDetectedAt
-        ? new Date(b.firstDetectedAt).getTime()
-        : 0
-      return bTime - aTime
+      return timeMs(b.firstDetectedAt) - timeMs(a.firstDetectedAt)
     })
 }
 
@@ -277,25 +328,32 @@ async function fetchStoryData(): Promise<StoryData> {
   const retentionStart = new Date()
   retentionStart.setDate(retentionStart.getDate() - 31)
 
-  const { data, error } = await supabase
-    .from('monitor_matches')
-    .select(
-      'id,monitor_id,item_id,matched_keyword,created_at,monitored_items(title,url,published_at,detected_at,status)'
-    )
-    .in('monitor_id', monitorIds)
-    .gte('created_at', retentionStart.toISOString())
-    .order('created_at', { ascending: false })
-    .limit(STORY_FETCH_LIMIT)
+  const rows: StoryMatchRow[] = []
 
-  if (error) {
-    return {
-      groups: [],
-      totalRows: 0,
-      errorMessage: t("Story Intelligence məlumatlarını yükləmək mümkün olmadı."),
+  for (let page = 0; page < STORY_MAX_PAGES; page += 1) {
+    const from = page * STORY_PAGE_SIZE
+    const { data, error } = await supabase
+      .from('monitor_matches')
+      .select(
+        'id,monitor_id,item_id,matched_keyword,created_at,monitored_items(title,url,published_at,detected_at,status)'
+      )
+      .in('monitor_id', monitorIds)
+      .gte('created_at', retentionStart.toISOString())
+      .order('created_at', { ascending: false })
+      .range(from, from + STORY_PAGE_SIZE - 1)
+
+    if (error) {
+      return {
+        groups: [],
+        totalRows: 0,
+        errorMessage: t("Story Intelligence məlumatlarını yükləmək mümkün olmadı."),
+      }
     }
-  }
 
-  const rows = (data || []) as unknown as StoryMatchRow[]
+    const batch = (data || []) as unknown as StoryMatchRow[]
+    rows.push(...batch)
+    if (batch.length < STORY_PAGE_SIZE) break
+  }
 
   return {
     groups: buildStoryGroups(rows),
@@ -324,20 +382,27 @@ function StoryIntelligence() {
   }, [selectedStoryKey, storyData.groups])
 
   const firstItem = story?.items[0] || null
-  const fastest = story?.items[1] || story?.items[0] || null
-  const changedTitleCount =
+  // Fastest follower: the earliest item from a different site than the first.
+  const fastest =
+    story?.items.find((item) => item.source !== firstItem?.source) || null
+  const countMedia = (label: string) =>
     story && firstItem
-      ? story.items.filter(
-          (item) => getSimilarityLabel(item, firstItem) === t('Başlıq dəyişib')
-        ).length
+      ? new Set(
+          story.items
+            .filter(
+              (item) =>
+                item.source !== firstItem.source &&
+                getSimilarityLabel(item, firstItem) === label
+            )
+            .map((item) => item.source)
+        ).size
       : 0
-  const addedInfoCount =
-    story && firstItem
-      ? story.items.filter(
-          (item) =>
-            getSimilarityLabel(item, firstItem) === t('Əlavə məlumat əlavə olunub')
-        ).length
-      : 0
+  const changedTitleCount = countMedia(t('Başlıq dəyişib'))
+  const addedInfoCount = countMedia(t('Əlavə məlumat əlavə olunub'))
+  const fastestGap =
+    fastest && firstItem
+      ? minutesBetween(firstItem.detectedAt, fastest.detectedAt)
+      : null
 
   return (
     <section className='min-h-screen bg-muted/50 px-4 py-6 text-foreground sm:px-6 lg:px-8'>
@@ -465,7 +530,7 @@ function StoryIntelligence() {
                 <div className='mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
                   <SummaryItem label={t("İlk mənbə")} value={story.firstSource} />
                   <SummaryItem
-                    label={t("İlk aşkarlanma")}
+                    label={t("İlk yayım")}
                     value={formatDate(story.firstDetectedAt)}
                   />
                   <SummaryItem
@@ -506,7 +571,9 @@ function StoryIntelligence() {
                     title={t("Ən sürətli götürən media")}
                     value={
                       fastest
-                        ? `${fastest.source} · ${formatTime(fastest.detectedAt)}`
+                        ? `${fastest.source} · ${formatTime(fastest.detectedAt)}${
+                            fastestGap === null ? '' : ` (+${fastestGap} dəq)`
+                          }`
                         : '-'
                     }
                     icon={Clock3}
@@ -577,7 +644,7 @@ function StoryIntelligence() {
                           <h3 className='mt-1 leading-snug font-semibold'>
                             {item.title}
                           </h3>
-                          <p className='mt-2 text-sm text-muted-foreground'>{t("Aşkarlanma:")}{' '}{formatDate(item.detectedAt)}
+                          <p className='mt-2 text-sm text-muted-foreground'>{t("Yayım vaxtı:")}{' '}{formatDate(item.detectedAt)}
                           </p>
                         </div>
                         <span className='w-fit rounded-full border border-border bg-card px-3 py-1 text-sm font-medium text-foreground'>
@@ -595,7 +662,7 @@ function StoryIntelligence() {
             <section className='rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6'>
               <div className='flex items-center gap-2 text-sm font-medium text-primary'>
                 <FileText className='h-4 w-4' />{t("İstifadəçi üçün izah")}</div>
-              <p className='mt-3 max-w-4xl text-muted-foreground'>{t("Bu bölmə eyni mövzu üzrə yayılan media materiallarını qruplaşdırır və xəbərin yayılma ardıcıllığını göstərir. Qruplaşdırma mövcud nəticələrin başlığı, mənbəsi, açar sözü və aşkarlanma vaxtı əsasında aparılır.")}</p>
+              <p className='mt-3 max-w-4xl text-muted-foreground'>{t("Bu bölmə eyni mövzu üzrə yayılan media materiallarını qruplaşdırır və xəbərin yayılma ardıcıllığını göstərir. Qruplaşdırma başlıqdakı ortaq sözlərə və 72 saatlıq vaxt pəncərəsinə görə aparılır, sıralama saytın yayım vaxtına əsaslanır. Yalnız sizin açar sözlərinizə uyğun gələn və ən azı 2 mediada çıxan xəbərlər göstərilir.")}</p>
               <div className='mt-4 text-sm text-muted-foreground'>{t("Son 30 gündə yoxlanılan nəticə:")}{' '}{storyData.totalRows}{' '}{t("· Qruplaşdırılan mövzu sayı:")}{' '}{storyData.groups.length}
               </div>
             </section>
