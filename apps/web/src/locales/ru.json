@@ -814,5 +814,11 @@
   "Sosial filtr saxlanıldı: {0}": "Фильтр соцсетей сохранён: {0}",
   "Sosial filtr: yalnız Azərbaycan": "Фильтр соцсетей: только Азербайджан",
   "Sosial filtr: bütün ölkələr": "Фильтр соцсетей: все страны",
-  "istisna: {0}": "исключить: {0}"
+  "istisna: {0}": "исключить: {0}",
+  "Mövzunun xülasəsi": "Сводка по теме",
+  "Əhatə göstəriciləri": "Показатели охвата",
+  "Yayılma xətti": "Хронология распространения",
+  "Əlaqəli media materialları": "Связанные материалы СМИ",
+  "Orta": "Средний",
+  "{0} media": "{0} СМИ"
 }
