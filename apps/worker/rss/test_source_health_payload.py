@@ -143,8 +143,12 @@ class SourceHealthPayloadTests(unittest.TestCase):
             self.assertEqual(site_monitor.source_backoff_interval(reason), timedelta(0), reason)
         self.assertEqual(site_monitor.get_scheduler_base_interval_minutes({"monitor_method": "rss"}), 5)
         self.assertEqual(site_monitor.get_scheduler_base_interval_minutes({"monitor_method": "latest_page"}), 8)
-        # Blocks and dead sites still back off for hours.
-        self.assertGreaterEqual(site_monitor.source_backoff_interval("http_403"), timedelta(hours=24))
+        # Blocks and dead sites back off for hours, but not a whole day.
+        for reason in ("http_403", "http_429", "dns_failure", "ssl_failure", "http_404"):
+            interval = site_monitor.source_backoff_interval(reason)
+            self.assertGreaterEqual(interval, timedelta(hours=2), reason)
+            self.assertLessEqual(interval, timedelta(hours=6), reason)
+        self.assertEqual(site_monitor.source_backoff_interval("unsafe_url"), timedelta(hours=24))
 
     def test_loss_streak_does_not_slow_polling(self):
         notes = site_monitor.merge_crawl_state_notes("", {"last_result": "bad_title"})

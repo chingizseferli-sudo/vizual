@@ -747,16 +747,16 @@ def safe_request(url, *, site=None, method="", **kwargs):
 def source_backoff_interval(reason, fail_count=0):
     reason = clean_text(reason)
     fail_count = int(fail_count or 0)
-    if reason == "http_403":
-        return timedelta(hours=24)
-    if reason == "http_429":
-        return timedelta(hours=18)
+    # Blocks and outages are retried within hours, not a day: news older than
+    # NEWS_TIME_LIMIT_HOURS is never sent, so a long wait only delays the next fresh article.
+    if reason in {"http_403", "http_429"}:
+        return timedelta(hours=3 if fail_count < 3 else 6)
     if reason == "timeout":
         return timedelta(hours=6 if fail_count >= 2 else 1)
-    if reason in {"dns_failure", "ssl_failure", "unsafe_url"}:
+    if reason == "unsafe_url":
         return timedelta(hours=24)
-    if reason in {"http_404", "dead"}:
-        return timedelta(hours=24)
+    if reason in {"dns_failure", "ssl_failure", "http_404", "dead"}:
+        return timedelta(hours=2 if fail_count < 3 else 6)
     if reason.startswith("http_5") or reason in {"site_error"}:
         return timedelta(hours=2 if fail_count < 3 else 6)
     if reason in {"rss_empty", "sitemap_empty", "latest_page_empty", "homepage_empty", "fallback_empty", "no_article"}:
