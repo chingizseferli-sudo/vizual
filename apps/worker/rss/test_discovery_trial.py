@@ -19,8 +19,54 @@ def test_rejected_stays_rejected_without_trial_tag():
     assert "[trial" not in (payload["notes"] or "")
 
 
-def test_low_google_news_activity_is_not_a_final_rejection():
-    assert not d.is_hard_rejected(site("review", "insufficient_news_activity: 0/15 in last 24h"))
+def test_low_google_news_activity_does_not_reject_a_site(monkeypatch):
+    html = "<html>" + "xəbər " * 10 + "</html>"
+
+    class Session:
+        pass
+
+    monkeypatch.setattr(d, "page_news_stats", lambda session, url: (True, 12, 0, html))
+    monkeypatch.setattr(d, "find_working_rss", lambda session, url, text: (None, 0))
+    monkeypatch.setattr(d, "google_news_activity_count", lambda session, domain, hours: 0)
+    monkeypatch.setattr(d, "guess_selector_and_xpath", lambda session, url: ("article", [], 10))
+    result = d.analyze_section(Session(), "Yerli xəbər", "https://yerli.az")
+    assert result["status"] != "rejected"
+    assert "insufficient_news_activity" not in result["reason"]
+
+
+def test_non_azerbaijani_page_is_rejected_for_good(monkeypatch):
+    monkeypatch.setattr(d, "page_news_stats", lambda session, url: (True, 12, 0, "Последние новости России"))
+    monkeypatch.setattr(d, "find_working_rss", lambda session, url, text: (None, 0))
+    result = d.analyze_section(object(), "Новости", "https://novosti.com")
+    assert result["status"] == "rejected"
+    assert d.is_hard_rejected(result)
+
+
+def test_site_with_too_few_news_links_is_rejected(monkeypatch):
+    html = "<html>" + "xəbər " * 10 + "</html>"
+    monkeypatch.setattr(d, "page_news_stats", lambda session, url: (True, 2, 0, html))
+    monkeypatch.setattr(d, "find_working_rss", lambda session, url, text: (None, 0))
+    monkeypatch.setattr(d, "google_news_activity_count", lambda session, domain, hours: 0)
+    result = d.analyze_section(object(), "Kiçik", "https://kicik.az")
+    assert result["status"] == "rejected"
+
+
+def test_store_and_encyclopedia_domains_are_not_candidates():
+    for url in ("https://apps.apple.com/az/app/x", "https://az.wikipedia.org/wiki/X"):
+        assert d.is_bad_url(url)
+
+
+def test_rotating_queries_change_every_run_and_cover_all_regions():
+    first = d.rotating_queries(0)
+    assert first != d.rotating_queries(1)
+    seen = set()
+    for slot in range(len(d.REGION_NAMES)):
+        seen.update(q for q in d.rotating_queries(slot) if q.endswith(" xəbərləri") and "Azərbaycan" not in q)
+    assert len(seen) == len(d.REGION_NAMES)
+
+
+def test_fast_mode_queries_fit_the_limit():
+    assert len(d.build_search_queries("fast", slot=3)) <= d.get_mode_settings("fast")["max_queries"]
 
 
 def test_commercial_and_subdomain_rejections_stay_final():

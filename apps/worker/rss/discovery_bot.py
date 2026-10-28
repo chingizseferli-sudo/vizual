@@ -24,7 +24,7 @@ REQUEST_TIMEOUT = 12
 DISCOVERY_VERSION = "5.3-general-news-discovery"
 DISCOVERY_ACTIVITY_LOOKBACK_HOURS = int(os.getenv("DISCOVERY_ACTIVITY_LOOKBACK_HOURS", "24"))
 DISCOVERY_MIN_NEWS_PER_PERIOD = int(os.getenv("DISCOVERY_MIN_NEWS_PER_PERIOD", "15"))
-DISCOVERY_REQUIRE_ACTIVITY = os.getenv("DISCOVERY_REQUIRE_ACTIVITY", "true").lower() != "false"
+DISCOVERY_MIN_NEWS_LINKS = int(os.getenv("DISCOVERY_MIN_NEWS_LINKS", "5"))
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
@@ -227,7 +227,8 @@ RSS_PATHS = [
 BAD_DOMAINS = [
     "facebook.com", "instagram.com", "youtube.com", "youtu.be", "t.me",
     "twitter.com", "x.com", "linkedin.com", "whatsapp.com", "google.com",
-    "news.google.com", "maps.google.com",
+    "news.google.com", "maps.google.com", "apple.com", "microsoft.com",
+    "wikipedia.org", "wikimedia.org",
 ]
 
 # gov istənmir. Tam qadağa qoyuruq ki, discovery gov mənbələrini toplamasın.
@@ -280,7 +281,7 @@ def get_mode_settings(mode: str) -> dict:
         }
     else:
         settings = {
-            "max_queries": 55,
+            "max_queries": 70,
             "max_entries_per_query": 40,
             "max_sections_per_source": 3,
             "sleep": 0.10,
@@ -349,7 +350,7 @@ def is_hard_rejected(site: dict) -> bool:
         "subdomain_rejected",
         "bad_url_or_gov_blocked",
         "rejected_commercial",
-        "rejected_inactive_news",
+        "rejected_not_azerbaijani",
     )
     return any(marker in reason or marker in source_type for marker in hard_markers)
 
@@ -804,13 +805,45 @@ def google_news_activity_count(session: requests.Session, domain: str, lookback_
         return 0
 
 
-def build_search_queries(mode: str) -> list[str]:
+# Fixed generic queries return the same big outlets every time. Local and topic words find
+# the small sites; each 6-hour run takes the next slice so all of them are covered in turn.
+REGION_NAMES = [
+    "Bakı", "Gəncə", "Sumqayıt", "Mingəçevir", "Naxçıvan", "Şəki", "Lənkəran", "Şirvan",
+    "Quba", "Qəbələ", "Zaqatala", "Qazax", "Tovuz", "Bərdə", "Ağdam", "Şuşa", "Xankəndi",
+    "Yevlax", "Göyçay", "Masallı", "Astara", "Cəlilabad", "Salyan", "Neftçala", "Şamaxı",
+    "İsmayıllı", "Xaçmaz", "Balakən", "Ağcabədi", "Ağdaş", "Ağsu", "Beyləqan", "Biləsuvar",
+    "Füzuli", "Goranboy", "Hacıqabul", "İmişli", "Kürdəmir", "Saatlı", "Sabirabad", "Şəmkir",
+    "Şabran", "Cəbrayıl", "Laçın", "Kəlbəcər", "Zəngilan", "Qubadlı", "Ordubad", "Şərur",
+]
+TOPIC_WORDS = [
+    "kriminal", "səhiyyə", "təhsil", "texnologiya", "biznes", "turizm", "kənd təsərrüfatı",
+    "avtomobil", "hüquq", "ekologiya", "ədəbiyyat", "gənclər", "qadın", "tibb", "enerji",
+]
+ROTATING_REGIONS_PER_RUN = 10
+ROTATING_TOPICS_PER_RUN = 4
+
+
+def rotating_queries(slot: int) -> list[str]:
+    def take(items, count):
+        start = (slot * count) % len(items)
+        return [items[(start + i) % len(items)] for i in range(count)]
+
+    return (
+        [f"{region} xəbərləri" for region in take(REGION_NAMES, ROTATING_REGIONS_PER_RUN)]
+        + [f"{topic} xəbərləri Azərbaycan" for topic in take(TOPIC_WORDS, ROTATING_TOPICS_PER_RUN)]
+    )
+
+
+def build_search_queries(mode: str, slot: int | None = None) -> list[str]:
     queries = []
     base_queries = GENERAL_NEWS_QUERIES_DEEP if mode == "deep" else GENERAL_NEWS_QUERIES_FAST
     edu_queries = EDU_CHECK_QUERIES_DEEP if mode == "deep" else EDU_CHECK_QUERIES_FAST
 
     # 1) Default hədəf: gündəlik Azərbaycan xəbər saytları.
     queries.extend(base_queries)
+    if slot is None:
+        slot = int(time.time() // (6 * 3600))
+    queries.extend(rotating_queries(slot))
 
     # 2) Təhsil/elm xüsusi axtarışı artıq default deyil; yalnız lazım olanda env ilə açılır.
     if DISCOVERY_INCLUDE_EDU_SPECIALIZED:
@@ -1343,6 +1376,31 @@ def analyze_section(session: requests.Session, name: str, section_url: str) -> d
             "source_type": "rejected_commercial",
         }
 
+    if not is_azerbaijani_source(domain, html_text):
+        return {
+            "name": name or domain,
+            "url": section_url.rstrip("/"),
+            "enabled": True,
+            "rss_url": rss_url,
+            "selector": None,
+            "xpaths": [],
+            "keywords": DEFAULT_KEYWORDS,
+            "limit": 10,
+            "score": 0,
+            "status": "rejected",
+            "reason": "not_azerbaijani_language",
+            "analysis": {
+                "rss_count": rss_count,
+                "news_link_count": news_count,
+                "topic_keyword_count": edu_keyword_count,
+                "article_block_count": 0,
+                "activity_count": 0,
+                "activity_source": "language_filter",
+                "reasons": ["page is not Azerbaijani news"],
+            },
+            "source_type": "rejected_not_azerbaijani",
+        }
+
     rss_recent_count = count_recent_rss_entries(
         session,
         rss_url,
@@ -1356,33 +1414,8 @@ def analyze_section(session: requests.Session, name: str, section_url: str) -> d
     activity_count = max(rss_recent_count, google_recent_count)
     activity_source = "rss" if rss_recent_count >= google_recent_count else "google_news"
 
-    if DISCOVERY_REQUIRE_ACTIVITY and activity_count < DISCOVERY_MIN_NEWS_PER_PERIOD:
-        return {
-            "name": name or domain,
-            "url": section_url.rstrip("/"),
-            "enabled": True,
-            "rss_url": rss_url,
-            "selector": None,
-            "xpaths": [],
-            "keywords": DEFAULT_KEYWORDS,
-            "limit": 10,
-            "score": min(score, 20),
-            "status": "rejected",
-            "reason": f"insufficient_news_activity: {activity_count}/{DISCOVERY_MIN_NEWS_PER_PERIOD} in last {DISCOVERY_ACTIVITY_LOOKBACK_HOURS}h",
-            "analysis": {
-                "rss_count": rss_count,
-                "news_link_count": news_count,
-                "topic_keyword_count": edu_keyword_count,
-                "article_block_count": 0,
-                "activity_count": activity_count,
-                "activity_source": activity_source,
-                "rss_recent_count": rss_recent_count,
-                "google_recent_count": google_recent_count,
-                "reasons": reasons + [f"activity too low ({activity_count}/{DISCOVERY_MIN_NEWS_PER_PERIOD})"],
-            },
-            "source_type": "rejected_inactive_news",
-        }
-
+    # Google News often does not index small sites, so low activity there is no proof the site
+    # is dead. It only withholds the bonus; the trial reads the site and decides.
     if activity_count >= DISCOVERY_MIN_NEWS_PER_PERIOD:
         score += 25
         reasons.append(
@@ -1509,16 +1542,38 @@ def analyze_section(session: requests.Session, name: str, section_url: str) -> d
             "source_type": "homepage_fallback",
         }
 
+    if news_count < DISCOVERY_MIN_NEWS_LINKS:
+        return {
+            "name": name or domain,
+            "url": section_url.rstrip("/"),
+            "enabled": True,
+            "rss_url": rss_url,
+            "selector": None,
+            "xpaths": [],
+            "keywords": DEFAULT_KEYWORDS,
+            "limit": 10,
+            "score": min(score, 20),
+            "status": "rejected",
+            "reason": f"news links insufficient: {news_count}/{DISCOVERY_MIN_NEWS_LINKS}",
+            "analysis": {
+                "rss_count": rss_count,
+                "news_link_count": news_count,
+                "topic_keyword_count": edu_keyword_count,
+                "article_block_count": 0,
+                "activity_count": activity_count,
+                "activity_source": activity_source,
+                "reasons": reasons,
+            },
+            "source_type": "rejected_few_news_links",
+        }
+
     # Xəbər saytı olması əsasdır.
     if news_count >= 10:
         score += 30
         reasons.append(f"çox xəbər linki var ({news_count})")
-    elif news_count >= 5:
+    else:
         score += 22
         reasons.append(f"xəbər linkləri var ({news_count})")
-    else:
-        score += 15
-        reasons.append(f"minimum xəbər linkləri var ({news_count})")
 
     try:
         selector, xpaths, article_count = guess_selector_and_xpath(
