@@ -29,6 +29,7 @@ const STORY_MAX_PAGES = 3
 const STORY_WINDOW_MS = 72 * 60 * 60 * 1000
 const STORY_MIN_SHARED_WORDS = 3
 const STORY_MIN_OVERLAP = 0.7
+const STORY_MIN_DISTINCT_SHARED_WORDS = 2
 // A word in more than this share of all headlines ("yeni", "təyin", "direktor") says nothing about the story.
 const STORY_COMMON_WORD_SHARE = 0.04
 const STORY_COMMON_WORD_MIN_ITEMS = 20
@@ -361,11 +362,20 @@ function sharedWordCount(a: Set<string>, b: Set<string>) {
   return shared
 }
 
-function sameStory(a: Set<string>, b: Set<string>) {
-  if (a.size === 0 || b.size === 0) return false
-  const shared = sharedWordCount(a, b)
-  if (shared < Math.min(STORY_MIN_SHARED_WORDS, a.size, b.size)) return false
-  return shared / Math.min(a.size, b.size) >= STORY_MIN_OVERLAP
+// `words` are all headline words, `distinct` the ones left after dropping common words.
+type StoryWords = { words: Set<string>; distinct: Set<string> }
+
+function sameStory(a: StoryWords, b: StoryWords) {
+  // Two headlines that differ only in a place or a name ("Bakıda müəllim vəfat etdi"
+  // vs "Beyləqanda müəllim vəfat edib") share generic words but are different stories,
+  // so enough of the shared words must be uncommon ones.
+  const distinctShared = sharedWordCount(a.distinct, b.distinct)
+  if (distinctShared < STORY_MIN_DISTINCT_SHARED_WORDS) return false
+  if (sharedWordCount(a.words, b.words) < STORY_MIN_SHARED_WORDS) return false
+  return (
+    distinctShared / Math.min(a.distinct.size, b.distinct.size) >=
+    STORY_MIN_OVERLAP
+  )
 }
 
 function timeMs(value: string | null) {
@@ -456,10 +466,13 @@ function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
     for (const [word, count] of counts)
       if (count / items.length > STORY_COMMON_WORD_SHARE) common.add(word)
   }
-  const distinct = new Map(
+  const wordsOf = new Map<StoryItem, StoryWords>(
     items.map((item) => [
       item,
-      new Set([...item.words].filter((word) => !common.has(word))),
+      {
+        words: item.words,
+        distinct: new Set([...item.words].filter((word) => !common.has(word))),
+      },
     ])
   )
 
@@ -468,7 +481,7 @@ function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
   const clusters: StoryItem[][] = []
 
   for (const item of items) {
-    const mine = distinct.get(item) as Set<string>
+    const mine = wordsOf.get(item) as StoryWords
     const cluster = clusters.find((members) => {
       if (
         Math.abs(timeMs(item.detectedAt) - timeMs(members[0].detectedAt)) >
@@ -476,7 +489,7 @@ function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
       )
         return false
       const similar = members.filter((member) =>
-        sameStory(mine, distinct.get(member) as Set<string>)
+        sameStory(mine, wordsOf.get(member) as StoryWords)
       ).length
       return similar >= Math.floor(members.length / 2) + 1
     })
