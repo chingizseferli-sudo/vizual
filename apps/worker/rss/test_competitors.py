@@ -237,7 +237,7 @@ def test_competitor_only_article_is_saved_without_telegram(sm, monkeypatch):
     item = {"title": "Bakcell yeni tarif təqdim etdi", "link": "https://news.az/bakcell-tarif", "source": "news.az"}
     saved = []
     monkeypatch.setattr(sm, "fetch_site", lambda site, patterns: [dict(item)])
-    monkeypatch.setattr(sm, "choose_best_article_title_info", lambda title, link, source_domain=None: {"title": title})
+    monkeypatch.setattr(sm, "choose_best_article_title_info", lambda title, link, source_domain=None, from_feed=False: {"title": title})
     monkeypatch.setattr(sm, "exists", lambda link, title=None: False)
     monkeypatch.setattr(sm, "extract_publish_time_from_article", lambda link, return_source=False: ("now", "meta"))
     monkeypatch.setattr(sm, "evaluate_publish_freshness", lambda *args, **kwargs: ("2026-10-22 10:00", "fresh"))
