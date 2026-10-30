@@ -236,12 +236,29 @@ function buildStoriesHtml(groups: StoryGroup[]) {
 </html>`
 }
 
+function fileSlug(title: string) {
+  return (
+    title
+      .toLocaleLowerCase('az-AZ')
+      .replace(/ə/g, 'e').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ü/g, 'u')
+      .replace(/ş/g, 's').replace(/ç/g, 'c').replace(/ğ/g, 'g')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40)
+  )
+}
+
+// `groups` is either every topic or just the one the person picked.
 function exportStories(groups: StoryGroup[], format: 'csv' | 'json' | 'html') {
   const stamp = new Date().toISOString().slice(0, 10)
+  const name =
+    groups.length === 1
+      ? `xeber-xeritesi-${fileSlug(groups[0].title) || 'movzu'}-${stamp}`
+      : `xeber-xeritesi-${stamp}`
 
   if (format === 'html') {
     downloadFile(
-      `xeber-xeritesi-${stamp}.html`,
+      `${name}.html`,
       buildStoriesHtml(groups),
       'text/html;charset=utf-8'
     )
@@ -264,7 +281,7 @@ function exportStories(groups: StoryGroup[], format: 'csv' | 'json' | 'html') {
       })),
     }))
     downloadFile(
-      `xeber-xeritesi-${stamp}.json`,
+      `${name}.json`,
       JSON.stringify(data, null, 2),
       'application/json;charset=utf-8'
     )
@@ -301,7 +318,7 @@ function exportStories(groups: StoryGroup[], format: 'csv' | 'json' | 'html') {
   })
   const csv = rows.map((row) => row.map(csvCell).join(',')).join('\n')
   downloadFile(
-    `xeber-xeritesi-${stamp}.csv`,
+    `${name}.csv`,
     `\ufeff${csv}`,
     'text/csv;charset=utf-8'
   )
@@ -707,30 +724,8 @@ function StoryIntelligence() {
                 <div className='flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center'>
                   <span className='rounded-full border border-border bg-muted/50 px-3 py-2 text-sm font-semibold text-foreground'>
                     {storyData.groups.length}{' '}{t("mövzu")}</span>
-                  <button
-                    type='button'
-                    onClick={() => exportStories(storyData.groups, 'csv')}
-                    className='inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted/50'
-                  >
-                    <Download className='h-4 w-4' />
-                    {t("Hamısını yüklə (CSV)")}
-                  </button>
-                  <button
-                    type='button'
-                    onClick={() => exportStories(storyData.groups, 'json')}
-                    className='inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted/50'
-                  >
-                    <Download className='h-4 w-4' />
-                    JSON
-                  </button>
-                  <button
-                    type='button'
-                    onClick={() => exportStories(storyData.groups, 'html')}
-                    className='inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted/50'
-                  >
-                    <Download className='h-4 w-4' />
-                    HTML
-                  </button>
+                  <ExportButtons label={t("Seçilmiş mövzu")} groups={[story]} />
+                  <ExportButtons label={t("Bütün mövzular")} groups={storyData.groups} />
                   <button
                     type='button'
                     onClick={() => setIsTopicListOpen((value) => !value)}
@@ -950,6 +945,31 @@ function StoryIntelligence() {
         )}
       </div>
     </section>
+  )
+}
+
+function ExportButtons({
+  label,
+  groups,
+}: {
+  label: string
+  groups: StoryGroup[]
+}) {
+  return (
+    <div className='flex items-center gap-1.5 rounded-xl border border-border bg-card p-1 pl-3'>
+      <span className='text-xs font-semibold text-muted-foreground'>{label}</span>
+      {(['csv', 'json', 'html'] as const).map((format) => (
+        <button
+          key={format}
+          type='button'
+          onClick={() => exportStories(groups, format)}
+          className='inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold hover:bg-muted/50'
+        >
+          <Download className='h-3.5 w-3.5' />
+          {format.toUpperCase()}
+        </button>
+      ))}
+    </div>
   )
 }
 
