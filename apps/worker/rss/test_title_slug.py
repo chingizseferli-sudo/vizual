@@ -89,6 +89,6 @@ def test_title_not_from_a_feed_is_still_checked_against_the_slug(page_refuses):
     assert info["title"] == ""
 
 
-def test_feed_title_that_is_just_the_site_name_is_still_rejected(page_refuses):
-    info = sm.choose_best_article_title_info("oxu.az", OLD_SLUG_URL, source_domain="oxu.az", from_feed=True)
+def test_short_feed_title_is_still_vetoed_by_the_slug(page_refuses):
+    info = sm.choose_best_article_title_info("Oxu Media", OLD_SLUG_URL, source_domain="oxu.az", from_feed=True)
     assert info["title"] == ""
