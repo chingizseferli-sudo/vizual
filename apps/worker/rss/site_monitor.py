@@ -2088,6 +2088,8 @@ def fold_az(text):
     return normalize_text(str(text or "").translate(_AZ_FOLD))
 
 
+_AZ_DROP = str.maketrans("", "", "əıöüçşğƏİÖÜÇŞĞ")
+
 _CYRILLIC_SKELETON = str.maketrans({
     "ж": "z", "ц": "c", "ч": "c", "ш": "s", "щ": "s", "х": "", "й": "", "ь": "", "ъ": "",
     "а": "", "е": "", "ё": "", "и": "", "о": "", "у": "", "ы": "", "э": "", "ю": "", "я": "",
@@ -2137,7 +2139,10 @@ def title_matches_url_slug(title, article_url):
     words = words[:8]
     cleaned = clean_title_for_message(title)
     title_norm = fold_az(cleaned)
-    overlap = sum(1 for word in words if word in title_norm)
+    # Some sites build slugs by deleting the Azerbaijani letters instead of replacing them
+    # ("Kiçik Ermənistan" -> "kiik-ermnistan"), so compare against that form too.
+    title_dropped = normalize_text(cleaned.translate(_AZ_DROP))
+    overlap = sum(1 for word in words if word in title_norm or word in title_dropped)
     if _CYRILLIC_RE.search(cleaned):
         skeletons = {w.translate(_CYRILLIC_SKELETON) for w in re.findall(r"[а-яё]+", cleaned.lower())}
         overlap = sum(1 for word in words if len(slug_skeleton(word)) >= 2 and slug_skeleton(word) in skeletons)
@@ -2161,6 +2166,25 @@ def title_rejection_reason(title, article_url=None, source_domain=None):
     if article_url and not title_matches_url_slug(cleaned, article_url) and title_quality_score(cleaned) < 145:
         return "slug_mismatch"
     return ""
+
+
+def slug_consensus_title(slug_rejected):
+    """A title the URL slug disagrees with is still right when the page itself agrees on it.
+
+    Sites edit a headline after publishing and keep the old slug, so a slug mismatch alone is
+    weak evidence. When the page metadata AND the headline inside <article>/<main> give the same
+    text, take it. A site-wide title on every page would not appear as an article headline.
+    slug_rejected: [(method, cleaned, raw)] of candidates rejected only for slug_mismatch.
+    """
+    groups = {}
+    for method, cleaned, raw in slug_rejected:
+        groups.setdefault(normalize_text(cleaned), []).append((method, cleaned, raw))
+    for group in groups.values():
+        meta = [item for item in group if item[0] in {"json_ld_headline", "og_title", "twitter_title", "meta_headline", "meta_title"}]
+        scoped = [item for item in group if item[0] in {"selector:article h1", "selector:main h1", "selector:article h2", "selector:main h2"}]
+        if meta and scoped:
+            return meta[0]
+    return None
 
 
 def extract_article_title_info_from_html(page_html, article_url=None, source_domain=None):
@@ -2255,6 +2279,7 @@ def extract_article_title_info_from_html(page_html, article_url=None, source_dom
 
     valid = []
     rejected = []
+    slug_rejected = []
     for method, raw_title in candidates:
         cleaned = clean_title_for_message(raw_title)
         reason = title_rejection_reason(cleaned, article_url=article_url, source_domain=source_domain)
@@ -2267,10 +2292,18 @@ def extract_article_title_info_from_html(page_html, article_url=None, source_dom
                 reason = "conflicts_with_meta"
         if reason:
             rejected.append(f"{method}:{reason}:{cleaned[:60]}")
+            if reason == "slug_mismatch":
+                slug_rejected.append((method, cleaned, raw_title))
             continue
         bonus = method_bonus.get(method, 30 if method.startswith("selector:") and "h1" in method else 5)
         tier = 2 if method in meta_methods else (1 if method.startswith("selector:") and "h1" in method else 0)
         valid.append((tier, title_quality_score(cleaned) + bonus, method, cleaned, raw_title))
+
+    if not valid:
+        agreed = slug_consensus_title(slug_rejected)
+        if agreed:
+            method, cleaned, raw_title = agreed
+            return {"title": cleaned, "method": f"{method}:page_consensus", "raw_title": raw_title, "reject_reason": ""}
 
     if not valid:
         return {
