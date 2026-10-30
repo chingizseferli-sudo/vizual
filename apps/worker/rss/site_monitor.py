@@ -4034,8 +4034,11 @@ def fetch_page(url):
 
 
 
-def try_safe_blocked_source_fallback(site, base_url, status_reason):
-    """Try low-pressure alternatives when the configured page is blocked."""
+def try_safe_blocked_source_fallback(site, base_url, status_reason, host_reachable=True):
+    """Try low-pressure alternatives when the configured page cannot be read.
+
+    host_reachable=False (timeout, DNS, TLS: the site does not answer us at all) skips the
+    site's own RSS and sitemap, which would only time out again, and goes to Google News."""
     root = (base_url or site.get("base_url") or site.get("url") or "").rstrip("/") + "/"
     if not root.startswith("http") or is_local_only_url(root):
         return []
@@ -4050,25 +4053,26 @@ def try_safe_blocked_source_fallback(site, base_url, status_reason):
     rss_candidates.extend([urljoin(root, path.lstrip("/")) for path in COMMON_RSS_PATHS])
     rss_candidates = list(dict.fromkeys([url for url in rss_candidates if url and not is_local_only_url(url)]))[:8]
 
-    if rss_candidates:
+    if host_reachable and rss_candidates:
         items = extract_links_from_rss(site, rss_candidates)
         if items:
             mark_read_success(site, "rss", fallback_used=True)
             return unique_items(items)
 
-    sitemap_site = dict(site)
-    sitemap_site["latest_url"] = urljoin(root, "sitemap.xml")
-    sitemap_site["_fallback_used"] = True
-    items = extract_links_from_sitemap(sitemap_site)
-    if items:
-        site.update({
-            "_read_failure_reason": sitemap_site.get("_read_failure_reason"),
-            "_method_attempted": sitemap_site.get("_method_attempted"),
-            "_method_succeeded": sitemap_site.get("_method_succeeded"),
-            "_fallback_used": True,
-        })
-        mark_read_success(site, "sitemap", fallback_used=True)
-        return unique_items(items)
+    if host_reachable:
+        sitemap_site = dict(site)
+        sitemap_site["latest_url"] = urljoin(root, "sitemap.xml")
+        sitemap_site["_fallback_used"] = True
+        items = extract_links_from_sitemap(sitemap_site)
+        if items:
+            site.update({
+                "_read_failure_reason": sitemap_site.get("_read_failure_reason"),
+                "_method_attempted": sitemap_site.get("_method_attempted"),
+                "_method_succeeded": sitemap_site.get("_method_succeeded"),
+                "_fallback_used": True,
+            })
+            mark_read_success(site, "sitemap", fallback_used=True)
+            return unique_items(items)
 
     domain = get_domain(root)
     if domain:
@@ -4240,8 +4244,12 @@ def fetch_site(site, patterns_data):
         if r.status_code != 200:
             site["_last_http_status"] = r.status_code
             status_reason = http_status_reason(r.status_code)
-            if r.status_code in {403, 429}:
-                fallback_items = try_safe_blocked_source_fallback(site, base_url, status_reason)
+            if r.status_code in {401, 403, 429} or r.status_code >= 500:
+                # 403/429: the site refuses us. 401 and 5xx (Cloudflare 520/521 too): its own
+                # pages do not work for us right now. Google News still lists its fresh headlines.
+                fallback_items = try_safe_blocked_source_fallback(
+                    site, base_url, status_reason, host_reachable=r.status_code in {403, 429}
+                )
                 if fallback_items:
                     return fallback_items
             set_read_diagnostic(site, status_reason, monitor_method or "latest_page")
@@ -4253,6 +4261,11 @@ def fetch_site(site, patterns_data):
         reason = classify_fetch_exception(e)
         set_read_diagnostic(site, reason, monitor_method or "latest_page")
         print(f"Sayt xətası: {page_url} | {reason} | {e}", flush=True)
+        if reason in {"timeout", "dns_failure", "ssl_failure"}:
+            # The site does not answer from our server (for example a geo-block); try Google News.
+            fallback_items = try_safe_blocked_source_fallback(site, base_url, reason, host_reachable=False)
+            if fallback_items:
+                return fallback_items
         return []
 
     domain = get_domain(page_url)
