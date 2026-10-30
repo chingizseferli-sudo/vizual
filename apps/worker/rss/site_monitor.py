@@ -2356,7 +2356,7 @@ def fetch_article_title(article_url):
     return fetch_article_title_info(article_url).get("title", "")
 
 
-def choose_best_article_title_info(current_title, article_url, source_domain=None):
+def choose_best_article_title_info(current_title, article_url, source_domain=None, from_feed=False):
     current = clean_title_for_message(current_title)
     current_reason = title_rejection_reason(current, article_url=article_url, source_domain=source_domain)
     page_info = {"title": "", "method": "", "raw_title": "", "reject_reason": ""}
@@ -2387,6 +2387,16 @@ def choose_best_article_title_info(current_title, article_url, source_domain=Non
                 "reject_reason": "",
                 "candidate_title": current,
             }
+    if current and current_reason == "slug_mismatch" and from_feed and len(current.split()) >= 3:
+        # The publisher's own feed carries the current headline; the slug is the pre-edit one
+        # (oxu.az, rednews.az), and the article page may refuse us (403), so the slug cannot veto it.
+        return {
+            "title": current,
+            "method": "feed_title",
+            "raw_title": current_title,
+            "reject_reason": "",
+            "candidate_title": current,
+        }
     if current and not current_reason:
         return {
             "title": current,
@@ -5332,7 +5342,12 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
             continue
         matched_keywords = item.get("matched_keywords", [])
         raw_title = item.get("raw_title") or title
-        title_info = choose_best_article_title_info(item.get("clean_title") or title, link, source_domain=source)
+        title_info = choose_best_article_title_info(
+            item.get("clean_title") or title,
+            link,
+            source_domain=source,
+            from_feed=item.get("source_context") == "rss",
+        )
         clean_title = title_info.get("title", "")
         title_method = title_info.get("method", "")
         title_reject_reason = title_info.get("reject_reason", "")

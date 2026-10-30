@@ -64,3 +64,31 @@ def test_without_page_agreement_the_slug_mismatch_stands(methods):
 
 def test_different_titles_do_not_form_agreement():
     assert sm.slug_consensus_title([candidate("og_title", "Bir başlıq"), candidate("selector:main h1", "Başqa başlıq")]) is None
+
+
+FEED_TITLE = "Bakıda ağır qəzada ölən gəncin fotoları"
+OLD_SLUG_URL = "https://oxu.az/hadise/bakida-avtomobil-yuk-masinina-cirpildi-surucu-oldu"
+
+
+@pytest.fixture
+def page_refuses(monkeypatch):
+    monkeypatch.setattr(
+        sm, "fetch_article_title_info",
+        lambda url, source_domain=None: {"title": "", "method": "http_error", "raw_title": "", "reject_reason": "http_403"},
+    )
+
+
+def test_feed_headline_survives_an_old_slug_and_a_403_page(page_refuses):
+    info = sm.choose_best_article_title_info(FEED_TITLE, OLD_SLUG_URL, source_domain="oxu.az", from_feed=True)
+    assert info["title"] == FEED_TITLE
+    assert info["method"] == "feed_title"
+
+
+def test_title_not_from_a_feed_is_still_checked_against_the_slug(page_refuses):
+    info = sm.choose_best_article_title_info(FEED_TITLE, OLD_SLUG_URL, source_domain="oxu.az", from_feed=False)
+    assert info["title"] == ""
+
+
+def test_feed_title_that_is_just_the_site_name_is_still_rejected(page_refuses):
+    info = sm.choose_best_article_title_info("oxu.az", OLD_SLUG_URL, source_domain="oxu.az", from_feed=True)
+    assert info["title"] == ""
