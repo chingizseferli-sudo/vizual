@@ -2358,6 +2358,18 @@ def fetch_article_title(article_url):
 
 def choose_best_article_title_info(current_title, article_url, source_domain=None, from_feed=False):
     current = clean_title_for_message(current_title)
+    if article_url and "news.google.com/" in article_url.lower():
+        # A Google News link opens Google's consent page, whose heading is the same for every
+        # article ("Google'a keçməmişdən əvvəl"). The feed title ("Headline - Publisher") is the headline.
+        headline = re.sub(r"\s+[-\u2013\u2014|]\s+[^-\u2013\u2014|]{2,60}$", "", current).strip()
+        reason = title_rejection_reason(headline, source_domain=source_domain)
+        return {
+            "title": "" if reason else headline,
+            "method": "google_news_title",
+            "raw_title": current_title,
+            "reject_reason": reason or "",
+            "candidate_title": current,
+        }
     current_reason = title_rejection_reason(current, article_url=article_url, source_domain=source_domain)
     page_info = {"title": "", "method": "", "raw_title": "", "reject_reason": ""}
     page_title = ""
