@@ -14,6 +14,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from domain_policy import is_excluded_domain as policy_is_excluded_domain
+import news_structure
 
 DISCOVERED_FILE = "discovered_sites.json"
 CONFIG_FILE = "courier_config_clean.json"
@@ -352,6 +353,7 @@ def is_hard_rejected(site: dict) -> bool:
         "bad_url_or_gov_blocked",
         "rejected_commercial",
         "rejected_not_azerbaijani",
+        "rejected_not_news_structure",
     )
     return any(marker in reason or marker in source_type for marker in hard_markers)
 
@@ -1303,6 +1305,59 @@ def guess_selector_and_xpath(session: requests.Session, url: str) -> tuple[str |
         return None, [], 0
 
 
+def pick_article_links(page_html: str, page_url: str, limit: int = news_structure.SAMPLE_SIZE) -> list[str]:
+    """Article-looking links of the same site; links whose text reads like a headline come first."""
+    own_domain = clean_domain(page_url)
+    headline_links, other_links = [], []
+    for anchor in BeautifulSoup(page_html or "", "html.parser").find_all("a", href=True):
+        link = urljoin(page_url, anchor["href"].strip()).split("#")[0]
+        if not link.startswith("http") or clean_domain(link) != own_domain or is_bad_url(link):
+            continue
+        if link.rstrip("/") == page_url.rstrip("/") or not is_article_like_url(link):
+            continue
+        if link in headline_links or link in other_links:
+            continue
+        words = len(clean_text(anchor.get_text(" ", strip=True)).split())
+        (headline_links if words >= 4 else other_links).append(link)
+    return (headline_links + other_links)[:limit]
+
+
+def feed_publish_dates(rss_url: str) -> list[datetime]:
+    try:
+        feed = feedparser.parse(rss_url)
+    except Exception:
+        return []
+    dates = []
+    for entry in feed.entries:
+        parsed = entry.get("published_parsed") or entry.get("updated_parsed")
+        if parsed:
+            dates.append(datetime(*parsed[:6], tzinfo=timezone.utc))
+    return dates
+
+
+def verify_news_structure(session: requests.Session, page_url: str, page_html: str, rss_url: str | None = None) -> tuple[bool, str, dict]:
+    """Reads a few real articles of the site and decides from them whether it is a news outlet."""
+    links = pick_article_links(page_html, page_url)
+
+    def read_article(link: str):
+        try:
+            response = session.get(link, timeout=REQUEST_TIMEOUT)
+            if response.status_code != 200:
+                return None
+            return news_structure.article_evidence(response.text)
+        except Exception:
+            return None
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        evidence = [item for item in executor.map(read_article, links) if item]
+
+    ok, reason, stats = news_structure.judge_articles(evidence)
+    if not ok and len(evidence) < news_structure.MIN_ARTICLES and rss_url:
+        # The pages cannot be read (bot protection, scripts), but the site's own feed can.
+        ok, reason, stats = news_structure.judge_feed_dates(feed_publish_dates(rss_url))
+    return ok, reason, stats
+
+
 def analyze_section(session: requests.Session, name: str, section_url: str) -> dict:
     score = 0
     reasons = []
@@ -1401,6 +1456,37 @@ def analyze_section(session: requests.Session, name: str, section_url: str) -> d
             },
             "source_type": "rejected_not_azerbaijani",
         }
+
+    # Words and link counts do not make a news outlet: a cargo company has a "News" page too.
+    # The articles themselves must be dated, readable and fresh.
+    structure_ok, structure_reason, structure_stats = verify_news_structure(session, section_url, html_text, rss_url)
+    if not structure_ok:
+        return {
+            "name": name or domain,
+            "url": section_url.rstrip("/"),
+            "enabled": True,
+            "rss_url": rss_url,
+            "selector": None,
+            "xpaths": [],
+            "keywords": DEFAULT_KEYWORDS,
+            "limit": 10,
+            "score": 0,
+            "status": "rejected",
+            "reason": f"rejected_not_news_structure:{structure_reason}",
+            "analysis": {
+                "rss_count": rss_count,
+                "news_link_count": news_count,
+                "topic_keyword_count": edu_keyword_count,
+                "article_block_count": 0,
+                "activity_count": 0,
+                "activity_source": "news_structure",
+                "news_structure": structure_stats,
+                "reasons": [f"news structure failed: {structure_reason}"],
+            },
+            "source_type": "rejected_not_news_structure",
+        }
+    score += 20
+    reasons.append(f"xəbər strukturu təsdiqləndi ({structure_stats})")
 
     rss_recent_count = count_recent_rss_entries(
         session,

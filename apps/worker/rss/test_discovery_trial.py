@@ -29,6 +29,7 @@ def test_low_google_news_activity_does_not_reject_a_site(monkeypatch):
     monkeypatch.setattr(d, "find_working_rss", lambda session, url, text: (None, 0))
     monkeypatch.setattr(d, "google_news_activity_count", lambda session, domain, hours: 0)
     monkeypatch.setattr(d, "guess_selector_and_xpath", lambda session, url: ("article", [], 10))
+    monkeypatch.setattr(d, "verify_news_structure", lambda *args: (True, "ok", {}))
     result = d.analyze_section(Session(), "Yerli xəbər", "https://yerli.az")
     assert result["status"] != "rejected"
     assert "insufficient_news_activity" not in result["reason"]
