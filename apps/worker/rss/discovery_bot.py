@@ -230,6 +230,8 @@ BAD_DOMAINS = [
     "twitter.com", "x.com", "linkedin.com", "whatsapp.com", "google.com",
     "news.google.com", "maps.google.com", "apple.com", "microsoft.com",
     "wikipedia.org", "wikimedia.org",
+    "wa.me", "wa.link", "telegram.me", "tiktok.com", "vk.com", "pinterest.com", "bit.ly",
+    "liveinternet.ru", "mail.ru", "yandex.ru",
 ]
 
 # gov istənmir. Tam qadağa qoyuruq ki, discovery gov mənbələrini toplamasın.
