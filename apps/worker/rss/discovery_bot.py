@@ -4,6 +4,7 @@ import os
 import re
 import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from urllib.parse import quote_plus, urljoin, urlparse
@@ -1720,6 +1721,108 @@ def append_unique(filename: str, new_sites: list[dict]) -> int:
     return added
 
 
+OUTBOUND_SOURCES_PER_RUN = int(os.getenv("DISCOVERY_OUTBOUND_SOURCES_PER_RUN", "40"))
+OUTBOUND_MIN_SOURCES = int(os.getenv("DISCOVERY_OUTBOUND_MIN_SOURCES", "2"))
+OUTBOUND_MAX_CANDIDATES = int(os.getenv("DISCOVERY_OUTBOUND_MAX_CANDIDATES", "25"))
+OUTBOUND_SLOT_SECONDS = 6 * 3600
+
+
+def extract_external_site_urls(page_html: str, page_url: str) -> set[str]:
+    """Root URLs of the other sites a page links to."""
+    own_domain = clean_domain(page_url)
+    found = set()
+    for anchor in BeautifulSoup(page_html or "", "html.parser").find_all("a", href=True):
+        link = urljoin(page_url, anchor["href"].strip())
+        if not link.startswith("http"):
+            continue
+        domain = clean_domain(link)
+        if not domain or domain == own_domain or is_subdomain_of(domain, own_domain) or is_subdomain_of(own_domain, domain):
+            continue
+        if is_bad_url(link):
+            continue
+        found.add(base_url(link))
+    return found
+
+
+def rank_outbound_candidates(links_by_source: dict[str, set[str]], known_domains: set[str], processed_domains: set[str]) -> list[str]:
+    """Sites linked from several different known sources are the likely news outlets."""
+    counts = Counter()
+    for urls in links_by_source.values():
+        for url in urls:
+            domain = clean_domain(url)
+            if domain and domain not in known_domains and domain not in processed_domains:
+                counts[url] += 1
+    ranked = [url for url, count in counts.most_common() if count >= OUTBOUND_MIN_SOURCES]
+    return ranked[:OUTBOUND_MAX_CANDIDATES]
+
+
+def active_source_homepages() -> list[str]:
+    if not supabase_ready():
+        return []
+    urls = []
+    offset = 0
+    try:
+        while True:
+            response = requests.get(
+                f"{SUPABASE_URL}/rest/v1/sources",
+                headers=supabase_headers(),
+                params={"select": "base_url", "status": "eq.active", "order": "name.asc", "limit": "1000", "offset": str(offset)},
+                timeout=REQUEST_TIMEOUT,
+            )
+            if response.status_code != 200:
+                break
+            rows = response.json() or []
+            urls.extend(row["base_url"] for row in rows if row.get("base_url"))
+            if len(rows) < 1000:
+                break
+            offset += 1000
+    except Exception as exc:
+        print(f"Aktiv mənbə siyahısı oxunmadı: {exc}", flush=True)
+    return urls
+
+
+def outbound_link_candidates(session: requests.Session, known_domains: set[str], processed_domains: set[str]) -> list[str]:
+    """Candidate sites taken from the pages of the sources we already read."""
+    homepages = active_source_homepages()
+    if not homepages or OUTBOUND_SOURCES_PER_RUN <= 0:
+        return []
+    groups = max(1, -(-len(homepages) // OUTBOUND_SOURCES_PER_RUN))
+    slot = int(time.time() // OUTBOUND_SLOT_SECONDS) % groups
+    sample = homepages[slot::groups]
+    print(f"Xarici link axtarışı: {len(sample)} mənbə səhifəsi ({slot + 1}/{groups})", flush=True)
+
+    def read_links(url: str):
+        try:
+            response = session.get(url, timeout=REQUEST_TIMEOUT)
+            if response.status_code != 200:
+                return url, set()
+            return url, extract_external_site_urls(response.text, response.url or url)
+        except Exception:
+            return url, set()
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        links_by_source = dict(executor.map(read_links, sample))
+    candidates = rank_outbound_candidates(links_by_source, known_domains, processed_domains)
+    print(f"Xarici linklərdən namizəd domen: {len(candidates)}", flush=True)
+    return candidates
+
+
+def candidate_batches(session: requests.Session, queries: list[str], settings: dict, known_domains: set[str], processed_domains: set[str]):
+    """Yields lists of entries shaped like Google News entries: {'source': {'title', 'href'}}."""
+    for query in queries:
+        if "gov" in query.lower() and DISCOVERY_BLOCK_GOV:
+            continue
+        print("Axtarılır:", query, flush=True)
+        try:
+            feed = feedparser.parse(google_news_rss(query))
+        except Exception as e:
+            print("Google News RSS xətası:", e, flush=True)
+            continue
+        print("Nəticə sayı:", len(feed.entries), flush=True)
+        yield feed.entries[:settings["max_entries_per_query"]]
+    yield [{"source": {"title": None, "href": url}} for url in outbound_link_candidates(session, known_domains, processed_domains)]
+
+
 def discover_sites(mode: str = "fast", add_to_config: bool = False):
     settings = get_mode_settings(mode)
 
@@ -1741,21 +1844,8 @@ def discover_sites(mode: str = "fast", add_to_config: bool = False):
     session = requests.Session()
     session.headers.update(HEADERS)
 
-    for query in queries:
-        if "gov" in query.lower() and DISCOVERY_BLOCK_GOV:
-            continue
-
-        print("Axtarılır:", query, flush=True)
-
-        try:
-            feed = feedparser.parse(google_news_rss(query))
-        except Exception as e:
-            print("Google News RSS xətası:", e, flush=True)
-            continue
-
-        print("Nəticə sayı:", len(feed.entries), flush=True)
-
-        for entry in feed.entries[:settings["max_entries_per_query"]]:
+    for entries in candidate_batches(session, queries, settings, known_domains, processed_domains):
+        for entry in entries:
             source = entry.get("source", {})
             source_name = None
             source_url = None
