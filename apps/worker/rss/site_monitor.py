@@ -4129,6 +4129,23 @@ def try_safe_blocked_source_fallback(site, base_url, status_reason, host_reachab
     return []
 
 def fetch_site(site, patterns_data):
+    items = fetch_site_once(site, patterns_data)
+    monitor_method = clean_text(site.get("monitor_method", "")).lower()
+    if monitor_method != "sitemap" or not items or site.get("_fallback_used") or site.get("_homepage_pass"):
+        return items
+    # A sitemap can be frozen in the past (rednews.az lists only April 2024 articles).
+    # The homepage always shows what the site published last, so its articles go first.
+    base_url = clean_text(site.get("base_url", ""))
+    if not base_url:
+        return items
+    homepage_site = dict(site, monitor_method="homepage", url=base_url, _homepage_pass=True)
+    homepage_items = fetch_site_once(homepage_site, patterns_data)
+    if not homepage_items:
+        return items
+    return unique_items(homepage_items + items)[:MAX_LINKS_PER_SITE]
+
+
+def fetch_site_once(site, patterns_data):
     page_url = site["url"]
     base_url = clean_text(site.get("base_url", "")) or page_url
     rss_url = clean_text(site.get("rss_url", ""))
