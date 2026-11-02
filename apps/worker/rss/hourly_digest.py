@@ -1,8 +1,10 @@
-"""One-shot hourly digest: sends every Telegram-linked customer an HTML report
-(same look as the Results page export) of the matches found in the previous
+"""One-shot hourly digest: sends every Telegram-linked customer the report (HTML, PDF, CSV)
+(HTML in the look of the Results page export) of the matches found in the previous
 full hour. Run by a Railway cron at minute 0 (WORKER=digest). Stateless: the
 window is derived from the clock, so no table or column is needed."""
+import csv
 import html
+import io
 import json
 import os
 import sys
@@ -175,17 +177,104 @@ def render_html(rows, start, end, generated_at):
 </main></body></html>"""
 
 
-def send_document(chat_id, filename, content, caption=""):
-    """Telegram sendDocument; returns True on success. Respects the global pause."""
+def build_caption(rows, start, end):
+    """Short Telegram caption (HTML parse mode); the files carry the details."""
+    return (
+        "📰 <b>Vizual.Az · Saatlıq hesabat</b>\n"
+        f"🕐 {start:%d.%m.%Y %H:%M} – {end:%H:%M}\n"
+        f"📌 {len(rows)} xəbər"
+    )
+
+
+def build_csv(rows):
+    """UTF-8 with BOM so Excel shows Azerbaijani letters correctly."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["Mənbə", "Başlıq", "Açar söz", "Tarix", "Saat", "Link"])
+    for row in rows:
+        day, hour = format_when(row["when"])
+        writer.writerow([row["source"], row["title"], ", ".join(row["keywords"]), day, hour, row["url"]])
+    return ("\ufeff" + buffer.getvalue()).encode("utf-8")
+
+
+def build_pdf(rows, start, end, generated_at):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    for name, file in (("DejaVu", "DejaVuSans.ttf"), ("DejaVu-Bold", "DejaVuSans-Bold.ttf")):
+        if name not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont(name, os.path.join(HERE, "assets", file)))
+
+    esc = lambda value: html.escape(str(value), quote=True)
+    title = ParagraphStyle("t", fontName="DejaVu-Bold", fontSize=16, leading=20, textColor=colors.HexColor("#0f2a6b"))
+    sub = ParagraphStyle("s", fontName="DejaVu", fontSize=9, leading=13, textColor=colors.HexColor("#61708a"))
+    cell = ParagraphStyle("c", fontName="DejaVu", fontSize=8.5, leading=11.5)
+    head = ParagraphStyle("h", parent=cell, fontName="DejaVu-Bold", textColor=colors.white)
+
+    data = [[Paragraph(label, head) for label in ("Mənbə", "Başlıq", "Açar söz", "Tarix və saat")]]
+    for row in rows:
+        day, hour = format_when(row["when"])
+        data.append(
+            [
+                Paragraph(esc(row["source"]), cell),
+                Paragraph(f'<a href="{esc(row["url"])}" color="#0f4fd7">{esc(row["title"])}</a>', cell),
+                Paragraph(esc(", ".join(row["keywords"])), cell),
+                Paragraph(f"{esc(day)}<br/>{esc(hour)}", cell),
+            ]
+        )
+    table = Table(data, colWidths=[28 * mm, 90 * mm, 34 * mm, 22 * mm], repeatRows=1)
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1463ff")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f3f7ff")]),
+                ("LINEBELOW", (0, 0), (-1, -1), 0.4, colors.HexColor("#dce6f3")),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm,
+                            bottomMargin=12 * mm, title="Vizual.Az · Saatlıq hesabat", author="Vizual.Az")
+    doc.build(
+        [
+            Paragraph("Vizual.Az · Saatlıq media hesabatı", title),
+            Spacer(1, 3 * mm),
+            Paragraph(f"{start:%d.%m.%Y %H:%M} – {end:%H:%M} · {len(rows)} xəbər · Hazırlandı: {esc(generated_at)}", sub),
+            Spacer(1, 5 * mm),
+            table,
+        ]
+    )
+    return buffer.getvalue()
+
+
+def send_documents(chat_id, files, caption=""):
+    """One Telegram album (sendMediaGroup) with the report files; the caption shows under it."""
     if sm.DISABLE_TELEGRAM_SEND or sm.notifications_paused() or not sm.BOT_TOKEN or not chat_id:
         return False
+    media = []
+    attachments = {}
+    for index, (filename, content, mime) in enumerate(files):
+        key = f"file{index}"
+        item = {"type": "document", "media": f"attach://{key}"}
+        if index == 0:
+            item.update({"caption": caption, "parse_mode": "HTML"})
+        media.append(item)
+        attachments[key] = (filename, content, mime)
     try:
         with sm.TELEGRAM_LOCK:
             response = requests.post(
-                f"https://api.telegram.org/bot{sm.BOT_TOKEN}/sendDocument",
-                data={"chat_id": chat_id, "caption": caption},
-                files={"document": (filename, content.encode("utf-8"), "text/html")},
-                timeout=60,
+                f"https://api.telegram.org/bot{sm.BOT_TOKEN}/sendMediaGroup",
+                data={"chat_id": chat_id, "media": json.dumps(media)},
+                files=attachments,
+                timeout=90,
             )
     except Exception as exc:
         print(f"Digest network_error: chat={chat_id} | {sm.redact_secrets(exc)}", flush=True)
@@ -214,9 +303,13 @@ def run(now=None):
         if not rows:
             skipped += 1
             continue
-        filename = f"vizual-{end:%Y-%m-%d-%H%M}.html"
-        caption = f"Saatlıq hesabat: {start:%H:%M}–{end:%H:%M}, {len(rows)} xəbər"
-        if send_document(chat_id, filename, render_html(rows, start, end, generated_at), caption):
+        base = f"vizual-{end:%Y-%m-%d}-{start:%H%M}-{end:%H%M}"
+        files = [
+            (f"{base}.html", render_html(rows, start, end, generated_at).encode("utf-8"), "text/html"),
+            (f"{base}.pdf", build_pdf(rows, start, end, generated_at), "application/pdf"),
+            (f"{base}.csv", build_csv(rows), "text/csv"),
+        ]
+        if send_documents(chat_id, files, build_caption(rows, start, end)):
             sent += 1
         else:
             failed += 1

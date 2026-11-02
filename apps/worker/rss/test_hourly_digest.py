@@ -53,14 +53,34 @@ def test_run_sends_only_to_chats_with_matches():
          mock.patch.object(hd.sm, "notifications_paused", return_value=False), \
          mock.patch.object(hd, "load_recipients", return_value={"1": {"m1"}, "2": {"m2"}}), \
          mock.patch.object(hd, "load_window_matches", return_value=[match("m1", "neft")]), \
-         mock.patch.object(hd, "send_document", side_effect=lambda chat, name, html, cap: sent.append((chat, name)) or True):
+         mock.patch.object(hd, "send_documents", side_effect=lambda chat, files, cap: sent.append((chat, [f[0] for f in files])) or True):
         assert hd.run(datetime(2026, 11, 2, 15, 0, tzinfo=BAKU)) == 0
-    assert sent == [("1", "vizual-2026-11-02-1500.html")]
+    assert sent == [("1", ["vizual-2026-11-02-1400-1500.html", "vizual-2026-11-02-1400-1500.pdf", "vizual-2026-11-02-1400-1500.csv"])]
 
 
 def test_paused_sends_nothing():
     with mock.patch.object(hd.sm, "supabase_ready", return_value=True), \
          mock.patch.object(hd.sm, "notifications_paused", return_value=True), \
-         mock.patch.object(hd, "send_document") as send:
+         mock.patch.object(hd, "send_documents") as send:
         assert hd.run(datetime(2026, 11, 2, 15, 0, tzinfo=BAKU)) == 0
     send.assert_not_called()
+
+
+def test_caption_is_three_lines():
+    start, end = hd.window_for(datetime(2026, 11, 2, 15, 0, tzinfo=BAKU))
+    caption = hd.build_caption(hd.build_rows([match("m1", "neft")], {"m1"}), start, end)
+    assert caption.splitlines() == [
+        "📰 <b>Vizual.Az · Saatlıq hesabat</b>",
+        "🕐 02.11.2026 14:00 – 15:00",
+        "📌 1 xəbər",
+    ]
+
+
+def test_csv_and_pdf_are_valid():
+    rows = hd.build_rows([match("m1", "neft"), match("m1", "qaz")], {"m1"})
+    start, end = hd.window_for(datetime(2026, 11, 2, 15, 0, tzinfo=BAKU))
+    data = hd.build_csv(rows)
+    assert data.startswith("\ufeff".encode("utf-8"))
+    assert "neft, qaz" in data.decode("utf-8") and "Mənbə" in data.decode("utf-8")
+    pdf = hd.build_pdf(rows, start, end, "02.11.2026 15:00")
+    assert pdf.startswith(b"%PDF") and len(pdf) > 1000
