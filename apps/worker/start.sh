@@ -4,6 +4,7 @@
 #   social         long-running social keyword collector: FB, IG, YouTube, X, LinkedIn, Telegram (social/collector.py)
 #   discovery      one-shot fast source discovery   (Railway cron, e.g. "0 */6 * * *")
 #   discovery_deep one-shot deep discovery          (Railway cron, e.g. "0 23 * * *")
+#   digest         one-shot hourly HTML report to Telegram   (Railway cron "0 * * * *")
 #   sync_sources   one-shot JSON -> Supabase sources sync (manual)
 #   auto_configure one-shot problem-source auto configuration (manual)
 #   readability    one-shot source readability report (manual)
@@ -28,6 +29,10 @@ case "${WORKER:-}" in
     cd /app/rss
     exec python -u discovery_bot.py --mode deep --add-to-config
     ;;
+  digest)
+    cd /app/rss
+    exec python -u hourly_digest.py
+    ;;
   sync_sources)
     cd /app/rss
     exec python -u sync_sources_to_supabase.py
@@ -41,7 +46,7 @@ case "${WORKER:-}" in
     exec python -u test_sources_readability.py
     ;;
   *)
-    echo "Set WORKER to one of: rss, social, discovery, discovery_deep, sync_sources, auto_configure, readability" >&2
+    echo "Set WORKER to one of: rss, social, discovery, discovery_deep, digest, sync_sources, auto_configure, readability" >&2
     exit 64
     ;;
 esac
