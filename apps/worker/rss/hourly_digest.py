@@ -178,7 +178,7 @@ def render_html(rows, start, end, generated_at):
 
 
 def build_caption(rows, start, end):
-    """Short Telegram caption (HTML parse mode); the files carry the details."""
+    """Short summary message (HTML parse mode); the files carry the details."""
     return (
         "📰 <b>Vizual.Az · Saatlıq hesabat</b>\n"
         f"🕐 {start:%d.%m.%Y %H:%M} – {end:%H:%M}\n"
@@ -255,34 +255,38 @@ def build_pdf(rows, start, end, generated_at):
     return buffer.getvalue()
 
 
-def send_documents(chat_id, files, caption=""):
-    """One Telegram album (sendMediaGroup) with the report files; the caption shows under it."""
+def telegram_post(method, chat_id, **kwargs):
+    """POST to the Telegram Bot API; returns True on success. Respects pause and DISABLE_TELEGRAM_SEND."""
     if sm.DISABLE_TELEGRAM_SEND or sm.notifications_paused() or not sm.BOT_TOKEN or not chat_id:
         return False
-    media = []
-    attachments = {}
-    for index, (filename, content, mime) in enumerate(files):
-        key = f"file{index}"
-        item = {"type": "document", "media": f"attach://{key}"}
-        if index == 0:
-            item.update({"caption": caption, "parse_mode": "HTML"})
-        media.append(item)
-        attachments[key] = (filename, content, mime)
     try:
         with sm.TELEGRAM_LOCK:
             response = requests.post(
-                f"https://api.telegram.org/bot{sm.BOT_TOKEN}/sendMediaGroup",
-                data={"chat_id": chat_id, "media": json.dumps(media)},
-                files=attachments,
+                f"https://api.telegram.org/bot{sm.BOT_TOKEN}/{method}",
+                data=dict(kwargs.pop("data", {}), chat_id=chat_id),
                 timeout=90,
+                **kwargs,
             )
     except Exception as exc:
         print(f"Digest network_error: chat={chat_id} | {sm.redact_secrets(exc)}", flush=True)
         return False
     parsed = sm.parse_telegram_response(response)
     if not parsed["ok"]:
-        print(f"Digest Telegram xətası: chat={chat_id} | {parsed['reason']} | {parsed['description'][:200]}", flush=True)
+        print(f"Digest Telegram xətası: chat={chat_id} | {method} | {parsed['reason']} | {parsed['description'][:200]}", flush=True)
     return bool(parsed["ok"])
+
+
+def send_report(chat_id, text, files):
+    """The summary text first, then one album with the report files right below it."""
+    if not telegram_post("sendMessage", chat_id, data={"text": text, "parse_mode": "HTML"}):
+        return False
+    media = []
+    attachments = {}
+    for index, (filename, content, mime) in enumerate(files):
+        key = f"file{index}"
+        media.append({"type": "document", "media": f"attach://{key}"})
+        attachments[key] = (filename, content, mime)
+    return telegram_post("sendMediaGroup", chat_id, data={"media": json.dumps(media)}, files=attachments)
 
 
 def run(now=None):
@@ -309,7 +313,7 @@ def run(now=None):
             (f"{base}.pdf", build_pdf(rows, start, end, generated_at), "application/pdf"),
             (f"{base}.csv", build_csv(rows), "text/csv"),
         ]
-        if send_documents(chat_id, files, build_caption(rows, start, end)):
+        if send_report(chat_id, build_caption(rows, start, end), files):
             sent += 1
         else:
             failed += 1
