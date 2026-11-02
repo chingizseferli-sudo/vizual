@@ -175,6 +175,28 @@ def render_html(rows, start, end, generated_at):
 </main></body></html>"""
 
 
+CAPTION_LIMIT = 1024
+CAPTION_HEADLINES = 5
+
+
+def build_caption(rows, start, end):
+    """Telegram caption (HTML parse mode, max 1024 chars): header plus the top headlines."""
+    esc = lambda value: html.escape(str(value), quote=True)
+    head = f"📰 <b>Vizual.Az · Saatlıq hesabat</b>\n🕐 {start:%d.%m.%Y %H:%M} – {end:%H:%M}\n📌 {len(rows)} xəbər\n"
+    lines = []
+    for row in rows[:CAPTION_HEADLINES]:
+        title = row["title"] if len(row["title"]) <= 70 else row["title"][:67].rstrip() + "…"
+        lines.append(f'• <a href="{esc(row["url"])}">{esc(title)}</a> <i>({esc(row["source"])})</i>')
+    extra = len(rows) - len(lines)
+    tail = f"\n… və daha {extra} xəbər faylda" if extra > 0 else ""
+    caption = head + "\n" + "\n".join(lines) + tail
+    while len(caption) > CAPTION_LIMIT and lines:
+        lines.pop()
+        extra = len(rows) - len(lines)
+        caption = head + "\n" + "\n".join(lines) + f"\n… və daha {extra} xəbər faylda"
+    return caption
+
+
 def send_document(chat_id, filename, content, caption=""):
     """Telegram sendDocument; returns True on success. Respects the global pause."""
     if sm.DISABLE_TELEGRAM_SEND or sm.notifications_paused() or not sm.BOT_TOKEN or not chat_id:
@@ -183,7 +205,7 @@ def send_document(chat_id, filename, content, caption=""):
         with sm.TELEGRAM_LOCK:
             response = requests.post(
                 f"https://api.telegram.org/bot{sm.BOT_TOKEN}/sendDocument",
-                data={"chat_id": chat_id, "caption": caption},
+                data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
                 files={"document": (filename, content.encode("utf-8"), "text/html")},
                 timeout=60,
             )
@@ -214,8 +236,8 @@ def run(now=None):
         if not rows:
             skipped += 1
             continue
-        filename = f"vizual-{end:%Y-%m-%d-%H%M}.html"
-        caption = f"Saatlıq hesabat: {start:%H:%M}–{end:%H:%M}, {len(rows)} xəbər"
+        filename = f"vizual-{end:%Y-%m-%d}-{start:%H%M}-{end:%H%M}.html"
+        caption = build_caption(rows, start, end)
         if send_document(chat_id, filename, render_html(rows, start, end, generated_at), caption):
             sent += 1
         else:

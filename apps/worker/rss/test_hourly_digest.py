@@ -55,7 +55,7 @@ def test_run_sends_only_to_chats_with_matches():
          mock.patch.object(hd, "load_window_matches", return_value=[match("m1", "neft")]), \
          mock.patch.object(hd, "send_document", side_effect=lambda chat, name, html, cap: sent.append((chat, name)) or True):
         assert hd.run(datetime(2026, 11, 2, 15, 0, tzinfo=BAKU)) == 0
-    assert sent == [("1", "vizual-2026-11-02-1500.html")]
+    assert sent == [("1", "vizual-2026-11-02-1400-1500.html")]
 
 
 def test_paused_sends_nothing():
@@ -64,3 +64,13 @@ def test_paused_sends_nothing():
          mock.patch.object(hd, "send_document") as send:
         assert hd.run(datetime(2026, 11, 2, 15, 0, tzinfo=BAKU)) == 0
     send.assert_not_called()
+
+
+def test_caption_is_neat_and_within_limit():
+    start, end = hd.window_for(datetime(2026, 11, 2, 15, 0, tzinfo=BAKU))
+    many = hd.build_rows([match("m1", "k", url=f"https://a.az/{i}.html", title="Uzun başlıq " * 12) for i in range(40)], {"m1"})
+    caption = hd.build_caption(many, start, end)
+    assert len(caption) <= hd.CAPTION_LIMIT
+    assert "40 xəbər" in caption and "faylda" in caption
+    one = hd.build_caption(hd.build_rows([match("m1", "neft")], {"m1"}), start, end)
+    assert "&lt;b&gt;" in one and "faylda" not in one
