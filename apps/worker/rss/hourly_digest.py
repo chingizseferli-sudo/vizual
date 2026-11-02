@@ -116,61 +116,58 @@ def logo_uri():
 
 STYLE = """
 *{box-sizing:border-box}
-body{margin:0;color:#172033;background:#f5f8ff;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
-.page{max-width:1180px;margin:0 auto;padding:34px}
-.hero{border-radius:22px;padding:28px;color:#fff;background:linear-gradient(135deg,#1463ff 0%,#14b8a6 58%,#f59e0b 120%)}
-.brand{display:flex;align-items:center;gap:12px;margin-bottom:26px}
-.logo{width:52px;height:52px;border-radius:14px}
-.brand strong{font-size:20px}
-h1{margin:0;font-size:34px;line-height:1.05}
-.hero p{margin:12px 0 0;color:rgba(255,255,255,.88);font-size:16px}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:22px}
-.stat{border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:14px;background:rgba(255,255,255,.14)}
-.stat span{display:block;color:rgba(255,255,255,.78);font-size:12px;font-weight:800;text-transform:uppercase}
-.stat strong{display:block;margin-top:6px;font-size:24px}
-.table-wrap{margin-top:24px;overflow:hidden;border:1px solid #dce6f3;border-radius:18px;background:#fff}
-table{width:100%;border-collapse:collapse}
-th,td{padding:14px 16px;text-align:left;vertical-align:top;border-bottom:1px solid #e8eef7}
-th{color:#315078;background:#eef5ff;font-size:12px;text-transform:uppercase;font-weight:900}
-th:last-child,td:last-child{width:150px}
-tr:nth-child(even) td{background:#fbfdff}
-a{color:#0f4fd7;font-weight:800;text-decoration:none}
-.keyword-pill{display:inline-block;border-radius:999px;padding:4px 10px;margin:0 4px 4px 0;font-size:12px;font-weight:900;color:#0f766e;background:#dcfdfa}
-.date-cell strong{display:block;font-size:14px;white-space:nowrap}
-.date-cell span{display:inline-block;margin-top:6px;border-radius:999px;padding:4px 10px;color:#0f4fd7;background:#eaf1ff;font-size:12px;font-weight:900}
-.footer{margin-top:18px;color:#61708a;font-size:12px}
-@media (max-width:760px){.page{padding:18px}.stats{grid-template-columns:1fr}.table-wrap{overflow-x:auto}table{min-width:820px}}
+body{margin:0;color:#172033;background:#f1f5fb;font-family:"Segoe UI",Tahoma,Arial,sans-serif;-webkit-text-size-adjust:100%}
+.page{max-width:760px;margin:0 auto;padding:16px}
+.hero{border-radius:18px;padding:18px 20px;color:#fff;background:linear-gradient(135deg,#1463ff 0%,#14b8a6 100%)}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:38px;height:38px;border-radius:10px}
+.brand strong{font-size:18px}
+.brand em{margin-left:auto;font-style:normal;font-size:12px;opacity:.85}
+.hero h1{margin:14px 0 0;font-size:22px;line-height:1.2}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{border-radius:999px;padding:5px 12px;font-size:13px;font-weight:700;background:rgba(255,255,255,.2)}
+.list{display:grid;gap:10px;margin-top:14px}
+.card{display:block;border:1px solid #dce6f3;border-left:4px solid #1463ff;border-radius:14px;padding:14px 16px;background:#fff;color:inherit;text-decoration:none}
+.card:hover{box-shadow:0 8px 24px rgba(40,55,85,.12)}
+.card h2{margin:0;font-size:16px;line-height:1.4;color:#0f2a6b}
+.info{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:8px;font-size:13px;color:#61708a}
+.info b{color:#315078}
+.time{border-radius:999px;padding:2px 9px;color:#0f4fd7;background:#eaf1ff;font-weight:800}
+.tags{margin-top:8px}
+.pill{display:inline-block;border-radius:999px;padding:3px 10px;margin:0 4px 4px 0;font-size:12px;font-weight:800;color:#0f766e;background:#dcfdfa}
+.footer{margin:18px 4px;color:#61708a;font-size:12px;text-align:center}
+@media (prefers-color-scheme:dark){
+body{background:#0e1524;color:#e6ecf7}
+.card{background:#16203a;border-color:#243456;border-left-color:#4d8bff}
+.card h2{color:#cfe0ff}.info,.footer{color:#9db0cf}.info b{color:#c3d3ee}
+.time{color:#a9c6ff;background:#1f3566}.pill{color:#7ee6d8;background:#0f3a3a}
+}
 """
 
 
 def render_html(rows, start, end, generated_at):
     esc = lambda value: html.escape(str(value), quote=True)
-    body = []
+    cards = []
     for row in rows:
         day, hour = format_when(row["when"])
-        pills = "".join(f'<span class="keyword-pill">{esc(keyword)}</span>' for keyword in row["keywords"])
-        body.append(
-            f"<tr><td>{esc(row['source'])}</td>"
-            f'<td><a href="{esc(row["url"])}" target="_blank" rel="noreferrer">{esc(row["title"])}</a></td>'
-            f"<td>{pills}</td>"
-            f'<td><div class="date-cell"><strong>{esc(day)}</strong><span>{esc(hour)}</span></div></td></tr>'
+        pills = "".join(f'<span class="pill">{esc(keyword)}</span>' for keyword in row["keywords"])
+        cards.append(
+            f'<a class="card" href="{esc(row["url"])}" target="_blank" rel="noreferrer">'
+            f"<h2>{esc(row['title'])}</h2>"
+            f'<div class="info"><b>{esc(row["source"])}</b><span>{esc(day)}</span><span class="time">{esc(hour)}</span></div>'
+            f'<div class="tags">{pills}</div></a>'
         )
     interval = f"{start:%d.%m.%Y %H:%M} – {end:%H:%M}"
     return f"""<!doctype html>
 <html lang="az"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vizual.Az · Media Monitorinq Hesabatı</title><style>{STYLE}</style></head>
+<title>Vizual.Az · Saatlıq hesabat</title><style>{STYLE}</style></head>
 <body><main class="page">
 <section class="hero">
-<div class="brand"><img class="logo" src="{logo_uri()}" alt="Vizual.Az"><strong>Vizual.Az</strong></div>
-<h1>Media Monitorinq Hesabatı</h1>
-<p>Son saat üzrə tapılan uyğun xəbər nəticələri.</p>
-<div class="stats">
-<div class="stat"><span>Interval</span><strong>{esc(interval)}</strong></div>
-<div class="stat"><span>Nəticə sayı</span><strong>{len(rows)}</strong></div>
-<div class="stat"><span>Hazırlandı</span><strong>{esc(generated_at)}</strong></div>
-</div></section>
-<section class="table-wrap"><table><thead><tr><th>Mənbə</th><th>Başlıq</th><th>Açar söz</th><th>Dərc vaxtı</th></tr></thead>
-<tbody>{''.join(body)}</tbody></table></section>
+<div class="brand"><img class="logo" src="{logo_uri()}" alt="Vizual.Az"><strong>Vizual.Az</strong><em>Hazırlandı: {esc(generated_at)}</em></div>
+<h1>Saatlıq media hesabatı</h1>
+<div class="meta"><span class="chip">{esc(interval)}</span><span class="chip">{len(rows)} xəbər</span></div>
+</section>
+<section class="list">{''.join(cards)}</section>
 <div class="footer">Vizual.Az tərəfindən avtomatik yaradılıb.</div>
 </main></body></html>"""
 
