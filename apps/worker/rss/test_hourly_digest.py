@@ -53,7 +53,7 @@ def test_run_sends_only_to_chats_with_matches():
          mock.patch.object(hd.sm, "notifications_paused", return_value=False), \
          mock.patch.object(hd, "load_recipients", return_value={"1": {"m1"}, "2": {"m2"}}), \
          mock.patch.object(hd, "load_window_matches", return_value=[match("m1", "neft")]), \
-         mock.patch.object(hd, "send_documents", side_effect=lambda chat, files, cap: sent.append((chat, [f[0] for f in files])) or True):
+         mock.patch.object(hd, "send_report", side_effect=lambda chat, text, files: sent.append((chat, [f[0] for f in files])) or True):
         assert hd.run(datetime(2026, 11, 2, 15, 0, tzinfo=BAKU)) == 0
     assert sent == [("1", ["vizual-2026-11-02-1400-1500.html", "vizual-2026-11-02-1400-1500.pdf", "vizual-2026-11-02-1400-1500.csv"])]
 
@@ -61,7 +61,7 @@ def test_run_sends_only_to_chats_with_matches():
 def test_paused_sends_nothing():
     with mock.patch.object(hd.sm, "supabase_ready", return_value=True), \
          mock.patch.object(hd.sm, "notifications_paused", return_value=True), \
-         mock.patch.object(hd, "send_documents") as send:
+         mock.patch.object(hd, "send_report") as send:
         assert hd.run(datetime(2026, 11, 2, 15, 0, tzinfo=BAKU)) == 0
     send.assert_not_called()
 
@@ -84,3 +84,18 @@ def test_csv_and_pdf_are_valid():
     assert "neft, qaz" in data.decode("utf-8") and "Mənbə" in data.decode("utf-8")
     pdf = hd.build_pdf(rows, start, end, "02.11.2026 15:00")
     assert pdf.startswith(b"%PDF") and len(pdf) > 1000
+
+
+def test_text_goes_first_then_album_without_caption():
+    calls = []
+    with mock.patch.object(hd, "telegram_post", side_effect=lambda method, chat, **kw: calls.append((method, kw)) or True):
+        assert hd.send_report("1", "özet", [("a.html", b"x", "text/html"), ("a.pdf", b"y", "application/pdf")])
+    assert [c[0] for c in calls] == ["sendMessage", "sendMediaGroup"]
+    assert calls[0][1]["data"]["text"] == "özet"
+    assert "caption" not in calls[1][1]["data"]["media"]
+
+
+def test_album_not_sent_when_text_fails():
+    with mock.patch.object(hd, "telegram_post", return_value=False) as post:
+        assert not hd.send_report("1", "özet", [("a.html", b"x", "text/html")])
+    assert post.call_count == 1
