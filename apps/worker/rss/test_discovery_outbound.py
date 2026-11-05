@@ -37,3 +37,13 @@ def test_outbound_candidates_join_the_discovery_batches(monkeypatch):
     monkeypatch.setattr(d, "outbound_link_candidates", lambda session, known, processed: ["https://tez.az"])
     batches = list(d.candidate_batches(object(), [], {"max_entries_per_query": 5}, set(), set()))
     assert batches == [[{"source": {"title": None, "href": "https://tez.az"}}]]
+
+
+def test_messenger_share_links_and_counters_are_not_candidates():
+    html = (
+        '<a href="https://wa.me/?text=xeber">share</a>'
+        '<a href="https://www.liveinternet.ru/click">counter</a>'
+        '<a href="https://tiktok.com/@x">tiktok</a>'
+        '<a href="https://musavat.com/news/1">Müsavat</a>'
+    )
+    assert d.extract_external_site_urls(html, "https://anews.az") == {"https://musavat.com"}
