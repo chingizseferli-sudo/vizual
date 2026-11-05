@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { Activity, Loader2, RefreshCw, Search, Share2 } from 'lucide-react'
+import { Activity, Bell, Loader2, RefreshCw, Search, Share2 } from 'lucide-react'
 import {
   SOCIAL_INTERVAL_OPTIONS,
   isMissingTableError,
@@ -11,6 +11,7 @@ import { friendlyError } from '@/lib/friendly-error'
 import { WatchedAccounts } from '@/features/social/watched-accounts'
 import { CheckCostDialog, type CheckBudgets } from '@/features/social/check-cost-dialog'
 import { remainingBudget, type CheckScope } from '@/features/social/check-cost'
+import { CostAlertRecipients } from '@/features/social/cost-alert-recipients'
 
 const socialAdminQueryKey = ['admin', 'social'] as const
 
@@ -38,6 +39,9 @@ type SocialSettings = {
   linkedin_max_posts_per_query?: number
   linkedin_min_interval_minutes?: number
   linkedin_monthly_budget_usd?: number | null
+  cost_alerts_enabled?: boolean
+  cost_alert_percent?: number
+  socialfetch_alert_credits?: number
   updated_at: string | null
 }
 
@@ -767,6 +771,55 @@ function SocialAdminPage() {
           ))}
         </section>
       </div>
+
+      <section className='grid content-start gap-4 rounded-lg border bg-card p-4 md:p-5'>
+        <div className='flex items-center gap-2'>
+          <Bell className='h-5 w-5 text-muted-foreground' />
+          <h2 className='text-lg font-semibold'>Balans və büdcə xəbərdarlıqları</h2>
+        </div>
+        <p className='text-sm text-muted-foreground'>
+          Servis hər 30 dəqiqədən bir Apify hesabının aylıq limitini, SocialFetch
+          kredit balansını, yuxarıdakı aylıq büdcələri, YouTube kvotasını və
+          Anthropic kredit xətalarını yoxlayır. Hədd keçiləndə (və 100%-də bir daha)
+          seçilmiş adminlərə email və/və ya Telegram gəlir. Email üçün Railway-də
+          SMTP_* dəyişənləri lazımdır.
+        </p>
+        <PlatformSwitch
+          label='Xəbərdarlıqlar aktivdir'
+          hint='Söndürülsə, heç bir admin xərc xəbərdarlığı almır.'
+          checked={settings?.cost_alerts_enabled ?? true}
+          disabled={disabled}
+          onChange={(next) => mutation.mutate({ cost_alerts_enabled: next })}
+        />
+        <div className='grid gap-4 md:grid-cols-2'>
+          <NumberSetting
+            name='cost_alert_percent'
+            label='Xəbərdarlıq həddi (%)'
+            hint='Apify limiti və ya büdcə bu faizə çatanda ilk xəbərdarlıq gəlir. 10–99.'
+            value={settings?.cost_alert_percent ?? 80}
+            min={10}
+            max={99}
+            disabled={disabled}
+            onSave={(value) => value != null && mutation.mutate({ cost_alert_percent: value })}
+          />
+          <NumberSetting
+            name='socialfetch_alert_credits'
+            label='SocialFetch: minimum kredit'
+            hint='Balans bu qədər kreditə düşəndə xəbərdarlıq gəlir.'
+            value={settings?.socialfetch_alert_credits ?? 1000}
+            min={0}
+            disabled={disabled}
+            onSave={(value) => value != null && mutation.mutate({ socialfetch_alert_credits: value })}
+          />
+        </div>
+        <div className='grid gap-2 border-t pt-3'>
+          <h3 className='font-medium'>Kim alsın</h3>
+          <p className='text-xs text-muted-foreground'>
+            Hər admin öz kanallarını seçə bilər; başqasınınkını yalnız superadmin dəyişir.
+          </p>
+          <CostAlertRecipients />
+        </div>
+      </section>
 
       <section className='grid content-start gap-4 rounded-lg border bg-card p-4 md:p-5'>
         <div>

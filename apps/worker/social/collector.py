@@ -44,6 +44,7 @@ import requests  # noqa: E402
 
 import site_monitor as sm  # noqa: E402
 
+import cost_alerts  # noqa: E402
 from relevance import keyword_row_allows, post_is_azerbaijani  # noqa: E402
 
 APIFY_TOKEN = os.getenv("APIFY_TOKEN", "").strip()
@@ -1123,6 +1124,15 @@ def run_tick(now=None):
         "x": bool(settings.get("x_enabled")) and bool(APIFY_TOKEN),
         "linkedin": bool(settings.get("linkedin_enabled")) and bool(APIFY_TOKEN),
     }
+    cost_alerts.check(
+        settings,
+        now,
+        # Read only when the alert check is due (every 30 min), not every tick.
+        lambda: load_usage(now),
+        lambda: youtube_units_used(now) if settings.get("youtube_enabled") else 0,
+        APIFY_TOKEN,
+        SOCIALFETCH_API_KEY,
+    )
     instagram_pages = bool(settings.get("instagram_accounts_enabled")) and bool(SOCIALFETCH_API_KEY)
     telegram_channels = bool(settings.get("telegram_channels_enabled"))
     if not any(enabled.values()) and not instagram_pages and not telegram_channels:

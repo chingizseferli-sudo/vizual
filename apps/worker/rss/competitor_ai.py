@@ -59,6 +59,16 @@ SUMMARY_SCHEMA = {
 }
 
 
+# Set when the API answers "credit balance is too low"; the rss worker stores it
+# (runtime state anthropic_credit_low) so the social worker can alert admins.
+CREDIT_LOW = {"seen": False}
+
+
+def note_api_error(exc):
+    if "credit balance" in str(exc).lower():
+        CREDIT_LOW["seen"] = True
+
+
 def make_client():
     """An Anthropic client, or None when no API key is configured."""
     if not os.getenv("ANTHROPIC_API_KEY", "").strip():
@@ -105,6 +115,7 @@ def classify_headlines(client, items):
                 max_tokens=4000,
             )
         except Exception as exc:
+            note_api_error(exc)
             print(f"Competitor AI ton xətası: {type(exc).__name__}: {str(exc)[:200]}", flush=True)
             continue
         if reply is None:
@@ -143,6 +154,7 @@ def write_summary(client, stats, headlines):
     try:
         reply = _json_reply(client, SUMMARY_SYSTEM, "\n".join(parts), SUMMARY_SCHEMA, max_tokens=3000)
     except Exception as exc:
+        note_api_error(exc)
         print(f"Competitor AI xülasə xətası: {type(exc).__name__}: {str(exc)[:200]}", flush=True)
         return None
     summary = str((reply or {}).get("summary") or "").strip()
