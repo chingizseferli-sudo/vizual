@@ -5025,6 +5025,9 @@ def competitor_ai_if_needed(competitor_keywords_cache, now=None):
         COMPETITOR_AI["last_summary_date"] = now.date()
         user_ids = sorted({row.get("user_id") for row in competitor_keywords_cache if row.get("user_id")})
         write_competitor_summaries(client, user_ids, now.date())
+    if competitor_ai.CREDIT_LOW["seen"]:
+        competitor_ai.CREDIT_LOW["seen"] = False
+        save_runtime_state("anthropic_credit_low", {"at": datetime.now(BAKU_TZ).isoformat()})
 
 
 def classify_pending_sentiment(client):
