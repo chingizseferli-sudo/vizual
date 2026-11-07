@@ -173,7 +173,9 @@ ARTICLE_URL_PATTERNS = [
     "/education/", "/elm/", "/tehsil/", "/2024/", "/2025/", "/2026/",
 ]
 
+SLUG_ID_HTML_RE = re.compile(r"/[^/?#]{8,}-\d{3,8}(?:-[a-z]+)?\.html?$")
 ARTICLE_URL_REGEX_PATTERNS = [
+    SLUG_ID_HTML_RE,
     re.compile(r"/\d{1,8}[-_][^/?#]{8,}\.html$"),
     re.compile(r"/\d{4,}[-_][^/?#]+\.html$"),
     re.compile(r"/(?:az|en|ru|tr)/[a-z0-9%_-]{3,}/\d{2,}/[a-z0-9%_-]{8,}/?$"),
@@ -187,6 +189,9 @@ ARTICLE_URL_REGEX_PATTERNS = [
 ]
 
 # Sites that serve articles as /index.php?newsid=164494 or WordPress /?p=123 have no slug to match.
+PHP_DETAIL_PATH_RE = re.compile(r"(?:post|news|article|detail|story|xeber)[\w-]*\.php$")
+PHP_DETAIL_QUERY_RE = re.compile(r"(?:^|&)(?:id=\d{3,}|slug=[^&]{8,}|news=[^&]{3,})(?:&|$)")
+ID_THEN_SLUG_PATH_RE = re.compile(r"/\d{4,}/[^/?#]{8,}")
 QUERY_ID_ARTICLE_RE = re.compile(r"(?:^|&)(?:newsid|news_id|articleid|article_id|postid|post_id|p)=\d{3,}(?:&|$)")
 
 ROOT_SLUG_ARTICLE_DOMAINS = {
@@ -202,7 +207,7 @@ ROOT_SLUG_ARTICLE_DOMAINS = {
     "yenicag.az",
 }
 
-ROOT_SLUG_ARTICLE_RE = re.compile(r"^/[a-z0-9%_-]{18,}/?$")
+ROOT_SLUG_ARTICLE_RE = re.compile(r"^/[a-z0-9%_-]{18,}(?:\.html?)?/?$")
 LANG_SLUG_ARTICLE_RE = re.compile(r"^/(az|en|ru|tr)/[a-z0-9%_-]{18,}/?$")
 CATEGORY_SLUG_ARTICLE_RE = re.compile(r"^/[a-z0-9%_-]{3,}/[a-z0-9%_-]{18,}/?$")
 
@@ -3529,7 +3534,16 @@ def extract_publish_time_from_article(article_url, return_source=False):
 
 
 def is_probably_section_url(link):
-    path = urlparse(link.lower()).path.strip("/").lower()
+    parsed = urlparse(link.lower())
+    if QUERY_ID_ARTICLE_RE.search(parsed.query):
+        # WordPress with plain permalinks: the article is https://site/?p=123, the path is empty.
+        return False
+    if PHP_DETAIL_PATH_RE.search(parsed.path) and PHP_DETAIL_QUERY_RE.search(parsed.query):
+        return False
+    if SLUG_ID_HTML_RE.search(parsed.path):
+        # /headline-76843-xeber.html: "xeber" in the file name does not make it a news section.
+        return False
+    path = parsed.path.strip("/").lower()
     if not path:
         return True
     section_paths = [
@@ -3668,7 +3682,12 @@ def is_article_like_link(link):
     path = parsed.path or ""
     if is_allowed_domain_detail_article(link_lower):
         return True
+    if PHP_DETAIL_PATH_RE.search(path) and PHP_DETAIL_QUERY_RE.search(parsed.query):
+        return True
     parts = [part for part in path.strip("/").split("/") if part]
+    if parts and parts[0] not in {"tag", "author", "authors", "search", "archive", "arxiv"} and ID_THEN_SLUG_PATH_RE.search(path):
+        # /category/futbol/117366/article-slug: the numeric id and the slug make it an article, not a section.
+        return True
     blocked_parts = {
         "category", "kateqoriya", "tag", "archive", "arxiv",
         "search", "author", "authors", "blog",
@@ -3727,7 +3746,11 @@ def is_bad_link(title, link):
 def add_item(results, page_url, title, link, keywords, extra=None):
     """Appends the item when it looks like a news article. Returns "" on success, otherwise the reject reason."""
     title = clean_article_text(title)
-    link = strip_tracking_params(urljoin(page_url, clean_text(link)).split("#")[0])
+    raw_link = clean_text(link)
+    if raw_link.startswith(":/") and not raw_link.startswith("://"):
+        # Some generated feeds drop the host and leave ":/az/slug"; the path is still the site's own.
+        raw_link = raw_link[1:]
+    link = strip_tracking_params(urljoin(page_url, raw_link).split("#")[0])
     if not title or not link.startswith("http"):
         return "empty_title_or_link"
     raw_title = title
