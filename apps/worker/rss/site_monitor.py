@@ -5,6 +5,7 @@ import re
 import time
 import threading
 import unicodedata
+from collections import Counter
 from html import unescape
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
@@ -3724,28 +3725,29 @@ def is_bad_link(title, link):
 
 
 def add_item(results, page_url, title, link, keywords, extra=None):
+    """Appends the item when it looks like a news article. Returns "" on success, otherwise the reject reason."""
     title = clean_article_text(title)
     link = strip_tracking_params(urljoin(page_url, clean_text(link)).split("#")[0])
     if not title or not link.startswith("http"):
-        return
+        return "empty_title_or_link"
     raw_title = title
     title_for_keyword = clean_title_for_message(title)
     if is_non_news_title(title_for_keyword):
-        return
+        return "non_news_title"
     page_domain = get_domain(page_url)
     link_domain = get_domain(link)
     is_google_news_link = "news.google.com" in {page_domain, link_domain}
     if page_domain and link_domain and page_domain != link_domain:
         # Google News fallback bəzən orijinal linki news.google yönləndiricisi ilə verir, ona görə source domain yoxdursa keçmirik.
         if not is_google_news_link:
-            return
+            return "other_domain"
     if is_bad_link(title, link):
-        return
+        return "bad_link"
     url_patterns = extra.get("url_patterns", []) if extra else []
     if not is_article_like_link(link):
         if not is_source_url_pattern_article(link, page_url, url_patterns):
             if not (extra and extra.get("source_context") == "rss" and is_feed_root_slug_article(link)):
-                return
+                return "not_article_like"
     item = {
         "title": title_for_keyword,
         "raw_title": raw_title,
@@ -3759,6 +3761,7 @@ def add_item(results, page_url, title, link, keywords, extra=None):
     item.setdefault("source_context", "html")
     item.setdefault("item_position", len(results))
     results.append(item)
+    return ""
 
 
 def unique_items(items):
@@ -3813,6 +3816,14 @@ def discover_rss_links(page_url, page_html):
     ]))[:12]
 
 
+def describe_rss_rejects(name, rejected, samples=3):
+    """One log line: why every entry of a feed that had entries was rejected."""
+    counts = Counter(reason for reason, _, _ in rejected)
+    summary = ", ".join(f"{reason}={count}" for reason, count in counts.most_common())
+    examples = " | ".join(f"{reason}: {link} ({clean_text(title)[:50]})" for reason, link, title in rejected[:samples])
+    return f"RSS rədd edildi: {name} | {summary} | nümunə: {examples}"
+
+
 def extract_links_from_rss(site, rss_urls):
     results = []
     keywords = site.get("keywords", [])
@@ -3854,11 +3865,14 @@ def extract_links_from_rss(site, rss_urls):
             site["_rss_feed_had_entries"] = True
             print(f"RSS tapıldı: {rss_url} | xəbər sayı: {len(feed.entries)}", flush=True)
             before_count = len(results)
+            rejected = []
             for entry in feed.entries[:MAX_LINKS_PER_SITE * 4]:
                 title = clean_article_text(entry.get("title", ""))
                 link = entry.get("link", "")
                 published = entry.get("published") or entry.get("updated") or entry.get("created") or ""
-                add_item(results, page_url or rss_url, title, link, keywords, {"rss_published": published, "source_context": "rss", "url_patterns": site.get("url_patterns", [])})
+                reason = add_item(results, page_url or rss_url, title, link, keywords, {"rss_published": published, "source_context": "rss", "url_patterns": site.get("url_patterns", [])})
+                if reason:
+                    rejected.append((reason, link, title))
                 if len(results) >= MAX_LINKS_PER_SITE:
                     break
             added = len(results) - before_count
@@ -3866,6 +3880,7 @@ def extract_links_from_rss(site, rss_urls):
                 mark_read_success(site, "rss", site.get("_fallback_used", False))
                 print(f"RSS uyğun namizəd verdi: {site.get('name')} | {added}", flush=True)
                 break
+            print(describe_rss_rejects(site.get("name"), rejected), flush=True)
             set_read_diagnostic(site, "no_article", "rss")
         except Exception as exc:
             reason = classify_fetch_exception(exc)
@@ -4445,8 +4460,16 @@ def fetch_site_once(site, patterns_data):
 
         items = unique_items(items)
         if not items:
-            hrefs = [a["href"] for a in BeautifulSoup(page_html, "html.parser").find_all("a", href=True)]
+            anchors = BeautifulSoup(page_html, "html.parser").find_all("a", href=True)
+            hrefs = [a["href"] for a in anchors]
             print(f"Boş nəticə: html={len(page_html)} | linklər={len(hrefs)} | nümunə={hrefs[:3]}", flush=True)
+            # Navigation links say nothing; headline-like links show what the article URLs look like.
+            headline_links = [
+                f"{urljoin(page_url, a['href'])} ({clean_text(a.get_text(' ', strip=True))[:40]})"
+                for a in anchors
+                if len(clean_text(a.get_text(" ", strip=True))) >= 35 and get_domain(urljoin(page_url, a["href"])) == get_domain(page_url)
+            ]
+            print(f"Boş nəticə: başlıq kimi linklər={len(headline_links)} | nümunə={headline_links[:3]}", flush=True)
             final_method = "fallback" if site.get("_fallback_used") else (monitor_method or "latest_page")
             final_reason = empty_reason_for_method(final_method)
             if not site.get("_read_failure_reason") or final_reason in {"homepage_empty", "latest_page_empty", "fallback_empty"}:
