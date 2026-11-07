@@ -63,3 +63,16 @@ def test_citation_needs_attribution_words_and_skips_own_site_emails_and_social()
 
 def test_domain_with_azerbaijani_case_suffix_is_extracted():
     assert d.extract_cited_site_urls("Oxu.az-a istinadən xəbər verilir", "anews.az") == {"https://oxu.az"}
+
+
+def test_search_results_naming_a_new_source_give_candidates():
+    entries = [
+        {"title": "Yanğın söndürüldü", "summary": "<a>tez.az</a> saytının məlumatına görə, yanğın söndürülüb"},
+        {"title": "x", "summary": "bilinen.az bildirir ki, qiymət artıb"},
+    ]
+    assert d.cited_site_urls_from_entries(entries, {"bilinen.az"}, set()) == ["https://tez.az"]
+
+
+def test_phrase_queries_are_part_of_the_rotation():
+    queries = d.rotating_queries(0)
+    assert any("məlumatına görə" in q or "istinadən" in q or "məlumatına əsasən" in q for q in queries)

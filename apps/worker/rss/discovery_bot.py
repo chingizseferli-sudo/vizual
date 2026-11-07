@@ -826,6 +826,12 @@ TOPIC_WORDS = [
 ]
 ROTATING_REGIONS_PER_RUN = 10
 ROTATING_TOPICS_PER_RUN = 4
+# News texts name their source in set phrases; the sites that repeat those phrases are mostly small outlets.
+CITATION_PHRASE_QUERIES = [
+    '"saytının məlumatına görə"', '"saytına istinadən"', '"məlumatına əsasən"',
+    '"xəbər verir ki" saytı', '"yazır ki" saytı', '"bildirib" saytının',
+]
+CITATION_QUERIES_PER_RUN = 3
 
 
 def rotating_queries(slot: int) -> list[str]:
@@ -836,6 +842,7 @@ def rotating_queries(slot: int) -> list[str]:
     return (
         [f"{region} xəbərləri" for region in take(REGION_NAMES, ROTATING_REGIONS_PER_RUN)]
         + [f"{topic} xəbərləri Azərbaycan" for topic in take(TOPIC_WORDS, ROTATING_TOPICS_PER_RUN)]
+        + take(CITATION_PHRASE_QUERIES, CITATION_QUERIES_PER_RUN)
     )
 
 
@@ -1936,6 +1943,18 @@ def outbound_link_candidates(session: requests.Session, known_domains: set[str],
     return candidates
 
 
+def cited_site_urls_from_entries(entries, known_domains: set[str], processed_domains: set[str]) -> list[str]:
+    """New sites that search results name as their source in the title or summary."""
+    found = {}
+    for entry in entries:
+        text = BeautifulSoup(f"{entry.get('title', '')} {entry.get('summary', '')}", "html.parser").get_text(" ")
+        for url in extract_cited_site_urls(text, ""):
+            domain = clean_domain(url)
+            if domain and domain not in known_domains and domain not in processed_domains:
+                found[url] = True
+    return list(found)[:OUTBOUND_MAX_CANDIDATES]
+
+
 def candidate_batches(session: requests.Session, queries: list[str], settings: dict, known_domains: set[str], processed_domains: set[str]):
     """Yields lists of entries shaped like Google News entries: {'source': {'title', 'href'}}."""
     for query in queries:
@@ -1948,7 +1967,12 @@ def candidate_batches(session: requests.Session, queries: list[str], settings: d
             print("Google News RSS xətası:", e, flush=True)
             continue
         print("Nəticə sayı:", len(feed.entries), flush=True)
-        yield feed.entries[:settings["max_entries_per_query"]]
+        entries = feed.entries[:settings["max_entries_per_query"]]
+        yield entries
+        cited = cited_site_urls_from_entries(entries, known_domains, processed_domains)
+        if cited:
+            print(f"Xəbər mətnində istinad edilən domen: {len(cited)}", flush=True)
+            yield [{"source": {"title": None, "href": url}} for url in cited]
     yield [{"source": {"title": None, "href": url}} for url in outbound_link_candidates(session, known_domains, processed_domains)]
 
 
