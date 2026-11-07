@@ -750,9 +750,26 @@ def looks_like_commercial_site(name: str | None, url: str, html_text: str = "") 
 
 
 
+AZ_LANG_DECLARATION_RE = re.compile(
+    r"<html[^>]*\blang=[\"']?az|property=[\"']og:locale[\"'][^>]*content=[\"']az", re.IGNORECASE
+)
+
+
+def visible_page_text(html_text: str) -> str:
+    """Text a visitor reads. Raw HTML starts with kilobytes of CSS and scripts, so slicing it
+    before parsing leaves modern pages with no Azerbaijani words at all."""
+    soup = BeautifulSoup(html_text or "", "html.parser")
+    for tag in soup(["script", "style", "noscript", "template"]):
+        tag.decompose()
+    return clean_text(soup.get_text(" ", strip=True))[:20000].lower()
+
+
 def count_az_news_language_signals(html_text: str) -> int:
-    value = clean_text((html_text or "")[:12000]).lower()
-    return sum(1 for word in AZ_NEWS_LANGUAGE_WORDS if word in value)
+    value = visible_page_text(html_text)
+    signals = sum(1 for word in AZ_NEWS_LANGUAGE_WORDS if word in value)
+    if AZ_LANG_DECLARATION_RE.search((html_text or "")[:20000]):
+        signals += 3
+    return signals
 
 
 def is_azerbaijani_source(domain: str, html_text: str = "", reasons=None) -> bool:
@@ -1434,7 +1451,8 @@ def analyze_section(session: requests.Session, name: str, section_url: str) -> d
             "source_type": "rejected_commercial",
         }
 
-    if not is_azerbaijani_source(domain, html_text):
+    # An unreadable page (blocked, redirected) says nothing about its language; the structure check below decides.
+    if html_text and not is_azerbaijani_source(domain, html_text):
         return {
             "name": name or domain,
             "url": section_url.rstrip("/"),
