@@ -47,3 +47,19 @@ def test_messenger_share_links_and_counters_are_not_candidates():
         '<a href="https://musavat.com/news/1">Müsavat</a>'
     )
     assert d.extract_external_site_urls(html, "https://anews.az") == {"https://musavat.com"}
+
+
+def test_domains_named_as_news_source_are_extracted():
+    text = "Hadisə baş verib. sizinxeber.az saytının məlumatına görə, yanğın söndürülüb. Ətraflı: report.az"
+    assert d.extract_cited_site_urls(text, "anews.az") == {"https://sizinxeber.az"}
+
+
+def test_citation_needs_attribution_words_and_skips_own_site_emails_and_social():
+    assert d.extract_cited_site_urls("Bizə yazın: info@tez.az", "anews.az") == set()
+    assert d.extract_cited_site_urls("Saytımız anews.az sürətlə işləyir", "anews.az") == set()
+    assert d.extract_cited_site_urls("facebook.com səhifəsinə istinadən xəbər verir", "anews.az") == set()
+    assert d.extract_cited_site_urls("Bu gün tez.az açıldı", "anews.az") == set()
+
+
+def test_domain_with_azerbaijani_case_suffix_is_extracted():
+    assert d.extract_cited_site_urls("Oxu.az-a istinadən xəbər verilir", "anews.az") == {"https://oxu.az"}

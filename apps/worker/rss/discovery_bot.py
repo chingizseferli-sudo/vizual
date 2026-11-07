@@ -1832,6 +1832,35 @@ def extract_external_site_urls(page_html: str, page_url: str) -> set[str]:
     return found
 
 
+CITED_DOMAIN_RE = re.compile(
+    r"(?<![@\w.-])((?:[a-z0-9-]+\.)+(?:az|com|info|media|news|org|net|tv|press|online|site))(?!\w)",
+    re.IGNORECASE,
+)
+CITATION_MARKERS = (
+    "istinadən", "məlumatına görə", "məlumatında", "xəbərinə görə", "xəbər verir", "saytı", "saytına",
+    "yazır", "bildirir", "məlumat yayıb", "nəşrinə",
+)
+
+
+def extract_cited_site_urls(text: str, own_domain: str) -> set[str]:
+    """Root URLs of sites a news text names as its source ("...saytının məlumatına görə")."""
+    text = clean_text(text)
+    lowered = text.lower()
+    found = set()
+    for match in CITED_DOMAIN_RE.finditer(text):
+        domain = match.group(1).lower()
+        if domain == own_domain or is_subdomain_of(domain, own_domain) or is_subdomain_of(own_domain, domain):
+            continue
+        window = lowered[match.end(): match.end() + 50]
+        if not any(marker in window for marker in CITATION_MARKERS):
+            continue
+        url = f"https://{domain}"
+        if is_bad_url(url):
+            continue
+        found.add(base_url(url))
+    return found
+
+
 def rank_outbound_candidates(links_by_source: dict[str, set[str]], known_domains: set[str], processed_domains: set[str]) -> list[str]:
     """Sites linked from several different known sources are the likely news outlets."""
     counts = Counter()
@@ -1844,7 +1873,7 @@ def rank_outbound_candidates(links_by_source: dict[str, set[str]], known_domains
     return ranked[:OUTBOUND_MAX_CANDIDATES]
 
 
-def active_source_homepages() -> list[str]:
+def active_source_homepages() -> list[tuple[str, str | None]]:
     if not supabase_ready():
         return []
     urls = []
@@ -1854,13 +1883,13 @@ def active_source_homepages() -> list[str]:
             response = requests.get(
                 f"{SUPABASE_URL}/rest/v1/sources",
                 headers=supabase_headers(),
-                params={"select": "base_url", "status": "eq.active", "order": "name.asc", "limit": "1000", "offset": str(offset)},
+                params={"select": "base_url,rss_url", "status": "eq.active", "order": "name.asc", "limit": "1000", "offset": str(offset)},
                 timeout=REQUEST_TIMEOUT,
             )
             if response.status_code != 200:
                 break
             rows = response.json() or []
-            urls.extend(row["base_url"] for row in rows if row.get("base_url"))
+            urls.extend((row["base_url"], row.get("rss_url")) for row in rows if row.get("base_url"))
             if len(rows) < 1000:
                 break
             offset += 1000
@@ -1879,14 +1908,26 @@ def outbound_link_candidates(session: requests.Session, known_domains: set[str],
     sample = homepages[slot::groups]
     print(f"Xarici link axtarışı: {len(sample)} mənbə səhifəsi ({slot + 1}/{groups})", flush=True)
 
-    def read_links(url: str):
+    def read_links(source: tuple[str, str | None]):
+        url, rss_url = source
+        found = set()
         try:
             response = session.get(url, timeout=REQUEST_TIMEOUT)
-            if response.status_code != 200:
-                return url, set()
-            return url, extract_external_site_urls(response.text, response.url or url)
+            if response.status_code == 200:
+                page_url = response.url or url
+                found |= extract_external_site_urls(response.text, page_url)
+                page_text = BeautifulSoup(response.text, "html.parser").get_text(" ", strip=True)
+                found |= extract_cited_site_urls(page_text, clean_domain(page_url))
         except Exception:
-            return url, set()
+            pass
+        if rss_url:
+            try:
+                feed = feedparser.parse(rss_url)
+                feed_text = " ".join(f"{entry.get('title', '')} {entry.get('summary', '')}" for entry in feed.entries[:50])
+                found |= extract_cited_site_urls(BeautifulSoup(feed_text, "html.parser").get_text(" "), clean_domain(url))
+            except Exception:
+                pass
+        return url, found
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         links_by_source = dict(executor.map(read_links, sample))
