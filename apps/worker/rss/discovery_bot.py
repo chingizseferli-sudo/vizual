@@ -1947,7 +1947,8 @@ def outbound_link_candidates(session: requests.Session, known_domains: set[str],
             pass
         if rss_url:
             try:
-                feed = feedparser.parse(rss_url)
+                feed_response = session.get(rss_url, timeout=REQUEST_TIMEOUT)
+                feed = feedparser.parse(feed_response.text if feed_response.status_code == 200 else "")
                 feed_text = " ".join(f"{entry.get('title', '')} {entry.get('summary', '')}" for entry in feed.entries[:50])
                 found |= extract_cited_site_urls(BeautifulSoup(feed_text, "html.parser").get_text(" "), clean_domain(url))
             except Exception:
