@@ -1108,6 +1108,27 @@ def get_base_url(url):
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
+TRACKING_QUERY_PARAMS = {
+    "fbclid", "gclid", "dclid", "yclid", "mc_cid", "mc_eid",
+    "igshid", "ref", "ref_src", "spm", "ved", "usg",
+}
+
+
+def is_tracking_param(key):
+    lower_key = key.lower()
+    return lower_key in TRACKING_QUERY_PARAMS or lower_key.startswith("utm_")
+
+
+def strip_tracking_params(link):
+    """Drop utm_* and click-id params only; scheme, host, path and other params stay untouched.
+    WordPress feeds append ?utm_source=rss&..., and the word "rss" made is_bad_link reject every article."""
+    parsed = urlparse(link)
+    if not parsed.query:
+        return link
+    kept = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True) if not is_tracking_param(key)]
+    return parsed._replace(query=urlencode(kept)).geturl()
+
+
 def normalize_link(link):
     link = clean_text(link)
     if not link:
@@ -1116,17 +1137,7 @@ def normalize_link(link):
     if not parsed.scheme or not parsed.netloc:
         return link.split("#")[0].rstrip("/")
 
-    tracking_prefixes = ("utm_",)
-    tracking_params = {
-        "fbclid", "gclid", "dclid", "yclid", "mc_cid", "mc_eid",
-        "igshid", "ref", "ref_src", "spm", "ved", "usg",
-    }
-    kept_query = []
-    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
-        lower_key = key.lower()
-        if lower_key in tracking_params or lower_key.startswith(tracking_prefixes):
-            continue
-        kept_query.append((key, value))
+    kept_query = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True) if not is_tracking_param(key)]
 
     scheme = parsed.scheme.lower()
     hostname = (parsed.hostname or "").lower()
@@ -3709,7 +3720,7 @@ def is_bad_link(title, link):
 
 def add_item(results, page_url, title, link, keywords, extra=None):
     title = clean_article_text(title)
-    link = urljoin(page_url, clean_text(link)).split("#")[0]
+    link = strip_tracking_params(urljoin(page_url, clean_text(link)).split("#")[0])
     if not title or not link.startswith("http"):
         return
     raw_title = title
