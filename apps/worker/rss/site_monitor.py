@@ -185,6 +185,9 @@ ARTICLE_URL_REGEX_PATTERNS = [
     re.compile(r"/[a-z0-9_-]+/\d{4,}[-_][^/?#]{8,}/?$"),
 ]
 
+# Sites that serve articles as /index.php?newsid=164494 or WordPress /?p=123 have no slug to match.
+QUERY_ID_ARTICLE_RE = re.compile(r"(?:^|&)(?:newsid|news_id|articleid|article_id|postid|post_id|p)=\d{3,}(?:&|$)")
+
 ROOT_SLUG_ARTICLE_DOMAINS = {
     "7times.az",
     "busaat.az",
@@ -3656,9 +3659,11 @@ def is_article_like_link(link):
     link_lower = link.lower()
     if "news.google.com/" in link_lower:
         return True
+    parsed = urlparse(link_lower)
+    if QUERY_ID_ARTICLE_RE.search(parsed.query):
+        return True
     if is_probably_section_url(link_lower):
         return False
-    parsed = urlparse(link_lower)
     path = parsed.path or ""
     if is_allowed_domain_detail_article(link_lower):
         return True
