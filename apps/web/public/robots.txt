@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /monitor
+Sitemap: https://vizual.az/sitemap.xml
