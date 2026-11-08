@@ -70,6 +70,8 @@ def col(monkeypatch):
     sm.BOT_SETTINGS_CACHE.update({"paused": False, "fetched_at": 0.0})
     monkeypatch.setattr(module.time, "sleep", lambda _s: None)
     monkeypatch.setattr(sm.time, "sleep", lambda _s: None)
+    # Balance alerts have their own tests (test_cost_alerts.py).
+    monkeypatch.setattr(module.cost_alerts, "check", lambda *args, **kwargs: None)
     return module
 
 
