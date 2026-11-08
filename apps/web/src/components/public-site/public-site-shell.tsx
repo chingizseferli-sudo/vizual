@@ -5,6 +5,7 @@ import { t } from '@/lib/i18n'
 import {
   defaultPublicSiteSettings,
   loadPublicSiteSettings,
+  setPublicPageMeta,
   type PublicSiteSettings,
 } from '@/lib/public-site-settings'
 import { BrandMark } from '@/components/brand-mark'
@@ -19,7 +20,6 @@ const label = {
   register: t('Hesab yarat'),
   demoRequest: t('Sınaq müraciəti'),
   demo: t('Sınaq'),
-  blog: t('Bloq'),
   trial: t('7 gün pulsuz sına'),
   openMenu: t('Menyunu aç'),
   closeMenu: t('Menyunu bağla'),
@@ -30,7 +30,6 @@ const mobileMenuLinks = [
   { to: '/solutions', label: label.services },
   { to: '/demo', label: label.demo },
   { to: '/pricing', label: label.pricing },
-  { to: '/blog', label: label.blog },
   { to: '/about', label: label.about },
   { to: '/contact', label: label.contact },
   { to: '/sign-in', label: label.login },
@@ -74,7 +73,6 @@ export function PublicHeader() {
           <Link to='/solutions'>{label.services}</Link>
           <Link to='/demo'>{label.demo}</Link>
           <Link to='/pricing'>{label.pricing}</Link>
-          <Link to='/blog'>{label.blog}</Link>
           <Link to='/about'>{label.about}</Link>
           <Link to='/contact'>{label.contact}</Link>
         </nav>
@@ -174,6 +172,11 @@ export function PublicPageHero({
   description: string
   children?: ReactNode
 }) {
+  useEffect(() => {
+    setPublicPageMeta({ title, description: description.slice(0, 160) })
+    return () => setPublicPageMeta(null)
+  }, [title, description])
+
   return (
     <section className='mx-auto max-w-7xl px-5 py-16 md:px-8 md:py-24'>
       <div className='max-w-4xl'>

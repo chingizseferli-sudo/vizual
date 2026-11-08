@@ -35,7 +35,6 @@ function BlogPage() {
                 <h2 className='mt-5 text-xl leading-7 font-extrabold text-slate-950'>
                   {post}
                 </h2>
-                <p className='mt-3 text-sm leading-6 text-slate-600'>{t("Bu mövzu üzrə məqalə və ya izah mətni admin paneldən genişləndirilə bilər.")}</p>
               </PublicCard>
             ))}
           </div>

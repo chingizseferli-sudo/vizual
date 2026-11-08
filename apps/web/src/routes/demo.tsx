@@ -43,18 +43,7 @@ function DemoPage() {
             </Link>
           </div>
         </PublicPageHero>
-        <section className='mx-auto grid max-w-7xl gap-6 px-5 pb-20 md:px-8 lg:grid-cols-[0.9fr_1.1fr]'>
-          <PublicCard>
-            <h2 className='text-xl font-extrabold text-slate-950'>
-              {content.demo.placeholderTitle}
-            </h2>
-            <div className='mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center'>
-              <PlayCircle className='mx-auto h-12 w-12 text-slate-500' />
-              <p className='mx-auto mt-4 max-w-xl text-sm leading-6 font-semibold text-slate-600'>
-                {content.demo.placeholderDescription}
-              </p>
-            </div>
-          </PublicCard>
+        <section className='mx-auto grid max-w-7xl gap-6 px-5 pb-20 md:px-8'>
           <PublicCard>
             <h2 className='text-xl font-extrabold text-slate-950'>{t("Demo iş axını")}</h2>
             <div className='mt-6 grid gap-3'>

@@ -242,14 +242,20 @@ function IndexPage() {
                 </Link>
               </div>
             </div>
-            <div className='rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center'>
-              <PlayCircle className='mx-auto h-12 w-12 text-slate-500' />
-              <p className='mt-4 text-lg font-extrabold text-slate-950'>
-                {content.demo.placeholderTitle}
-              </p>
-              <p className='mt-2 text-sm leading-6 text-slate-600'>
-                {content.demo.placeholderDescription}
-              </p>
+            <div className='grid gap-3'>
+              {content.demo.items.map((row) => (
+                <article
+                  key={row.title}
+                  className='rounded-xl border border-slate-200 bg-slate-50 p-4'
+                >
+                  <p className='text-xs font-bold text-slate-500'>
+                    {row.source} • {row.keyword} • {row.time}
+                  </p>
+                  <h3 className='mt-2 text-sm leading-6 font-extrabold text-slate-950'>
+                    {row.title}
+                  </h3>
+                </article>
+              ))}
             </div>
           </div>
         </section>

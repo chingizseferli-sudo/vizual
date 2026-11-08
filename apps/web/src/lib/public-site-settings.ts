@@ -159,13 +159,27 @@ function setMeta(
   tag.content = content
 }
 
+// The page being shown (pricing, about...) names itself; the site-wide texts are the fallback.
+let pageMeta: { title: string; description: string } | null = null
+let lastSettings: PublicSiteSettings | null = null
+
+export function setPublicPageMeta(meta: { title: string; description: string } | null) {
+  pageMeta = meta
+  if (lastSettings) applyPublicSiteMetadata(lastSettings)
+}
+
 export function applyPublicSiteMetadata(settings: PublicSiteSettings) {
-  document.title = settings.seo_title || settings.site_name
-  setMeta('description', settings.seo_description)
-  setMeta('og:title', settings.og_title || settings.seo_title, 'property')
+  lastSettings = settings
+  const title = pageMeta
+    ? `${pageMeta.title} · ${settings.site_name}`
+    : settings.seo_title || settings.site_name
+  const description = pageMeta?.description || settings.seo_description
+  document.title = title
+  setMeta('description', description)
+  setMeta('og:title', pageMeta ? title : settings.og_title || settings.seo_title, 'property')
   setMeta(
     'og:description',
-    settings.og_description || settings.seo_description,
+    pageMeta?.description || settings.og_description || settings.seo_description,
     'property'
   )
   setMeta('og:site_name', settings.site_name, 'property')
