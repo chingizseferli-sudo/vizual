@@ -15,15 +15,18 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
   return (
     <main className='relative min-h-svh bg-muted/30 text-foreground'>
-      <Link
-        to='/'
-        className='absolute top-4 left-4 z-10 inline-flex h-9 items-center rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground'
-      >{t("← Sayta qayıt")}</Link>
-      <div className='absolute top-4 right-4 z-10 flex items-center gap-2'>
-        <LanguageSwitcher />
-        <ThemeSwitch />
+      {/* In the page flow on phones so the buttons never cover the brand; floating over the corners on desktop. */}
+      <div className='relative z-10 flex items-center justify-between gap-2 px-4 pt-4 lg:absolute lg:inset-x-0 lg:top-0'>
+        <Link
+          to='/'
+          className='inline-flex h-9 items-center rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground'
+        >{t("← Sayta qayıt")}</Link>
+        <div className='flex items-center gap-2'>
+          <LanguageSwitcher />
+          <ThemeSwitch />
+        </div>
       </div>
-      <div className='mx-auto grid min-h-svh max-w-7xl gap-8 px-4 py-6 md:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:py-10'>
+      <div className='mx-auto grid max-w-7xl gap-8 px-4 pb-6 pt-2 md:px-6 lg:min-h-svh lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:py-10'>
         <section className='hidden lg:block'>
           <Link
             to='/'
@@ -63,7 +66,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           </div>
         </section>
 
-        <section className='flex min-h-[calc(100svh-3rem)] items-center justify-center lg:min-h-0'>
+        <section className='flex min-h-[calc(100svh-5rem)] items-center justify-center lg:min-h-0'>
           <div className='w-full max-w-md'>
             <Link to='/' className='mb-6 flex items-center justify-center gap-3 lg:hidden'>
               <BrandMark
