@@ -753,6 +753,15 @@ def safe_request(url, *, site=None, method="", **kwargs):
         return get_with_reader_fallback(url, domain, kwargs)
 
 
+TRANSIENT_BACKOFF_LADDER = (
+    (2, timedelta(minutes=10)),
+    (4, timedelta(minutes=30)),
+    (8, timedelta(hours=2)),
+)
+TRANSIENT_HTTP_STATUSES = {500, 502, 503, 504, 520, 521, 522, 523, 524}
+PAGE_RETRY_PAUSE_SECONDS = 3
+
+
 def source_backoff_interval(reason, fail_count=0):
     reason = clean_text(reason)
     fail_count = int(fail_count or 0)
@@ -760,14 +769,17 @@ def source_backoff_interval(reason, fail_count=0):
     # NEWS_TIME_LIMIT_HOURS is never sent, so a long wait only delays the next fresh article.
     if reason in {"http_403", "http_429"}:
         return timedelta(hours=3 if fail_count < 3 else 6)
-    if reason == "timeout":
-        return timedelta(hours=6 if fail_count >= 2 else 1)
     if reason == "unsafe_url":
         return timedelta(hours=24)
     if reason in {"dns_failure", "ssl_failure", "http_404", "dead"}:
         return timedelta(hours=2 if fail_count < 3 else 6)
-    if reason.startswith("http_5") or reason in {"site_error"}:
-        return timedelta(hours=2 if fail_count < 3 else 6)
+    if reason == "timeout" or reason.startswith("http_5") or reason in {"site_error"}:
+        # Overloaded sites come back within minutes, so the first failures are re-probed quickly
+        # and only a site that keeps failing is left alone for hours.
+        for limit, wait in TRANSIENT_BACKOFF_LADDER:
+            if fail_count < limit:
+                return wait
+        return timedelta(hours=6)
     if reason in {"rss_empty", "sitemap_empty", "latest_page_empty", "homepage_empty", "fallback_empty", "no_article"}:
         return timedelta(minutes=20)
     if reason in LOSS_REASONS:
@@ -4177,11 +4189,8 @@ def fetch_page(url):
 
 
 
-def try_safe_blocked_source_fallback(site, base_url, status_reason, host_reachable=True):
-    """Try low-pressure alternatives when the configured page cannot be read.
-
-    host_reachable=False (timeout, DNS, TLS: the site does not answer us at all) skips the
-    site's own RSS and sitemap, which would only time out again, and goes to Google News."""
+def try_safe_blocked_source_fallback(site, base_url, status_reason):
+    """Try the site's own feed and sitemap when its page refuses us (403/429)."""
     root = (base_url or site.get("base_url") or site.get("url") or "").rstrip("/") + "/"
     if not root.startswith("http") or is_local_only_url(root):
         return []
@@ -4196,37 +4205,50 @@ def try_safe_blocked_source_fallback(site, base_url, status_reason, host_reachab
     rss_candidates.extend([urljoin(root, path.lstrip("/")) for path in COMMON_RSS_PATHS])
     rss_candidates = list(dict.fromkeys([url for url in rss_candidates if url and not is_local_only_url(url)]))[:8]
 
-    if host_reachable and rss_candidates:
+    if rss_candidates:
         items = extract_links_from_rss(site, rss_candidates)
         if items:
             mark_read_success(site, "rss", fallback_used=True)
             return unique_items(items)
 
-    if host_reachable:
-        sitemap_site = dict(site)
-        sitemap_site["latest_url"] = urljoin(root, "sitemap.xml")
-        sitemap_site["_fallback_used"] = True
-        items = extract_links_from_sitemap(sitemap_site)
-        if items:
-            site.update({
-                "_read_failure_reason": sitemap_site.get("_read_failure_reason"),
-                "_method_attempted": sitemap_site.get("_method_attempted"),
-                "_method_succeeded": sitemap_site.get("_method_succeeded"),
-                "_fallback_used": True,
-            })
-            mark_read_success(site, "sitemap", fallback_used=True)
-            return unique_items(items)
-
-    domain = get_domain(root)
-    if domain:
-        google_url = f"https://news.google.com/rss/search?q=site%3A{domain}%20when%3A{google_news_when_window()}&hl=az&gl=AZ&ceid=AZ:az"
-        items = extract_links_from_rss(site, [google_url])
-        if items:
-            mark_read_success(site, "google_news", fallback_used=True)
-            return unique_items(items)
+    sitemap_site = dict(site)
+    sitemap_site["latest_url"] = urljoin(root, "sitemap.xml")
+    sitemap_site["_fallback_used"] = True
+    items = extract_links_from_sitemap(sitemap_site)
+    if items:
+        site.update({
+            "_read_failure_reason": sitemap_site.get("_read_failure_reason"),
+            "_method_attempted": sitemap_site.get("_method_attempted"),
+            "_method_succeeded": sitemap_site.get("_method_succeeded"),
+            "_fallback_used": True,
+        })
+        mark_read_success(site, "sitemap", fallback_used=True)
+        return unique_items(items)
 
     set_read_diagnostic(site, status_reason, clean_text(site.get("monitor_method", "")) or "latest_page", fallback_used=True)
     return []
+
+def request_page_with_one_retry(site, page_url, *, method, headers):
+    """One more try after a short pause when a site that worked before times out or answers 5xx.
+
+    A site that never worked is not retried: it would only cost another timeout."""
+    def attempt():
+        return safe_request(page_url, site=site, method=method, headers=headers, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+
+    try:
+        response = attempt()
+        failed = response.status_code in TRANSIENT_HTTP_STATUSES
+        error = None
+    except requests.Timeout as exc:
+        response, failed, error = None, True, exc
+    if not failed or not site.get("last_success_at"):
+        if error:
+            raise error
+        return response
+    print(f"Təkrar cəhd: {page_url} | {error.__class__.__name__ if error else response.status_code}", flush=True)
+    time.sleep(PAGE_RETRY_PAUSE_SECONDS)
+    return attempt()
+
 
 def fetch_site(site, patterns_data):
     items = fetch_site_once(site, patterns_data)
@@ -4390,13 +4412,11 @@ def fetch_site_once(site, patterns_data):
     try:
         print(f"Sayt açılır: {page_url}", flush=True)
 
-        r = safe_request(
+        r = request_page_with_one_retry(
+            site,
             page_url,
-            site=site,
             method=monitor_method or "latest_page",
             headers=headers,
-            timeout=REQUEST_TIMEOUT,
-            allow_redirects=True,
         )
 
         print(f"Status: {r.status_code}", flush=True)
@@ -4404,12 +4424,9 @@ def fetch_site_once(site, patterns_data):
         if r.status_code != 200:
             site["_last_http_status"] = r.status_code
             status_reason = http_status_reason(r.status_code)
-            if r.status_code in {401, 403, 429} or r.status_code >= 500:
-                # 403/429: the site refuses us. 401 and 5xx (Cloudflare 520/521 too): its own
-                # pages do not work for us right now. Google News still lists its fresh headlines.
-                fallback_items = try_safe_blocked_source_fallback(
-                    site, base_url, status_reason, host_reachable=r.status_code in {403, 429}
-                )
+            if r.status_code in {403, 429}:
+                # The site refuses the page but may still serve its feed or sitemap.
+                fallback_items = try_safe_blocked_source_fallback(site, base_url, status_reason)
                 if fallback_items:
                     return fallback_items
             set_read_diagnostic(site, status_reason, monitor_method or "latest_page")
@@ -4421,11 +4438,6 @@ def fetch_site_once(site, patterns_data):
         reason = classify_fetch_exception(e)
         set_read_diagnostic(site, reason, monitor_method or "latest_page")
         print(f"Sayt xətası: {page_url} | {reason} | {e}", flush=True)
-        if reason in {"timeout", "dns_failure", "ssl_failure"}:
-            # The site does not answer from our server (for example a geo-block); try Google News.
-            fallback_items = try_safe_blocked_source_fallback(site, base_url, reason, host_reachable=False)
-            if fallback_items:
-                return fallback_items
         return []
 
     domain = get_domain(page_url)
