@@ -207,7 +207,7 @@ ROOT_SLUG_ARTICLE_DOMAINS = {
     "yenicag.az",
 }
 
-ROOT_SLUG_ARTICLE_RE = re.compile(r"^/[a-z0-9%_-]{18,}(?:\.html?)?/?$")
+ROOT_SLUG_ARTICLE_RE = re.compile(r"^/[\w%-]{18,}(?:\.html?)?/?$")
 LANG_SLUG_ARTICLE_RE = re.compile(r"^/(az|en|ru|tr)/[a-z0-9%_-]{18,}/?$")
 CATEGORY_SLUG_ARTICLE_RE = re.compile(r"^/[a-z0-9%_-]{3,}/[a-z0-9%_-]{18,}/?$")
 
@@ -3560,6 +3560,9 @@ def is_probably_section_url(link):
         "arxiv", "latest", "lastnews", "allnews", "all-news", "son-xeberler", "media",
     ]
     parts = [part for part in path.split("/") if part]
+    if len(parts) == 1 and path.count("-") >= 4:
+        # A one-segment path with this many words is a headline slug, even when it contains "xeber".
+        return False
     if len(parts) <= 1 and any(word in path for word in bad_section_words):
         return True
     if len(parts) <= 2 and any(path.endswith(word) for word in bad_section_words):
@@ -3769,7 +3772,8 @@ def add_item(results, page_url, title, link, keywords, extra=None):
     url_patterns = extra.get("url_patterns", []) if extra else []
     if not is_article_like_link(link):
         if not is_source_url_pattern_article(link, page_url, url_patterns):
-            if not (extra and extra.get("source_context") == "rss" and is_feed_root_slug_article(link)):
+            root_slug_ok = extra and (extra.get("source_context") == "rss" or extra.get("root_slug_cluster"))
+            if not (root_slug_ok and is_feed_root_slug_article(link)):
                 return "not_article_like"
     item = {
         "title": title_for_keyword,
@@ -4031,8 +4035,38 @@ def extract_links_fallback(page_url, page_html, keywords, url_patterns=None):
         if len(results) >= MAX_LINKS_PER_SITE:
             break
 
+    if not results:
+        results = extract_root_slug_cluster(page_url, links, keywords, url_patterns)
+
     return unique_items(results)
 
+
+ROOT_SLUG_CLUSTER_MIN = 8
+
+
+def extract_root_slug_cluster(page_url, links, keywords, url_patterns=None):
+    """Sites whose article URLs are bare /headline-slug/ paths have no per-domain rule here.
+    One such link is indistinguishable from a menu page, but a page full of them is a news list."""
+    candidates = []
+    for a in links[:300]:
+        title = clean_article_text(a.get_text(" ", strip=True))
+        link = urljoin(page_url, a["href"])
+        if len(title) < 25 or get_domain(link) != get_domain(page_url):
+            continue
+        if is_feed_root_slug_article(link):
+            candidates.append((a, title, link))
+    if len({normalize_link(link) for _, _, link in candidates}) < ROOT_SLUG_CLUSTER_MIN:
+        return []
+    results = []
+    for a, title, link in candidates:
+        extra = {"url_patterns": url_patterns or [], "source_context": "latest_page", "root_slug_cluster": True}
+        listing_published = extract_listing_publish_time(a.parent, a)
+        if listing_published:
+            extra["listing_published"] = listing_published
+        add_item(results, page_url, title, link, keywords, extra)
+        if len(results) >= MAX_LINKS_PER_SITE:
+            break
+    return results
 
 
 def extract_sitemap_locs(xml_text, base_url):
