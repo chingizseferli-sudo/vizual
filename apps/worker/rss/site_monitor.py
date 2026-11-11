@@ -5832,7 +5832,34 @@ def patch_source_row(source_id, payload):
         return False
 
 
+def requeue_failed_trials():
+    """Gives sources that failed their trial days ago another chance (the reader may have improved)."""
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/sources",
+            headers=supabase_headers(),
+            params={
+                "select": "id,name,notes",
+                "status": "eq.inactive",
+                "discovery_status": "eq.needs_review",
+                "notes": "ilike.*[trial_failed *",
+                "limit": "200",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        rows = response.json() if response.status_code == 200 else []
+    except Exception as exc:
+        print(f"Yenidən sınaq siyahısı oxunmadı: {exc}", flush=True)
+        return
+    due = [row for row in rows if lifecycle.is_due_for_retrial(row.get("notes"))]
+    for row in due[:lifecycle.RETRIAL_PER_RUN]:
+        payload = {"discovery_status": "accepted", "notes": lifecycle.build_retrial_notes(row.get("notes"))}
+        if patch_source_row(row["id"], payload):
+            print(f"🔁 Yenidən sınaq: {row.get('name')} | n={lifecycle.retrial_count(payload['notes'])}", flush=True)
+
+
 def run_trial_pass(patterns_data):
+    requeue_failed_trials()
     rows = load_trial_rows()
     if not rows:
         return
@@ -5847,6 +5874,9 @@ def run_trial_pass(patterns_data):
             passed, reason = lifecycle.judge_sample(sample_trial_site(site, patterns_data))
         except Exception as exc:
             passed, reason = False, f"error:{str(exc)[:60]}"
+        if not passed and reason.startswith("too_few_articles:") and site.get("_read_failure_reason"):
+            # Says why the page gave no links (http_403, timeout, dns_failure...), so the admin sees the cause.
+            reason = f"{reason}:{re.sub(r'[^A-Za-z0-9_]', '', site['_read_failure_reason'])[:30]}"
         action, new_state = lifecycle.next_state(state, passed)
         base_notes = lifecycle.strip_trial_tag(row.get("notes"))
         stamp = datetime.now(BAKU_TZ).strftime("%Y-%m-%d %H:%M")
