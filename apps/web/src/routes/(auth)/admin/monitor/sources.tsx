@@ -226,7 +226,7 @@ function trialFailureText(notes: string | null) {
   const match = TRIAL_FAILED.exec(notes || '')
   if (!match) return ''
   const [code, first, cause] = match[1].split(':')
-  let text = ''
+  let text: string
   if (code === 'too_few_articles') {
     text = cause
       ? reasonLabel(cause)
