@@ -54,6 +54,10 @@ const MAX_BULK_ADD = 20
 
 const TRIAL_TAG = /\[trial passes=(\d+) fails=(\d+) since=[^\]\s]+\]/
 const TRIAL_TAG_WITH_SPACE = /\s*\[trial passes=\d+ fails=\d+ since=[^\]\s]+\]/
+const TRIAL_FAILED = /\[trial_failed (\S+) [^\]]+\]/
+const TRIAL_FAILED_WITH_SPACE = /\s*\[trial_failed \S+ [^\]]+\]/
+const RETRIAL_TAG = /\[retrial n=(\d+)\]/
+const RETRIAL_TAG_WITH_SPACE = /\s*\[retrial n=\d+\]/
 
 const EDITABLE_METHODS = [
   'rss',
@@ -217,6 +221,33 @@ const REASON_LABELS: Record<string, string> = {
   ssl_failure: 'SSL xətası',
 }
 
+// The worker writes the failed trial as "[trial_failed too_few_articles:0:http_403 2026-11-07 18:01]".
+function trialFailureText(notes: string | null) {
+  const match = TRIAL_FAILED.exec(notes || '')
+  if (!match) return ''
+  const [code, first, cause] = match[1].split(':')
+  let text: string
+  if (code === 'too_few_articles') {
+    text = cause
+      ? reasonLabel(cause)
+      : first === '0'
+        ? 'saytdan xəbər linki tapılmadı'
+        : `yalnız ${first} xəbər linki tapıldı`
+  } else if (code === 'future_dates') {
+    text = `xəbərlərin tarixi gələcək kimi oxunur (${first})`
+  } else if (code === 'unreadable_dates') {
+    text = `xəbərin tarixi oxunmur (${first})`
+  } else if (code === 'bad_titles') {
+    text = `başlıqlar düzgün alınmır (${first})`
+  } else if (code === 'error') {
+    text = 'oxuma xətası'
+  } else {
+    text = code
+  }
+  const retrial = RETRIAL_TAG.exec(notes || '')
+  return `Sınaq keçmədi: ${text}${retrial ? ` · ${retrial[1]}-ci yenidən sınaq` : ''}`
+}
+
 function reasonLabel(reason: string | null) {
   if (!reason) return ''
   return REASON_LABELS[reason] || reason.slice(0, 120)
@@ -301,7 +332,12 @@ function getSourceState(
       source.discovery_status === 'manual_needed'
     ) {
       const reason =
-        source.last_error || notes.replace(TRIAL_TAG_WITH_SPACE, '')
+        trialFailureText(notes) ||
+        source.last_error ||
+        notes
+          .replace(TRIAL_TAG_WITH_SPACE, '')
+          .replace(TRIAL_FAILED_WITH_SPACE, '')
+          .replace(RETRIAL_TAG_WITH_SPACE, '')
       return { state: 'review', reason: reason.slice(0, 160) }
     }
     return { state: 'off', reason: '' }
