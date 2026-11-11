@@ -192,6 +192,10 @@ ARTICLE_URL_REGEX_PATTERNS = [
 PHP_DETAIL_PATH_RE = re.compile(r"(?:post|news|article|detail|story|xeber)[\w-]*\.php$")
 PHP_DETAIL_QUERY_RE = re.compile(r"(?:^|&)(?:id=\d{3,}|slug=[^&]{8,}|news=[^&]{3,})(?:&|$)")
 ID_THEN_SLUG_PATH_RE = re.compile(r"/\d{4,}/[^/?#]{8,}")
+# Feeds that glue the site root to an already absolute link: "https:https://site.az/az/..."
+DOUBLE_SCHEME_RE = re.compile(r"^https?:(?=https?://)", re.IGNORECASE)
+# /az/category/71344/ : the article id is the last segment and there is no slug.
+NUMERIC_ID_LAST_RE = re.compile(r"/\d{5,}/?$")
 QUERY_ID_ARTICLE_RE = re.compile(r"(?:^|&)(?:newsid|news_id|articleid|article_id|postid|post_id|p)=\d{3,}(?:&|$)")
 
 ROOT_SLUG_ARTICLE_DOMAINS = {
@@ -3238,11 +3242,22 @@ def is_today_news(published_time):
     return True
 
 
+FUTURE_TOLERANCE_HOURS = float(os.getenv("FUTURE_TOLERANCE_HOURS", "4"))
+TIME_ONLY_RE = re.compile(r"^\s*\d{1,2}\s*[:.]\s*\d{2}\s*$")
+
+
 def get_freshness_status(published_time):
     dt = parse_datetime_to_baku(published_time)
     if not dt:
         return "date_parse_failed"
     now_baku = datetime.now(BAKU_TZ)
+    if dt > now_baku and TIME_ONLY_RE.match(clean_text(str(published_time or ""))):
+        # A bare "23:43" seen after midnight is yesterday's evening, not a time ahead of us.
+        dt -= timedelta(days=1)
+    elif now_baku < dt <= now_baku + timedelta(hours=FUTURE_TOLERANCE_HOURS):
+        # Sites often label local time as UTC (or run a few hours fast); this is "just published".
+        print(f"Tarix bir neçə saat irəlidədir, saat fərqi kimi qəbul edildi: {published_time}", flush=True)
+        return "fresh"
     if dt.date() == now_baku.date() and not has_explicit_time_signal(published_time):
         print(f"Tarix bugündür, saat tapılmadığı üçün gün səviyyəsində fresh sayıldı: {published_time}", flush=True)
         return "fresh"
@@ -3288,6 +3303,16 @@ def choose_publish_time(title, article_time, rss_time=None, listing_time=None, s
         if dt_baku.date() == now_baku.date() or now_baku - dt_baku <= timedelta(hours=NEWS_TIME_LIMIT_HOURS):
             print(f"Freshness {label} vaxtı ilə seçildi: {source_text}", flush=True)
             return format_publish_time_for_freshness(dt_baku, source_text)
+
+    if article_dt:
+        article_baku = article_dt.astimezone(BAKU_TZ) if article_dt.tzinfo else article_dt.replace(tzinfo=BAKU_TZ)
+        if article_baku > now_baku + timedelta(hours=FUTURE_TOLERANCE_HOURS):
+            # A date in the future found in the page body is an offer or event date, not the publish date.
+            # The feed or list date is real; it is simply not fresh, so the item is old news.
+            for dt, source_text in ((rss_dt, rss_time), (listing_dt, listing_time)):
+                if dt:
+                    dt_baku = dt.astimezone(BAKU_TZ) if dt.tzinfo else dt.replace(tzinfo=BAKU_TZ)
+                    return format_publish_time_for_freshness(dt_baku, source_text)
 
     if title_dt and article_dt and has_strong_date_signal(title):
         title_baku = title_dt.astimezone(BAKU_TZ) if title_dt.tzinfo else title_dt.replace(tzinfo=BAKU_TZ)
@@ -3715,6 +3740,8 @@ def is_article_like_link(link):
         return True
     if re.search(r"\d{4}[/-]\d{1,2}[/-]\d{1,2}", path):
         return True
+    if len(parts) >= 2 and NUMERIC_ID_LAST_RE.search(path):
+        return True
     if re.search(r"\d{6,}", path):
         return True
     if re.search(r"(news|xeber|post|article|story|read)", path, flags=re.IGNORECASE):
@@ -3762,6 +3789,7 @@ def add_item(results, page_url, title, link, keywords, extra=None):
     """Appends the item when it looks like a news article. Returns "" on success, otherwise the reject reason."""
     title = clean_article_text(title)
     raw_link = clean_text(link)
+    raw_link = DOUBLE_SCHEME_RE.sub("", raw_link)
     if raw_link.startswith(":/") and not raw_link.startswith("://"):
         # Some generated feeds drop the host and leave ":/az/slug"; the path is still the site's own.
         raw_link = raw_link[1:]
