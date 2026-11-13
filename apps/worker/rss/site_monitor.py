@@ -5473,6 +5473,20 @@ LANGUAGE_VARIANTS_TTL = timedelta(hours=24)
 LANGUAGE_VARIANTS_RETRY = timedelta(hours=6)
 LANGUAGE_DISCOVERIES_PER_RUN = 40
 LANGUAGE_VARIANTS_CACHE = {}
+LANGUAGE_VARIANT_COOLDOWN = timedelta(hours=2)
+LANGUAGE_VARIANT_COOLDOWN_UNTIL = {}
+LANGUAGE_VARIANT_BLOCK_REASONS = {"http_403", "http_429", "timeout", "network_error", "dns_failure", "ssl_failure"}
+
+
+def note_language_variant_result(site, result):
+    """Variants have no source row to back off, so a blocked/failed one rests in memory."""
+    if site.get("_language_variant") and (result or {}).get("reason") in LANGUAGE_VARIANT_BLOCK_REASONS:
+        LANGUAGE_VARIANT_COOLDOWN_UNTIL[normalize_link(site["url"])] = datetime.now(BAKU_TZ) + LANGUAGE_VARIANT_COOLDOWN
+        print(f"Dil versiyası fasilədə (2 saat): {site['url']} | {result.get('reason')}", flush=True)
+
+
+def parent_is_unhealthy(site):
+    return int(site.get("consecutive_fail_count") or 0) > 0 or clean_text(site.get("last_result")) in LANGUAGE_VARIANT_BLOCK_REASONS
 
 
 def language_variant_urls(site, now=None):
@@ -5514,15 +5528,19 @@ def expand_language_variants(sites):
         with ThreadPoolExecutor(max_workers=max(1, min(MAX_WORKERS, len(pending)))) as executor:
             list(executor.map(discover_language_variants, pending))
     extra = []
+    now = datetime.now(BAKU_TZ)
     for site in sites:
+        if parent_is_unhealthy(site):
+            continue
         for url in language_variant_urls(site) or []:
             key = normalize_link(url)
-            if key in known:
+            if key in known or LANGUAGE_VARIANT_COOLDOWN_UNTIL.get(key, now) > now:
                 continue
             known.add(key)
             variant = dict(site)
             lang = [part for part in urlparse(url).path.split("/") if part] or [urlparse(url).hostname.split(".")[0]]
             variant.update({
+                "_language_variant": True,
                 "id": None,
                 "name": f"{site.get('name')} ({lang[0].upper()})",
                 "url": url,
@@ -5810,6 +5828,7 @@ def check_sites(poll_commands=True):
                 print(f"Worker xətası: {redact_secrets(exc)}", flush=True)
                 stats["site_error"] += 1
                 continue
+            note_language_variant_result(futures[future], result)
             sent = int(result.get("sent", 0) or 0)
             reason = result.get("reason", "unknown")
             sent_count += sent

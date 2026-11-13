@@ -49,3 +49,19 @@ def test_expand_adds_variants_without_health_id_and_skips_existing(monkeypatch):
     assert variant["url"] == "https://1news.az/az/" and variant["id"] is None
     assert variant["name"] == "1news.az (AZ)" and variant["rss_url"] == "" and variant["monitor_method"] == "latest_page"
     assert parent["id"] == "p1" and parent["rss_url"]
+
+
+def test_unhealthy_parent_and_blocked_variant_are_skipped():
+    now = datetime.now(sm.BAKU_TZ)
+    sm.LANGUAGE_VARIANTS_CACHE.clear()
+    sm.LANGUAGE_VARIANT_COOLDOWN_UNTIL.clear()
+    sm.LANGUAGE_VARIANTS_CACHE["a.az"] = (now + timedelta(hours=1), ["https://a.az/en/"])
+    sm.LANGUAGE_VARIANTS_CACHE["b.az"] = (now + timedelta(hours=1), ["https://b.az/en/"])
+    sick = {"id": "1", "name": "a", "url": "https://a.az/", "base_url": "https://a.az/", "consecutive_fail_count": 2}
+    ok = {"id": "2", "name": "b", "url": "https://b.az/", "base_url": "https://b.az/", "consecutive_fail_count": 0}
+    result = sm.expand_language_variants([sick, ok])
+    assert [s["url"] for s in result] == ["https://a.az/", "https://b.az/", "https://b.az/en/"]
+    sm.note_language_variant_result(result[2], {"reason": "http_429"})
+    assert len(sm.expand_language_variants([sick, ok])) == 2
+    sm.note_language_variant_result(ok, {"reason": "http_429"})
+    assert len(sm.LANGUAGE_VARIANT_COOLDOWN_UNTIL) == 1
