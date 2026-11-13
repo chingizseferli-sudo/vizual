@@ -22,6 +22,7 @@ from lxml import html
 import competitor_ai
 import email_reports
 import source_lifecycle as lifecycle
+from language_variants import find_language_variants
 from domain_policy import is_excluded_domain
 
 HEALTH_FILE = "site_health.json"
@@ -5468,6 +5469,96 @@ def load_sites():
         return []
 
 
+LANGUAGE_VARIANTS_TTL = timedelta(hours=24)
+LANGUAGE_VARIANTS_RETRY = timedelta(hours=6)
+LANGUAGE_DISCOVERIES_PER_RUN = 40
+LANGUAGE_VARIANTS_CACHE = {}
+LANGUAGE_VARIANT_COOLDOWN = timedelta(hours=2)
+LANGUAGE_VARIANT_COOLDOWN_UNTIL = {}
+LANGUAGE_VARIANT_BLOCK_REASONS = {"http_403", "http_429", "timeout", "network_error", "dns_failure", "ssl_failure"}
+
+
+def note_language_variant_result(site, result):
+    """Variants have no source row to back off, so a blocked/failed one rests in memory."""
+    if site.get("_language_variant") and (result or {}).get("reason") in LANGUAGE_VARIANT_BLOCK_REASONS:
+        LANGUAGE_VARIANT_COOLDOWN_UNTIL[normalize_link(site["url"])] = datetime.now(BAKU_TZ) + LANGUAGE_VARIANT_COOLDOWN
+        print(f"Dil versiyası fasilədə (2 saat): {site['url']} | {result.get('reason')}", flush=True)
+
+
+def parent_is_unhealthy(site):
+    return int(site.get("consecutive_fail_count") or 0) > 0 or clean_text(site.get("last_result")) in LANGUAGE_VARIANT_BLOCK_REASONS
+
+
+def language_variant_urls(site, now=None):
+    """Other-language editions of the site, cached per source host. None = not looked up yet."""
+    page_url = clean_text(site.get("base_url")) or site.get("url")
+    now = now or datetime.now(BAKU_TZ)
+    cached = LANGUAGE_VARIANTS_CACHE.get(get_domain(page_url))
+    if cached and cached[0] > now:
+        return cached[1]
+    return None
+
+
+def discover_language_variants(site, now=None):
+    page_url = clean_text(site.get("base_url")) or site.get("url")
+    now = now or datetime.now(BAKU_TZ)
+    variants, ttl = [], LANGUAGE_VARIANTS_RETRY
+    try:
+        response = safe_request(page_url, method="language_discovery", headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+        if response.status_code == 200:
+            variants = find_language_variants(response.url or page_url, response.text)
+            ttl = LANGUAGE_VARIANTS_TTL
+    except Exception as exc:
+        print(f"Dil versiyası axtarışı xətası: {page_url} | {classify_fetch_exception(exc)}", flush=True)
+    LANGUAGE_VARIANTS_CACHE[get_domain(page_url)] = (now + ttl, variants)
+    return variants
+
+
+def expand_language_variants(sites):
+    """Add the other-language editions of each source as extra read targets.
+
+    Variants share the parent's schedule (they run only when it is due), never
+    write source health (no id) and are read from their start page generically."""
+    known = {normalize_link(site["url"]) for site in sites}
+    pending = []
+    for site in sites:
+        if language_variant_urls(site) is None and len(pending) < LANGUAGE_DISCOVERIES_PER_RUN:
+            pending.append(site)
+    if pending:
+        with ThreadPoolExecutor(max_workers=max(1, min(MAX_WORKERS, len(pending)))) as executor:
+            list(executor.map(discover_language_variants, pending))
+    extra = []
+    now = datetime.now(BAKU_TZ)
+    for site in sites:
+        if parent_is_unhealthy(site):
+            continue
+        for url in language_variant_urls(site) or []:
+            key = normalize_link(url)
+            if key in known or LANGUAGE_VARIANT_COOLDOWN_UNTIL.get(key, now) > now:
+                continue
+            known.add(key)
+            variant = dict(site)
+            lang = [part for part in urlparse(url).path.split("/") if part] or [urlparse(url).hostname.split(".")[0]]
+            variant.update({
+                "_language_variant": True,
+                "id": None,
+                "name": f"{site.get('name')} ({lang[0].upper()})",
+                "url": url,
+                "base_url": url,
+                "latest_url": url,
+                "rss_url": "",
+                "selector": "",
+                "article_pattern": "",
+                "xpaths": [],
+                "url_patterns": [],
+                "monitor_method": "latest_page",
+            })
+            extra.append(variant)
+    if extra:
+        print(f"Dil versiyaları əlavə olundu: {len(extra)} | " + ", ".join(v["url"] for v in extra[:8]), flush=True)
+    return sites + extra
+
+
 def process_site(index, total, site, patterns_data, monitor_keywords_cache=None, competitor_keywords_cache=None):
     started = time.time()
     result = {
@@ -5697,7 +5788,7 @@ def check_sites(poll_commands=True):
         ARTICLE_TITLE_INFO_CACHE.clear()
     if len(ARTICLE_VERDICT_CACHE) > ARTICLE_VERDICT_MAX:
         ARTICLE_VERDICT_CACHE.clear()
-    sites = load_sites()
+    sites = expand_language_variants(load_sites())
     if SCHEDULER_DRY_RUN:
         scheduler_decisions = [evaluate_source_schedule(site) for site in sites]
         log_scheduler_dry_run_summary(sites, scheduler_decisions)
@@ -5737,6 +5828,7 @@ def check_sites(poll_commands=True):
                 print(f"Worker xətası: {redact_secrets(exc)}", flush=True)
                 stats["site_error"] += 1
                 continue
+            note_language_variant_result(futures[future], result)
             sent = int(result.get("sent", 0) or 0)
             reason = result.get("reason", "unknown")
             sent_count += sent
