@@ -1,6 +1,6 @@
-"""One-shot hourly digest: sends every Telegram-linked customer the report (HTML, PDF, CSV)
+"""One-shot daily digest: sends every Telegram-linked customer the report (HTML, PDF, CSV)
 (HTML in the look of the Results page export) of the matches found in the previous
-full hour. Run by a Railway cron at minute 0 (WORKER=digest). Stateless: the
+24 hours. Run by a Railway cron once a day (WORKER=digest). Stateless: the
 window is derived from the clock, so no table or column is needed."""
 import csv
 import html
@@ -21,9 +21,13 @@ MAX_PAGES = 20
 
 
 def window_for(now):
-    """Previous full hour in Baku time: [start, end)."""
+    """The 24 hours before the current full hour in Baku time: [start, end)."""
     end = now.astimezone(sm.BAKU_TZ).replace(minute=0, second=0, microsecond=0)
-    return end - timedelta(hours=1), end
+    return end - timedelta(hours=24), end
+
+
+def interval_text(start, end):
+    return f"{start:%d.%m.%Y %H:%M} – {end:%d.%m.%Y %H:%M}"
 
 
 def fetch_json(path, params):
@@ -157,7 +161,7 @@ def render_html(rows, start, end, generated_at):
             f"<td>{pills}</td>"
             f'<td><div class="date-cell"><strong>{esc(day)}</strong><span>{esc(hour)}</span></div></td></tr>'
         )
-    interval = f"{start:%d.%m.%Y %H:%M} – {end:%H:%M}"
+    interval = interval_text(start, end)
     return f"""<!doctype html>
 <html lang="az"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vizual.Az · Media Monitorinq Hesabatı</title><style>{STYLE}</style></head>
@@ -165,7 +169,7 @@ def render_html(rows, start, end, generated_at):
 <section class="hero">
 <div class="brand"><img class="logo" src="{logo_uri()}" alt="Vizual.Az"><strong>Vizual.Az</strong></div>
 <h1>Media Monitorinq Hesabatı</h1>
-<p>Son saat üzrə tapılan uyğun xəbər nəticələri.</p>
+<p>Son 24 saat üzrə tapılan uyğun xəbər nəticələri.</p>
 <div class="stats">
 <div class="stat"><span>Interval</span><strong>{esc(interval)}</strong></div>
 <div class="stat"><span>Nəticə sayı</span><strong>{len(rows)}</strong></div>
@@ -180,8 +184,8 @@ def render_html(rows, start, end, generated_at):
 def build_caption(rows, start, end):
     """Short summary message (HTML parse mode); the files carry the details."""
     return (
-        "📰 <b>Vizual.Az · Saatlıq hesabat</b>\n"
-        f"🕐 {start:%d.%m.%Y %H:%M} – {end:%H:%M}\n"
+        "📰 <b>Vizual.Az · Gündəlik hesabat</b>\n"
+        f"🕐 {interval_text(start, end)}\n"
         f"📌 {len(rows)} xəbər"
     )
 
@@ -242,12 +246,12 @@ def build_pdf(rows, start, end, generated_at):
     )
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm,
-                            bottomMargin=12 * mm, title="Vizual.Az · Saatlıq hesabat", author="Vizual.Az")
+                            bottomMargin=12 * mm, title="Vizual.Az · Gündəlik hesabat", author="Vizual.Az")
     doc.build(
         [
-            Paragraph("Vizual.Az · Saatlıq media hesabatı", title),
+            Paragraph("Vizual.Az · Gündəlik media hesabatı", title),
             Spacer(1, 3 * mm),
-            Paragraph(f"{start:%d.%m.%Y %H:%M} – {end:%H:%M} · {len(rows)} xəbər · Hazırlandı: {esc(generated_at)}", sub),
+            Paragraph(f"{interval_text(start, end)} · {len(rows)} xəbər · Hazırlandı: {esc(generated_at)}", sub),
             Spacer(1, 5 * mm),
             table,
         ]
@@ -307,7 +311,7 @@ def run(now=None):
         if not rows:
             skipped += 1
             continue
-        base = f"vizual-{end:%Y-%m-%d}-{start:%H%M}-{end:%H%M}"
+        base = f"vizual-{end:%Y-%m-%d}-gunluk"
         files = [
             (f"{base}.html", render_html(rows, start, end, generated_at).encode("utf-8"), "text/html"),
             (f"{base}.pdf", build_pdf(rows, start, end, generated_at), "application/pdf"),
