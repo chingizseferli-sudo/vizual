@@ -22,6 +22,7 @@ import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
 import { dateLocale, t } from '@/lib/i18n'
+import { detectNewsLanguage, type NewsLanguage } from '@/lib/news-language'
 import iconSvg from '../../../../public/images/vizual-icon.svg?raw'
 
 // The export is one offline file, so the logo is embedded instead of linked.
@@ -374,6 +375,7 @@ function ResultsPage() {
   const errorMessage = data?.errorMessage || ''
   const [search, setSearch] = useState('')
   const [keywordFilter, setKeywordFilter] = useState(ALL)
+  const [languageFilter, setLanguageFilter] = useState<NewsLanguage | typeof ALL>(ALL)
   const sourceSearch = Route.useSearch()
   const navigate = Route.useNavigate()
   const sourceCategory = sourceSearch.cat
@@ -392,6 +394,7 @@ function ResultsPage() {
   }, [
     search,
     keywordFilter,
+    languageFilter,
     sourceCategory,
     selectedSites,
     socialNetwork,
@@ -469,6 +472,8 @@ function ResultsPage() {
       return (
         matchesSearch &&
         (keywordFilter === ALL || row.matched_keyword === keywordFilter) &&
+        (languageFilter === ALL ||
+          detectNewsLanguage(item?.title || '', item?.url || '') === languageFilter) &&
         matchesSourceFilter(host, sourceCategory, selectedSites, socialNetwork) &&
         (!dateFilter || foundDate === dateFilter)
       )
@@ -477,6 +482,7 @@ function ResultsPage() {
     periodRows,
     search,
     keywordFilter,
+    languageFilter,
     sourceCategory,
     selectedSites,
     socialNetwork,
@@ -507,6 +513,7 @@ function ResultsPage() {
   function clearResultFilters() {
     setSearch('')
     setKeywordFilter(ALL)
+    setLanguageFilter(ALL)
     setSourceSearch({})
     setDateFilter('')
   }
@@ -830,19 +837,35 @@ function ResultsPage() {
             />
           </div>
 
-          <select
-            aria-label={t("Açar söz")}
-            value={keywordFilter}
-            onChange={(event) => setKeywordFilter(event.target.value)}
-            className='h-10 rounded-xl border border-border bg-card px-3 text-sm'
-          >
-            <option value={ALL}>{t("Bütün açar sözlər")}</option>
-            {keywordOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div className='grid grid-cols-2 gap-2'>
+            <select
+              aria-label={t("Açar söz")}
+              value={keywordFilter}
+              onChange={(event) => setKeywordFilter(event.target.value)}
+              className='h-10 min-w-0 rounded-xl border border-border bg-card px-3 text-sm'
+            >
+              <option value={ALL}>{t("Bütün açar sözlər")}</option>
+              {keywordOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              aria-label={t("Dil")}
+              value={languageFilter}
+              onChange={(event) =>
+                setLanguageFilter(event.target.value as NewsLanguage | typeof ALL)
+              }
+              className='h-10 min-w-0 rounded-xl border border-border bg-card px-3 text-sm'
+            >
+              <option value={ALL}>{t("Bütün dillər")}</option>
+              <option value='az'>AZ</option>
+              <option value='ru'>RU</option>
+              <option value='en'>EN</option>
+            </select>
+          </div>
 
           <div className='grid grid-cols-2 gap-2'>
             <select
