@@ -7,6 +7,7 @@ import {
 } from '@/lib/public-site-content'
 import {
   PublicCard,
+  PublicFaq,
   PublicPageHero,
   PublicPageShell,
 } from '@/components/public-site/public-site-shell'
@@ -60,6 +61,7 @@ function PricingPage() {
             >{t("Əlaqə saxla")}</Link>
           </div>
         </section>
+        <PublicFaq />
       </main>
     </PublicPageShell>
   )

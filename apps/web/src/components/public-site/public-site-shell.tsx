@@ -219,6 +219,49 @@ export function SectionHeading({
   )
 }
 
+export function PublicFaq() {
+  const items = [
+    {
+      q: t("Sınaq müddətində nə əldə edirəm?"),
+      a: t("7 gün pulsuzdur: 5 açar söz əlavə edib nəticələri və Telegram bildirişlərini real iş prosesinizdə yoxlaya bilərsiniz."),
+    },
+    {
+      q: t("Xəbərlər nə qədər tez gəlir?"),
+      a: t("Mənbələr dövri yoxlanılır (adətən hər 5–10 dəqiqədə) və uyğun xəbər tapılan kimi Telegram-a göndərilir."),
+    },
+    {
+      q: t("Hansı mənbələr izlənir?"),
+      a: t("Yüzlərlə yerli xəbər mənbəyi izlənir. Facebook və Instagram izləməsi beta mərhələsindədir."),
+    },
+    {
+      q: t("Bildirişləri harada alıram?"),
+      a: t("Telegram-da. Planınıza görə gündəlik Telegram hesabatı və e-poçt hesabatları da var."),
+    },
+    {
+      q: t("Açar sözlərdə hərf registri vacibdirmi?"),
+      a: t("Xeyr. Böyük və kiçik hərflər, həmçinin İ/i və I/ı fərqi uyğunlaşdırma zamanı nəzərə alınmır."),
+    },
+  ]
+  return (
+    <section className='mx-auto max-w-3xl px-5 py-20 md:px-8'>
+      <SectionHeading eyebrow={t("Suallar")} title={t("Tez-tez verilən suallar")} />
+      <div className='grid gap-3'>
+        {items.map((item) => (
+          <details
+            key={item.q}
+            className='group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/40'
+          >
+            <summary className='cursor-pointer list-none font-extrabold text-slate-950'>
+              {item.q}
+            </summary>
+            <p className='mt-3 text-sm leading-6 text-slate-600'>{item.a}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export function PublicCard({
   children,
   className = '',

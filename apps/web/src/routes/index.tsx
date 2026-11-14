@@ -20,9 +20,11 @@ import {
 import {
   initialPublicSiteContent,
   loadPublicSiteContent,
+  splitServices,
   type PublicService,
 } from '@/lib/public-site-content'
 import {
+  PublicFaq,
   PublicFooter,
   PublicHeader,
   SectionHeading,
@@ -49,6 +51,7 @@ const audienceIcons = [
 
 function IndexPage() {
   const [content, setContent] = useState(initialPublicSiteContent)
+  const { live, soon } = splitServices(content.services.items)
 
   useEffect(() => {
     let active = true
@@ -154,14 +157,14 @@ function IndexPage() {
             description={content.services.description}
           />
           <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-6'>
-            {content.services.items.map((service, index) => {
+            {live.map((service, index) => {
               const ServiceIcon = serviceIcons[service.icon] || Newspaper
 
               return (
                 <article
                   key={service.title}
                   // Five services: three on top, the last two centred below.
-                  className={`flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/40 lg:col-span-2 ${index === 3 && content.services.items.length === 5 ? 'lg:col-start-2' : ''}`}
+                  className={`flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/40 ${live.length < 3 ? 'lg:col-span-3' : 'lg:col-span-2'} ${index === 3 && live.length === 5 ? 'lg:col-start-2' : ''}`}
                 >
                   <div className='flex items-center justify-between gap-3'>
                     <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#1463ff]'>
@@ -181,6 +184,11 @@ function IndexPage() {
               )
             })}
           </div>
+          {soon.length > 0 ? (
+            <p className='mt-6 text-center text-sm text-slate-500'>
+              {t("Tezliklə")}: {soon.map((service) => service.title).join(' · ')}
+            </p>
+          ) : null}
         </section>
 
         <section id='audience' className='mx-auto max-w-7xl px-5 py-20 md:px-8'>
@@ -335,6 +343,8 @@ function IndexPage() {
             </article>
           </div>
         </section>
+
+        <PublicFaq />
 
         <section id='contact' className='mx-auto max-w-7xl px-5 py-20 md:px-8'>
           <div className='rounded-[28px] bg-gradient-to-br from-slate-950 via-blue-900 to-cyan-700 p-6 text-white md:p-10'>
