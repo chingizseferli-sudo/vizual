@@ -81,7 +81,8 @@ def assert_status_with_context(label, title, article_time, expected, **context):
 
 def main():
     now = datetime.now(site_monitor.BAKU_TZ)
-    fresh = now - timedelta(minutes=10)
+    # Never earlier than today's 00:00: "Bugün 23:57" read at 00:07 is not a fresh sample.
+    fresh = max(now - timedelta(minutes=10), now.replace(hour=0, minute=0, second=0, microsecond=0))
     old = now - timedelta(days=14)
     yesterday = now - timedelta(days=1)
     future = now + timedelta(days=1)
