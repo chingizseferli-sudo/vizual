@@ -3093,8 +3093,12 @@ def parse_az_datetime(value):
     if time_only:
         hour = int(time_only.group(1))
         minute = int(time_only.group(2))
-        today = datetime.now(BAKU_TZ).date()
-        return safe_datetime(today.year, today.month, today.day, hour, minute)
+        now = datetime.now(BAKU_TZ)
+        dt = safe_datetime(now.year, now.month, now.day, hour, minute)
+        if dt and dt > now + timedelta(hours=FUTURE_TOLERANCE_HOURS):
+            # "23:56" read at 00:06 is yesterday's evening, not a time a day ahead.
+            dt -= timedelta(days=1)
+        return dt
 
     return None
 

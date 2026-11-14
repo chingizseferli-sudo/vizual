@@ -81,7 +81,8 @@ def assert_status_with_context(label, title, article_time, expected, **context):
 
 def main():
     now = datetime.now(site_monitor.BAKU_TZ)
-    fresh = now - timedelta(minutes=10)
+    # Never earlier than today's 00:00: "Bugün 23:57" read at 00:07 is not a fresh sample.
+    fresh = max(now - timedelta(minutes=10), now.replace(hour=0, minute=0, second=0, microsecond=0))
     old = now - timedelta(days=14)
     yesterday = now - timedelta(days=1)
     future = now + timedelta(days=1)
@@ -194,6 +195,10 @@ def main():
     assert site_monitor.clean_title_for_message('Atası ilə birgə ölən Fidanla Tunar dünən imtahan verməli imiş - <span style="color: #ff0000;">FOTO</span>') == "Atası ilə birgə ölən Fidanla Tunar dünən imtahan verməli imiş"
     assert site_monitor.clean_title_for_message("SOSİAL 09:56 Atası ilə birgə ölən Fidanla Tunar dünən imtahan verməli imiş") == "Atası ilə birgə ölən Fidanla Tunar dünən imtahan verməli imiş"
     assert site_monitor.clean_title_for_message("“Rəqəmsal elm dövrü: Qlobal reytinqlər” adlı elmi seminar keçirildi 06.07.2026 / 10:53 Ətraflı") == "“Rəqəmsal elm dövrü: Qlobal reytinqlər” adlı elmi seminar keçirildi"
+
+    ahead = datetime.now(site_monitor.BAKU_TZ) + timedelta(hours=10)
+    parsed = site_monitor.parse_datetime_to_baku(f"{ahead.hour:02d}:{ahead.minute:02d} Gecə xəbəri")
+    assert parsed <= datetime.now(site_monitor.BAKU_TZ) + timedelta(hours=site_monitor.FUTURE_TOLERANCE_HOURS), "bare time far ahead must be yesterday"
 
     print("date fixtures ok")
 
