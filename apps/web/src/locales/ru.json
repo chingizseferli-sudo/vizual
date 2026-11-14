@@ -825,5 +825,17 @@
   "Mövzu №": "№ темы",
   "Sayt": "Сайт",
   "Seçilmiş mövzu": "Выбранная тема",
-  "Bütün mövzular": "Все темы"
+  "Bütün mövzular": "Все темы",
+  "Suallar": "Вопросы",
+  "Tez-tez verilən suallar": "Часто задаваемые вопросы",
+  "Sınaq müddətində nə əldə edirəm?": "Что я получаю в пробный период?",
+  "7 gün pulsuzdur: 5 açar söz əlavə edib nəticələri və Telegram bildirişlərini real iş prosesinizdə yoxlaya bilərsiniz.": "Пробный период бесплатный, 7 дней: добавьте 5 ключевых слов и проверьте результаты и уведомления в Telegram в реальной работе.",
+  "Xəbərlər nə qədər tez gəlir?": "Как быстро приходят новости?",
+  "Mənbələr dövri yoxlanılır (adətən hər 5–10 dəqiqədə) və uyğun xəbər tapılan kimi Telegram-a göndərilir.": "Источники проверяются периодически (обычно каждые 5–10 минут), и подходящая новость отправляется в Telegram сразу после обнаружения.",
+  "Hansı mənbələr izlənir?": "Какие источники отслеживаются?",
+  "Yüzlərlə yerli xəbər mənbəyi izlənir. Facebook və Instagram izləməsi beta mərhələsindədir.": "Отслеживаются сотни местных новостных источников. Мониторинг Facebook и Instagram находится на стадии бета.",
+  "Bildirişləri harada alıram?": "Где я получаю уведомления?",
+  "Telegram-da. Planınıza görə gündəlik Telegram hesabatı və e-poçt hesabatları da var.": "В Telegram. В зависимости от плана также доступны ежедневный отчёт в Telegram и отчёты по электронной почте.",
+  "Açar sözlərdə hərf registri vacibdirmi?": "Важен ли регистр букв в ключевых словах?",
+  "Xeyr. Böyük və kiçik hərflər, həmçinin İ/i və I/ı fərqi uyğunlaşdırma zamanı nəzərə alınmır.": "Нет. Заглавные и строчные буквы, а также различие İ/i и I/ı при сопоставлении не учитываются."
 }

@@ -8,6 +8,14 @@ export type PublicService = {
   icon: 'newspaper' | 'radio' | 'megaphone' | 'file' | 'search'
 }
 
+export function splitServices(items: PublicService[]) {
+  const soon = t("Tezliklə")
+  return {
+    live: items.filter((item) => item.status !== soon),
+    soon: items.filter((item) => item.status === soon),
+  }
+}
+
 export type PublicAudience = {
   title: string
   description: string

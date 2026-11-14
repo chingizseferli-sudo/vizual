@@ -10,6 +10,7 @@ import {
 import {
   initialPublicSiteContent,
   loadPublicSiteContent,
+  splitServices,
   type PublicService,
 } from '@/lib/public-site-content'
 import {
@@ -30,6 +31,7 @@ const serviceIcons: Record<PublicService['icon'], typeof Newspaper> = {
 
 function SolutionsPage() {
   const [content, setContent] = useState(initialPublicSiteContent)
+  const { live, soon } = splitServices(content.services.items)
 
   useEffect(() => {
     let active = true
@@ -60,8 +62,8 @@ function SolutionsPage() {
         </PublicPageHero>
 
         <section className='mx-auto max-w-7xl px-5 pb-20 md:px-8'>
-          <div className='grid gap-5 md:grid-cols-2 xl:grid-cols-5'>
-            {content.services.items.map((service) => {
+          <div className={`grid gap-5 md:grid-cols-2 ${live.length >= 4 ? 'xl:grid-cols-4' : live.length === 3 ? 'xl:grid-cols-3' : ''}`}>
+            {live.map((service) => {
               const ServiceIcon = serviceIcons[service.icon] || Newspaper
 
               return (
@@ -82,6 +84,11 @@ function SolutionsPage() {
               )
             })}
           </div>
+          {soon.length > 0 ? (
+            <p className='mt-6 text-center text-sm text-slate-500'>
+              {t("Tezliklə")}: {soon.map((service) => service.title).join(' · ')}
+            </p>
+          ) : null}
         </section>
 
         <section className='mx-auto max-w-7xl px-5 py-20 md:px-8'>
