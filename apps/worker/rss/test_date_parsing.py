@@ -195,6 +195,10 @@ def main():
     assert site_monitor.clean_title_for_message("SOSİAL 09:56 Atası ilə birgə ölən Fidanla Tunar dünən imtahan verməli imiş") == "Atası ilə birgə ölən Fidanla Tunar dünən imtahan verməli imiş"
     assert site_monitor.clean_title_for_message("“Rəqəmsal elm dövrü: Qlobal reytinqlər” adlı elmi seminar keçirildi 06.07.2026 / 10:53 Ətraflı") == "“Rəqəmsal elm dövrü: Qlobal reytinqlər” adlı elmi seminar keçirildi"
 
+    ahead = datetime.now(site_monitor.BAKU_TZ) + timedelta(hours=10)
+    parsed = site_monitor.parse_datetime_to_baku(f"{ahead.hour:02d}:{ahead.minute:02d} Gecə xəbəri")
+    assert parsed <= datetime.now(site_monitor.BAKU_TZ) + timedelta(hours=site_monitor.FUTURE_TOLERANCE_HOURS), "bare time far ahead must be yesterday"
+
     print("date fixtures ok")
 
 
