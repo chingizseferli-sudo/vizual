@@ -23,10 +23,9 @@ def match(monitor, keyword, url="https://a.az/x.html", title="Başlıq <b>"):
     }
 
 
-def test_window_is_previous_full_hour():
-    start, end = hd.window_for(datetime(2026, 11, 2, 15, 0, 3, tzinfo=BAKU))
-    assert (start.hour, end.hour) == (14, 15)
-    assert start.minute == end.minute == 0
+def test_window_is_previous_24_hours():
+    start, end = hd.window_for(datetime(2026, 11, 2, 9, 0, 3, tzinfo=BAKU))
+    assert (start, end) == (datetime(2026, 11, 1, 9, 0, tzinfo=BAKU), datetime(2026, 11, 2, 9, 0, tzinfo=BAKU))
 
 
 def test_rows_merge_keywords_and_scope_to_chat_monitors():
@@ -55,7 +54,7 @@ def test_run_sends_only_to_chats_with_matches():
          mock.patch.object(hd, "load_window_matches", return_value=[match("m1", "neft")]), \
          mock.patch.object(hd, "send_report", side_effect=lambda chat, text, files: sent.append((chat, [f[0] for f in files])) or True):
         assert hd.run(datetime(2026, 11, 2, 15, 0, tzinfo=BAKU)) == 0
-    assert sent == [("1", ["vizual-2026-11-02-1400-1500.html", "vizual-2026-11-02-1400-1500.pdf", "vizual-2026-11-02-1400-1500.csv"])]
+    assert sent == [("1", ["vizual-2026-11-02-gunluk.html", "vizual-2026-11-02-gunluk.pdf", "vizual-2026-11-02-gunluk.csv"])]
 
 
 def test_paused_sends_nothing():
@@ -70,8 +69,8 @@ def test_caption_is_three_lines():
     start, end = hd.window_for(datetime(2026, 11, 2, 15, 0, tzinfo=BAKU))
     caption = hd.build_caption(hd.build_rows([match("m1", "neft")], {"m1"}), start, end)
     assert caption.splitlines() == [
-        "📰 <b>Vizual.Az · Saatlıq hesabat</b>",
-        "🕐 02.11.2026 14:00 – 15:00",
+        "📰 <b>Vizual.Az · Gündəlik hesabat</b>",
+        "🕐 01.11.2026 15:00 – 02.11.2026 15:00",
         "📌 1 xəbər",
     ]
 
