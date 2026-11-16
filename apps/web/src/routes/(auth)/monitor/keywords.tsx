@@ -5,6 +5,7 @@ import {
   Check,
   Info,
   KeyRound,
+  Languages,
   Loader2,
   Pause,
   Play,
@@ -19,10 +20,12 @@ import {
   deleteKeyword,
   fetchKeywordsData,
   keywordErrorMessage,
+  setKeywordAliases,
   setKeywordFilters,
   setKeywordSocial,
   setKeywordStatus,
 } from '@/features/keywords/data'
+import { KeywordAliasesDialog } from '@/features/keywords/keyword-aliases-dialog'
 import { KeywordFiltersDialog } from '@/features/keywords/keyword-filters-dialog'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
@@ -72,6 +75,7 @@ function KeywordsPage() {
   const [filterTarget, setFilterTarget] = useState<CustomerKeyword | null>(
     null
   )
+  const [aliasTarget, setAliasTarget] = useState<CustomerKeyword | null>(null)
 
   const data = query.data
   const keywords = useMemo(() => {
@@ -185,6 +189,19 @@ function KeywordsPage() {
     setFilterTarget(null)
     await refresh()
     setMessage(t("Sosial filtr saxlanıldı: {0}", [item.keyword]))
+  }
+
+  async function saveAliases(item: CustomerKeyword, aliases: string[]) {
+    setBusyId(item.id)
+    const error = await setKeywordAliases(item.id, aliases)
+    setBusyId(null)
+    if (error) {
+      setMessage(keywordErrorMessage(error))
+      return
+    }
+    setAliasTarget(null)
+    await refresh()
+    setMessage(t("Variantlar saxlanıldı: {0}", [item.keyword]))
   }
 
   async function removeKeyword(item: CustomerKeyword) {
@@ -384,13 +401,20 @@ function KeywordsPage() {
                     className='flex items-center gap-3 px-3 py-2.5'
                   >
                     <div className='flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2'>
-                      <span
-                        className={cn(
-                          'font-medium break-words',
-                          paused && 'text-muted-foreground'
-                        )}
-                      >
-                        {item.keyword}
+                      <span className='flex min-w-0 flex-col'>
+                        <span
+                          className={cn(
+                            'font-medium break-words',
+                            paused && 'text-muted-foreground'
+                          )}
+                        >
+                          {item.keyword}
+                        </span>
+                        {item.aliases.length ? (
+                          <span className='text-xs break-words text-muted-foreground'>
+                            {item.aliases.join(' · ')}
+                          </span>
+                        ) : null}
                       </span>
                       <span
                         className={cn(
@@ -410,6 +434,37 @@ function KeywordsPage() {
                       </span>
                     </div>
                     <div className='flex shrink-0 items-center gap-1'>
+                      {data?.aliasesSupported ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='icon'
+                              aria-label={t("Variantlar: {0}", [item.keyword])}
+                              onClick={() => setAliasTarget(item)}
+                              disabled={busy}
+                              className={cn(
+                                'relative',
+                                item.aliases.length > 0 && 'text-primary'
+                              )}
+                            >
+                              <Languages />
+                              {item.aliases.length === 0 &&
+                              (item.aliasSuggestions?.length ?? 0) > 0 ? (
+                                <span className='absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary' />
+                              ) : null}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {item.aliases.length
+                              ? t("Variantlar: {0}", [item.aliases.join(', ')])
+                              : (item.aliasSuggestions?.length ?? 0) > 0
+                                ? t("İngiliscə və rusca yazılış təklifləri var")
+                                : t("İngiliscə, rusca yazılış əlavə et")}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : null}
                       {data?.filtersSupported ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -526,6 +581,18 @@ function KeywordsPage() {
           )}
         </section>
       </div>
+
+      <KeywordAliasesDialog
+        key={`aliases-${aliasTarget?.id ?? 'none'}`}
+        keyword={aliasTarget}
+        saving={!!aliasTarget && busyId === aliasTarget.id}
+        onOpenChange={(open) => {
+          if (!open) setAliasTarget(null)
+        }}
+        onSave={(aliases) => {
+          if (aliasTarget) void saveAliases(aliasTarget, aliases)
+        }}
+      />
 
       <KeywordFiltersDialog
         key={filterTarget?.id ?? 'none'}

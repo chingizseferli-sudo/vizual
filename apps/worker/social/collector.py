@@ -875,7 +875,7 @@ def relevant_keyword_rows(post, keyword_cache, matcher, text):
     is_az = post.get("az_source") or post_is_azerbaijani(post)
     kept, reasons = [], set()
     for row in keyword_cache:
-        if not sm.keyword_is_active(row) or not matcher(sm.normalize_text(row.get("keyword", "")), title):
+        if not sm.keyword_is_active(row) or not sm.row_matches(row, matcher, title):
             continue
         reason = keyword_row_allows(row, post, is_az, social_keyword_matches)
         if reason:
