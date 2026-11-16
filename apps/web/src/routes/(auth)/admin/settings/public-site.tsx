@@ -239,7 +239,7 @@ function PublicSiteSettingsPage() {
           <TabsTrigger value='audiences'>Auditoriya</TabsTrigger>
           <TabsTrigger value='demo'>Demo</TabsTrigger>
           <TabsTrigger value='pricing'>Qiymətlər</TabsTrigger>
-          <TabsTrigger value='content'>Blog / Kampaniya</TabsTrigger>
+          <TabsTrigger value='content'>Blog</TabsTrigger>
           <TabsTrigger value='about'>Haqqımızda</TabsTrigger>
           <TabsTrigger value='contact'>Əlaqə</TabsTrigger>
         </TabsList>
@@ -251,14 +251,6 @@ function PublicSiteSettingsPage() {
                 value={content.hero.badge}
                 onChange={(event) =>
                   updateSection('hero', { badge: event.target.value })
-                }
-              />
-            </Field>
-            <Field label='Brend'>
-              <Input
-                value={content.hero.brand}
-                onChange={(event) =>
-                  updateSection('hero', { brand: event.target.value })
                 }
               />
             </Field>
@@ -620,35 +612,6 @@ function PublicSiteSettingsPage() {
 
         <TabsContent value='content'>
           <div className='grid gap-4'>
-            <Card title='Kampaniyalar'>
-              <Field label='Yuxarı etiket'>
-                <Input
-                  value={content.campaigns.eyebrow}
-                  onChange={(event) =>
-                    updateSection('campaigns', { eyebrow: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label='Başlıq'>
-                <Input
-                  value={content.campaigns.title}
-                  onChange={(event) =>
-                    updateSection('campaigns', { title: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label='Təsvir'>
-                <Textarea
-                  value={content.campaigns.description}
-                  onChange={(event) =>
-                    updateSection('campaigns', {
-                      description: event.target.value,
-                    })
-                  }
-                  rows={3}
-                />
-              </Field>
-            </Card>
             <Card title='Blog'>
               <Field label='Yuxarı etiket'>
                 <Input

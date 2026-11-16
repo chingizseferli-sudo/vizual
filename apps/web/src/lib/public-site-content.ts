@@ -38,7 +38,6 @@ export type PublicDemoItem = {
 export type PublicSiteContent = {
   hero: {
     badge: string
-    brand: string
     tagline: string
     description: string
     primaryCta: string
@@ -71,11 +70,6 @@ export type PublicSiteContent = {
     description: string
     plans: PublicPlan[]
   }
-  campaigns: {
-    eyebrow: string
-    title: string
-    description: string
-  }
   blog: {
     eyebrow: string
     title: string
@@ -104,7 +98,6 @@ export const publicSiteSectionKeys = [
   'audiences',
   'demo',
   'pricing',
-  'campaigns',
   'blog',
   'about',
   'contact',
@@ -147,11 +140,10 @@ export function initialPublicSiteContent(): PublicSiteContent {
 
 export const defaultPublicSiteContent: PublicSiteContent = {
   hero: {
-    badge: t("Kommunikasiya və Media Monitorinq Platforması"),
-    brand: 'Vizual.Az',
-    tagline: t("İzləyin. Anlayın. Qərar verin."),
+    badge: t("Azərbaycan mediası üçün monitorinq"),
+    tagline: t("Adınız xəbərə düşəndə ilk siz bilin."),
     description:
-      t("Media mənbələrində və sosial şəbəkələrdə təşkilatınız haqqında yayımlanan vacib məlumatları bir platformadan izləyin."),
+      t("Vizual 280-dən çox Azərbaycan xəbər saytını hər 15 dəqiqədən bir, Facebook və Instagram-ı isə planınıza görə yoxlayır. Açar sözünüz harada çıxsa, linki Telegram-a göndəririk. Səhər mətbuat icmalını əl ilə yığmağa ehtiyac qalmır."),
     primaryCta: t("7 gün pulsuz sına"),
     secondaryCta: t("İstifadəçi girişi"),
   },
@@ -189,37 +181,22 @@ export const defaultPublicSiteContent: PublicSiteContent = {
   },
   audiences: {
     eyebrow: t("Kimlər üçündür?"),
-    title: t("Kommunikasiya gündəmini izləyən komandalar üçün"),
+    title: t("Vizual-ı kim, nə üçün işlədir"),
     items: [
       {
-        title: t("Dövlət qurumları"),
+        title: t("Universitetin mətbuat xidməti"),
         description:
-          t("Media görünürlüğü, rəsmi məlumatlar və gündəlik kommunikasiya nəzarəti üçün."),
+          t("Əvvəl hər səhər 20 saytı açıb universitetin adını axtarırdılar. İndi axşamdan bəri çıxan hər xəbər Telegram-dadır, həftəlik hesabat isə emailə gəlir."),
       },
       {
-        title: t("Universitetlər"),
+        title: t("Bankın PR komandası"),
         description:
-          t("Təhsil, qəbul, elm və universitet adı ilə bağlı media materiallarını izləmək üçün."),
+          t("Müştəri şikayəti Facebook-da çıxanda bildiriş gəlir. Cavab saatlar sonra yox, eyni səhər verilir."),
       },
       {
-        title: t("Şirkətlər"),
+        title: t("PR agentliyi"),
         description:
-          t("Brend, məhsul, rəhbərlik və sektor xəbərlərini vaxtında görmək üçün."),
-      },
-      {
-        title: 'Banklar',
-        description:
-          t("Reputasiya, bazar xəbərləri və ictimai kommunikasiya siqnalları üçün."),
-      },
-      {
-        title: t("PR və kommunikasiya komandaları"),
-        description:
-          t("Müştəri, kampaniya və media nəticələrini sistemli izləmək üçün."),
-      },
-      {
-        title: t("Media nümayəndələri"),
-        description:
-          t("Gündəmi, mənbələri və mövzu axınını daha ardıcıl izləmək üçün."),
+          t("Hər müştərinin adı ayrıca açar sözdür. Kampaniyadan sonra neçə saytda çıxdığını saymaq üçün nəticələri bir kliklə ixrac edirsiniz."),
       },
     ],
   },
@@ -235,21 +212,21 @@ export const defaultPublicSiteContent: PublicSiteContent = {
       t("Burada məhsul turu, qısa təqdimat videosu və ya iş masası nümunəsi yerləşdirilə bilər."),
     items: [
       {
-        title: t("Təşkilatınızla bağlı yeni media materialı tapıldı"),
-        source: 'azertag.az',
-        keyword: t("təşkilat adı"),
+        title: t("Qəbul imtahanlarının cədvəli açıqlandı"),
+        source: 'report.az',
+        keyword: t("qəbul imtahanı"),
         time: '09:12',
       },
       {
-        title: t("Facebook-da açar sözünüzlə yeni paylaşım tapıldı"),
+        title: t("İpoteka faizləri ilə bağlı paylaşım, 48 rəy"),
         source: 'facebook.com',
-        keyword: t("brend adı"),
+        keyword: t("ipoteka"),
         time: '08:47',
       },
       {
-        title: t("Vacib uyğunluq üzrə Telegram bildirişi göndərildi"),
-        source: t("iş masası"),
-        keyword: t("bildiriş"),
+        title: t("Bakı metrosunda qatarların hərəkət qrafiki dəyişir"),
+        source: 'apa.az',
+        keyword: t("Bakı metrosu"),
         time: '08:21',
       },
     ],
@@ -306,12 +283,6 @@ export const defaultPublicSiteContent: PublicSiteContent = {
         ],
       },
     ],
-  },
-  campaigns: {
-    eyebrow: 'Kampaniyalar',
-    title: t("Yeni funksiyalar və kampaniyalar"),
-    description:
-      t("Yeni funksiyalar, sınaq imkanları və xüsusi təqdimat təklifləri bu bölmədə elan olunacaq."),
   },
   blog: {
     eyebrow: 'Bloq',
