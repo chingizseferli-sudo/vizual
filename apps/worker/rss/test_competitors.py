@@ -242,7 +242,7 @@ def test_competitor_only_article_is_saved_without_telegram(sm, monkeypatch):
     monkeypatch.setattr(sm, "extract_publish_time_from_article", lambda link, return_source=False: ("now", "meta"))
     monkeypatch.setattr(sm, "evaluate_publish_freshness", lambda *args, **kwargs: ("2026-10-22 10:00", "fresh"))
     monkeypatch.setattr(sm, "title_rejection_reason", lambda *args, **kwargs: "")
-    monkeypatch.setattr(sm, "find_matching_user_monitors", lambda title, cache: [])
+    monkeypatch.setattr(sm, "find_matching_user_monitors", lambda title, cache, matcher=None: [])
     monkeypatch.setattr(sm, "save_to_vizual_monitor", lambda site, item, title, published: "item-1")
     monkeypatch.setattr(sm, "save_competitor_matches", lambda item_id, hits: saved.append((item_id, hits)))
     monkeypatch.setattr(sm, "match_user_monitors", lambda *args: pytest.fail("no customer match expected"))

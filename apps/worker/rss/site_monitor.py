@@ -1,3 +1,4 @@
+import functools
 import hashlib
 import json
 import os
@@ -5,7 +6,7 @@ import re
 import time
 import threading
 import unicodedata
-from collections import Counter
+from collections import Counter, OrderedDict
 from html import unescape
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
@@ -22,6 +23,7 @@ from lxml import html
 import competitor_ai
 import email_reports
 import source_lifecycle as lifecycle
+from article_text import MAX_HTML_CHARS, extract_article_body, feed_entry_text
 from language_variants import find_language_variants
 from domain_policy import is_excluded_domain
 
@@ -68,6 +70,11 @@ USER_TELEGRAM_CACHE_AT = {}
 # unlinking on the website stops alerts within minutes in this long-running process.
 USER_TELEGRAM_CACHE_SECONDS = 300
 ARTICLE_TITLE_INFO_CACHE = {}
+# The last article pages downloaded (title, publish date and body read the same page,
+# so it is fetched once). Small: only the article being processed by each thread is needed.
+ARTICLE_PAGE_CACHE = OrderedDict()
+ARTICLE_PAGE_CACHE_MAX = 48
+ARTICLE_PAGE_CACHE_LOCK = threading.Lock()
 
 # Verdicts for articles already judged, so a source that is polled every few minutes
 # does not re-fetch the same ten pages each time. In memory only (reset on restart).
@@ -2358,6 +2365,42 @@ def extract_article_title_from_html(page_html):
     return extract_article_title_info_from_html(page_html).get("title", "")
 
 
+def fetch_article_page(article_url):
+    """(status, html) of an article page; the last few pages are kept in memory."""
+    key = normalize_link(article_url) or article_url
+    with ARTICLE_PAGE_CACHE_LOCK:
+        if key in ARTICLE_PAGE_CACHE:
+            ARTICLE_PAGE_CACHE.move_to_end(key)
+            return ARTICLE_PAGE_CACHE[key]
+    response = safe_request(article_url, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+    page = (response.status_code, decode_response_text(response)[:MAX_HTML_CHARS] if response.status_code == 200 else "")
+    with ARTICLE_PAGE_CACHE_LOCK:
+        ARTICLE_PAGE_CACHE[key] = page
+        while len(ARTICLE_PAGE_CACHE) > ARTICLE_PAGE_CACHE_MAX:
+            ARTICLE_PAGE_CACHE.popitem(last=False)
+    return page
+
+
+def cached_article_page(article_url):
+    """HTML of an article page already downloaded, without a new request; '' otherwise."""
+    key = normalize_link(article_url) or article_url
+    with ARTICLE_PAGE_CACHE_LOCK:
+        status, page_html = ARTICLE_PAGE_CACHE.get(key, (None, ""))
+    return page_html if status == 200 else ""
+
+
+def article_body_text(item):
+    """Feed summary/content plus the body of the article page read for its date."""
+    link = item.get("link") or ""
+    parts = [clean_text(item.get("rss_text"))]
+    if "news.google.com/" not in link.lower():
+        try:
+            parts.append(extract_article_body(cached_article_page(link)))
+        except Exception as exc:
+            print(f"Xəbər mətni oxunmadı: {link} | {exc}", flush=True)
+    return " ".join(part for part in parts if part)
+
+
 def fetch_article_title_info(article_url, source_domain=None):
     if not article_url or is_local_only_url(article_url):
         return {"title": "", "method": "invalid_url", "raw_title": "", "reject_reason": "invalid_url"}
@@ -2365,18 +2408,13 @@ def fetch_article_title_info(article_url, source_domain=None):
     if cache_key in ARTICLE_TITLE_INFO_CACHE:
         return ARTICLE_TITLE_INFO_CACHE[cache_key]
     try:
-        response = safe_request(
-            article_url,
-            headers=REQUEST_HEADERS,
-            timeout=REQUEST_TIMEOUT,
-            allow_redirects=True,
-        )
-        if response.status_code != 200:
-            info = {"title": "", "method": "http_error", "raw_title": "", "reject_reason": f"http_{response.status_code}"}
+        status, page_html = fetch_article_page(article_url)
+        if status != 200:
+            info = {"title": "", "method": "http_error", "raw_title": "", "reject_reason": f"http_{status}"}
             ARTICLE_TITLE_INFO_CACHE[cache_key] = info
             return info
         info = extract_article_title_info_from_html(
-            decode_response_text(response),
+            page_html,
             article_url=article_url,
             source_domain=source_domain,
         )
@@ -2494,28 +2532,119 @@ AZ_SUFFIXES = (
     "a", "ə", "i", "u", "ü",
 )
 AZ_SUFFIX_CHAIN = r"(?:" + "|".join(sorted(AZ_SUFFIXES, key=len, reverse=True)) + r"){0,3}"
-# "ümumtəhsil": the only compound prefix kept from the old substring match.
-COMPOUND_PREFIX = r"(?:ümum)?"
 
 
-def keyword_matches_title(keyword, title_text):
-    keyword = keyword_fold(keyword).strip()
-    title_text = keyword_fold(title_text)
-    if not keyword:
-        return False
+# Russian case endings for Cyrillic keywords ("Алиев" -> Алиева, Алиеву, Алиевым;
+# "Азербайджан" -> Азербайджана, азербайджанский). A keyword ending in a vowel loses it
+# first, so "Москва" also finds "Москвы", "Москве".
+RU_SUFFIXES = (
+    "ск", "ов", "ев", "ин",
+    "ами", "ями", "ого", "его", "ому", "ему", "ыми", "ими",
+    "ом", "ем", "ой", "ей", "ым", "им", "ах", "ях", "ую", "юю", "ая", "яя", "ое", "ее",
+    "ий", "ый", "ые", "ие", "ам", "ям",
+    "а", "я", "у", "ю", "е", "ы", "и", "о",
+)
+RU_SUFFIX_CHAIN = r"(?:" + "|".join(sorted(RU_SUFFIXES, key=len, reverse=True)) + r"){0,3}"
+RU_STEM_VOWELS = "аяоеыийь"
+CYRILLIC_KEYWORD_RE = re.compile(r"[\u0400-\u04ff]")
 
+
+@functools.lru_cache(maxsize=65536)
+def keyword_rule(keyword):
+    """(needle, tail regex, allow "ümum" prefix) for a keyword already in keyword_fold form.
+
+    Cached: thousands of customer keywords are checked against every article."""
     # \w is Unicode-aware, so ə ğ ı ö ü ç ş count as word characters while
     # hyphens/punctuation do not ("BDU-da" matches "bdu", "ABDU" does not).
     strict_match = keyword in STRICT_WORDS_FOLDED or len(keyword) <= 4
-
     if strict_match or " " in keyword:
-        pattern = r"(?<!\w)" + re.escape(keyword) + r"(?!\w)"
-        return bool(re.search(pattern, title_text))
-
+        return keyword, re.compile(r"(?!\w)"), False
+    if CYRILLIC_KEYWORD_RE.search(keyword):
+        stem = keyword[:-1] if len(keyword) >= 5 and keyword[-1] in RU_STEM_VOWELS else keyword
+        return stem, re.compile(RU_SUFFIX_CHAIN + r"(?!\w)"), False
     # Long single-word keywords match as a stem at the start of a word, followed by
-    # nothing or Azerbaijani suffixes ("universitet" -> "Universitetin").
-    pattern = r"(?<!\w)" + COMPOUND_PREFIX + re.escape(keyword) + AZ_SUFFIX_CHAIN + r"(?!\w)"
-    return bool(re.search(pattern, title_text))
+    # nothing or Azerbaijani suffixes ("universitet" -> "Universitetin"). "ümumtəhsil":
+    # "ümum" is the only compound prefix kept from the old substring match.
+    return keyword, re.compile(AZ_SUFFIX_CHAIN + r"(?!\w)"), True
+
+
+def _word_char(char):
+    return char.isalnum() or char == "_"
+
+
+def keyword_span(keyword, folded_text):
+    """(start, end) of the first match of a keyword_fold-form keyword in keyword_fold-form text.
+
+    Finds the keyword with str.find and checks the word edges around each hit, which is
+    far cheaper on long article texts than scanning the whole text with a regex."""
+    keyword = keyword.strip()
+    if not keyword or not folded_text:
+        return None
+    needle, tail, compound = keyword_rule(keyword)
+    position = folded_text.find(needle)
+    while position != -1:
+        start = position
+        if compound and folded_text[max(0, position - 4):position] == "ümum":
+            start = position - 4
+        if start == 0 or not _word_char(folded_text[start - 1]):
+            found = tail.match(folded_text, position + len(needle))
+            if found:
+                return start, found.end()
+        position = folded_text.find(needle, position + 1)
+    return None
+
+
+def keyword_matches_folded(keyword, folded_text):
+    """keyword and folded_text are both in keyword_fold form."""
+    return keyword_span(keyword, folded_text) is not None
+
+
+def keyword_matches_title(keyword, title_text):
+    return keyword_matches_folded(keyword_fold(keyword), keyword_fold(title_text))
+
+
+def article_keyword_matcher(title, body=""):
+    """Matcher for one article: the title first, then the article text.
+
+    Folds each text once and remembers each keyword's answer, so a keyword many customers
+    share is checked once. matcher.body_only collects keywords found only in the text."""
+    folded_title = keyword_fold(title)
+    folded_body = keyword_fold(body) if body else ""
+    answers = {}
+    body_only = set()
+
+    def matcher(keyword, _title_text=None):
+        if keyword in answers:
+            return answers[keyword]
+        key = keyword_fold(keyword).strip()
+        hit = keyword_matches_folded(key, folded_title)
+        if not hit and folded_body and keyword_matches_folded(key, folded_body):
+            hit = True
+            body_only.add(key)
+        answers[keyword] = hit
+        return hit
+
+    matcher.body_only = body_only
+    return matcher
+
+
+def body_excerpt(keyword, body, width=180):
+    """A short piece of the text around the keyword, for the alert."""
+    body = clean_text(body)
+    folded = keyword_fold(body)
+    if not body or len(folded) != len(body):
+        return ""
+    found = keyword_span(keyword_fold(keyword), folded)
+    if not found:
+        return ""
+    start = max(0, found[0] - width // 2)
+    end = min(len(body), found[1] + width // 2)
+    if start > 0:
+        start = body.rfind(" ", 0, start) + 1
+    if end < len(body):
+        space = body.find(" ", end)
+        end = space if space != -1 else len(body)
+    return ("…" if start > 0 else "") + body[start:end].strip() + ("…" if end < len(body) else "")
 
 
 def keyword_match(title, keywords):
@@ -3536,12 +3665,10 @@ def extract_publish_time_from_html(page_html):
 
 
 def extract_publish_time_from_article(article_url, return_source=False):
-    headers = REQUEST_HEADERS
     try:
-        response = safe_request(article_url, headers=headers, timeout=REQUEST_TIMEOUT, allow_redirects=True)
-        if response.status_code != 200:
+        status, page_html = fetch_article_page(article_url)
+        if status != 200:
             return (None, None) if return_source else None
-        page_html = decode_response_text(response)
         metadata_time, metadata_source = extract_publish_time_from_html_with_source(page_html)
         if metadata_time:
             return (metadata_time, metadata_source) if return_source else metadata_time
@@ -3942,7 +4069,7 @@ def extract_links_from_rss(site, rss_urls):
                 title = clean_article_text(entry.get("title", ""))
                 link = entry.get("link", "")
                 published = entry.get("published") or entry.get("updated") or entry.get("created") or ""
-                reason = add_item(results, page_url or rss_url, title, link, keywords, {"rss_published": published, "source_context": "rss", "url_patterns": site.get("url_patterns", [])})
+                reason = add_item(results, page_url or rss_url, title, link, keywords, {"rss_published": published, "source_context": "rss", "rss_text": feed_entry_text(entry), "url_patterns": site.get("url_patterns", [])})
                 if reason:
                     rejected.append((reason, link, title))
                 if len(results) >= MAX_LINKS_PER_SITE:
@@ -5563,6 +5690,38 @@ def expand_language_variants(sites):
     return sites + extra
 
 
+def body_only_excerpt(keywords, matcher, item):
+    """Text around the first keyword that is not in the headline, so the alert shows why it matched."""
+    body_only = getattr(matcher, "body_only", set())
+    for keyword in keywords:
+        if keyword_fold(keyword).strip() in body_only:
+            excerpt = body_excerpt(keyword, article_body_text(item))
+            if excerpt:
+                return excerpt
+    return ""
+
+
+def alert_message(title, source, keywords_text, published_time, link, excerpt=""):
+    excerpt_block = f"\nMətndən:\n{excerpt}\n" if excerpt else ""
+    return f"""Yeni uyğun xəbər
+
+Başlıq:
+{title}
+{excerpt_block}
+Mənbə:
+{source}
+
+Açar sözlər:
+{keywords_text}
+
+Tarix və saat:
+{published_time}
+
+Link:
+{link}
+"""
+
+
 def process_site(index, total, site, patterns_data, monitor_keywords_cache=None, competitor_keywords_cache=None):
     started = time.time()
     result = {
@@ -5678,7 +5837,12 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
                 flush=True,
             )
             continue
-        pre_matches = find_matching_user_monitors(clean_title, monitor_keywords_cache)
+        # Keywords are looked for in the headline and then in the article text, so a story
+        # that names the tracked school or person only in its body is still found.
+        matcher = article_keyword_matcher(clean_title, article_body_text(item))
+        pre_matches = find_matching_user_monitors(clean_title, monitor_keywords_cache, matcher=matcher)
+        if pre_matches and matcher.body_only:
+            print(f"Açar söz mətndə tapıldı (başlıqda yox): {', '.join(sorted(matcher.body_only))} | {link}", flush=True)
         competitor_hits = find_competitor_hits(clean_title, competitor_keywords_cache)
         if not pre_matches and not competitor_hits:
             result["reason"] = "no_monitor_match"
@@ -5694,7 +5858,7 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
             if monitor_item_id:
                 remember_article_verdict(link, "competitor_only", keyword_signature)
             continue
-        monitor_matches = match_user_monitors(monitor_item_id, clean_title, monitor_keywords_cache) if monitor_item_id else []
+        monitor_matches = match_user_monitors(monitor_item_id, clean_title, monitor_keywords_cache, matcher=matcher) if monitor_item_id else []
         matched_keywords = clean_matched_keywords([match.get("keyword") for match in monitor_matches])
 
         if not monitor_matches or not matched_keywords:
@@ -5734,23 +5898,7 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
             chat_matches = [match for match in monitor_matches if clean_text(match.get("telegram_chat_id")) == chat_id]
             chat_keywords = clean_matched_keywords([match.get("keyword") for match in chat_matches])
             chat_keywords_text = ", ".join(chat_keywords) or matched_keywords_text
-            chat_message = f"""Yeni uyğun xəbər
-
-Başlıq:
-{clean_title}
-
-Mənbə:
-{source}
-
-Açar sözlər:
-{chat_keywords_text}
-
-Tarix və saat:
-{published_time}
-
-Link:
-{link}
-"""
+            chat_message = alert_message(clean_title, source, chat_keywords_text, published_time, link, body_only_excerpt(chat_keywords, matcher, item))
             if send_telegram(chat_message, chat_id=chat_id):
                 sent_chats.add(chat_id)
                 sent_any = True
