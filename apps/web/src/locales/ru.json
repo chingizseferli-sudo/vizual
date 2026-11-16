@@ -839,5 +839,20 @@
   "Açar sözlərdə hərf registri vacibdirmi?": "Важен ли регистр букв в ключевых словах?",
   "Xeyr. Böyük və kiçik hərflər, həmçinin İ/i və I/ı fərqi uyğunlaşdırma zamanı nəzərə alınmır.": "Нет. Заглавные и строчные буквы, а также различие İ/i и I/ı при сопоставлении не учитываются.",
   "Dil": "Язык",
-  "Bütün dillər": "Все языки"
+  "Bütün dillər": "Все языки",
+  "Bir açar sözün ən çox {0} variantı ola bilər.": "У ключевого слова может быть не более {0} вариантов.",
+  "Hər variant 2-100 simvol olmalıdır.": "Каждый вариант должен содержать от 2 до 100 символов.",
+  "Variantlar: {0}": "Варианты: {0}",
+  "Xəbər bu yazılışlardan birini çəkəndə də \"{0}\" kimi tapılır. İngiliscə, rusca adı və ya qısaltmanı əlavə edin. Limitə daxil deyil.": "Новость с любым из этих написаний тоже будет найдена как «{0}». Добавьте название на английском, русском или сокращение. В лимит не входит.",
+  "Sil: {0}": "Удалить: {0}",
+  "Hələ variant yoxdur.": "Вариантов пока нет.",
+  "Yeni variant": "Новый вариант",
+  "Ən çox {0} variant": "Не более {0} вариантов",
+  "Məsələn: Azerbaijan Airlines": "Например: Azerbaijan Airlines",
+  "Təkliflər hazırlanır, bir neçə dəqiqəyə görünəcək.": "Предложения готовятся и появятся через несколько минут.",
+  "Təkliflər": "Предложения",
+  "Təkliflər avtomatik hazırlanır; yalnız düzgün olanları əlavə edin.": "Предложения формируются автоматически; добавляйте только верные.",
+  "Variantlar saxlanıldı: {0}": "Варианты сохранены: {0}",
+  "İngiliscə və rusca yazılış təklifləri var": "Есть предложения написания на английском и русском",
+  "İngiliscə, rusca yazılış əlavə et": "Добавить написание на английском, русском"
 }

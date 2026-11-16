@@ -21,6 +21,7 @@ from dateutil import parser
 from lxml import html
 
 import competitor_ai
+import keyword_variants_ai
 import email_reports
 import source_lifecycle as lifecycle
 from article_text import MAX_HTML_CHARS, extract_article_body, feed_entry_text
@@ -95,7 +96,7 @@ def keywords_signature(monitor_keywords_cache):
     if memo["id"] == id(monitor_keywords_cache):
         return memo["signature"]
     parts = sorted(
-        f"{row.get('id')}|{row.get('keyword')}|{row.get('match_type')}|{row.get('monitor_id')}"
+        f"{row.get('id')}|{row.get('keyword')}|{row.get('match_type')}|{row.get('monitor_id')}|{'|'.join(row.get('aliases') or [])}"
         for row in monitor_keywords_cache
     )
     signature = hashlib.sha1("\n".join(parts).encode("utf-8")).hexdigest()
@@ -5087,6 +5088,18 @@ def load_active_monitor_keywords():
         print(f"Monitor keyword cache istisnasi: {exc}", flush=True)
         return None
 
+def keyword_terms(row):
+    """The keyword and the customer's variants of it (other spellings, English, Russian)."""
+    terms = [row.get("keyword") or ""]
+    terms.extend(alias for alias in row.get("aliases") or [] if clean_text(alias))
+    return terms
+
+
+def row_matches(row, matcher, text):
+    """A keyword row matches when the keyword or any of its variants is in the text."""
+    return any(matcher(normalize_text(term), text) for term in keyword_terms(row))
+
+
 def find_matching_user_monitors(title, monitor_keywords_cache=None, matcher=None):
     if not supabase_ready():
         return []
@@ -5105,7 +5118,7 @@ def find_matching_user_monitors(title, monitor_keywords_cache=None, matcher=None
                 continue
             keyword_original = row.get("keyword", "")
             keyword = normalize_text(keyword_original)
-            if not matcher(keyword, title_text):
+            if not row_matches(row, matcher, title_text):
                 continue
             # A user can own the same keyword on two monitors; one story must
             # produce one match and one alert per user and keyword.
@@ -5149,7 +5162,7 @@ def match_user_monitors(item_id, title, monitor_keywords_cache=None, matcher=Non
                 continue
             keyword_original = row.get("keyword", "")
             keyword = normalize_text(keyword_original)
-            if not matcher(keyword, title_text):
+            if not row_matches(row, matcher, title_text):
                 continue
             match_key = (row.get("monitor_id"), keyword)
             if match_key not in seen_matches:
@@ -5261,6 +5274,82 @@ def competitor_ai_client():
         if COMPETITOR_AI["client"] is None:
             print("ANTHROPIC_API_KEY yoxdur: rəqiblər səhifəsi AI təhlilsiz işləyir.", flush=True)
     return COMPETITOR_AI["client"]
+
+
+KEYWORD_VARIANTS_AI = {"thread": None, "known": {}, "retry_at": None}
+KEYWORD_VARIANTS_PER_RUN = 60
+KEYWORD_VARIANTS_RETRY = timedelta(minutes=30)
+
+
+def keyword_rows_needing_variants(rows):
+    """Active keyword rows never sent to Claude. Rows without the column (before
+    migration 20261116000001) are skipped."""
+    return [row for row in rows or [] if row.get("id") and "alias_suggestions" in row and row.get("alias_suggestions") is None]
+
+
+def save_keyword_variant_suggestions(rows, suggestions_by_fold):
+    """Writes each row's suggestions; rows with the same list share one request."""
+    groups = {}
+    for row in rows:
+        variants = suggestions_by_fold.get(keyword_fold(row.get("keyword")).strip())
+        if variants is not None:
+            groups.setdefault(tuple(variants), []).append(row["id"])
+    for variants, ids in groups.items():
+        for start in range(0, len(ids), 100):
+            chunk = ids[start:start + 100]
+            response = requests.patch(
+                f"{SUPABASE_URL}/rest/v1/monitor_keywords",
+                headers=supabase_headers({"Prefer": "return=minimal"}),
+                params={"id": f"in.({','.join(chunk)})"},
+                json={"alias_suggestions": list(variants)},
+                timeout=REQUEST_TIMEOUT,
+            )
+            if response.status_code not in (200, 204):
+                print(f"Açar söz variant təklifləri yazılmadı: {response.status_code} | {response.text[:200]}", flush=True)
+
+
+def keyword_variants_if_needed(monitor_keywords_cache, now=None):
+    """Ask Claude once per distinct keyword for its English/Russian forms (few calls a day)."""
+    rows = keyword_rows_needing_variants(monitor_keywords_cache)
+    if not rows or not supabase_ready():
+        return
+    now = now or datetime.now(BAKU_TZ)
+    state = KEYWORD_VARIANTS_AI
+    known = state["known"]
+    to_ask, asked = [], set()
+    for row in rows:
+        keyword = clean_text(row.get("keyword"))
+        fold = keyword_fold(keyword).strip()
+        if fold and fold not in known and fold not in asked:
+            asked.add(fold)
+            to_ask.append(keyword)
+    to_ask = to_ask[:KEYWORD_VARIANTS_PER_RUN]
+    if to_ask and (not state["retry_at"] or now >= state["retry_at"]):
+        client = competitor_ai_client()
+        if client is None:
+            return
+        answered = keyword_variants_ai.suggest_variants(client, to_ask)
+        for keyword, variants in answered.items():
+            known[keyword_fold(keyword).strip()] = variants
+        state["retry_at"] = now + KEYWORD_VARIANTS_RETRY if len(answered) < len(to_ask) else None
+        print(f"Açar söz variantları təklif edildi: {len(answered)}/{len(to_ask)}", flush=True)
+    save_keyword_variant_suggestions(rows, known)
+
+
+def start_keyword_variants(monitor_keywords_cache):
+    """Runs beside the news check so a slow API call never delays alerts."""
+    thread = KEYWORD_VARIANTS_AI.get("thread")
+    if thread and thread.is_alive():
+        return
+    if not keyword_rows_needing_variants(monitor_keywords_cache):
+        return
+    KEYWORD_VARIANTS_AI["thread"] = threading.Thread(
+        target=keyword_variants_if_needed,
+        args=(monitor_keywords_cache,),
+        name="keyword-variants-ai",
+        daemon=True,
+    )
+    KEYWORD_VARIANTS_AI["thread"].start()
 
 
 def start_competitor_ai(competitor_keywords_cache):
@@ -5690,12 +5779,17 @@ def expand_language_variants(sites):
     return sites + extra
 
 
-def body_only_excerpt(keywords, matcher, item):
-    """Text around the first keyword that is not in the headline, so the alert shows why it matched."""
+def body_only_excerpt(keywords, matcher, item, keyword_rows=None):
+    """Text around the first keyword (or variant) that is not in the headline, so the alert shows why it matched."""
     body_only = getattr(matcher, "body_only", set())
-    for keyword in keywords:
-        if keyword_fold(keyword).strip() in body_only:
-            excerpt = body_excerpt(keyword, article_body_text(item))
+    wanted = {keyword_fold(keyword).strip() for keyword in keywords}
+    terms = list(keywords)
+    for row in keyword_rows or []:
+        if keyword_fold(row.get("keyword")).strip() in wanted:
+            terms.extend(keyword_terms(row)[1:])
+    for term in terms:
+        if keyword_fold(term).strip() in body_only:
+            excerpt = body_excerpt(term, article_body_text(item))
             if excerpt:
                 return excerpt
     return ""
@@ -5898,7 +5992,7 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
             chat_matches = [match for match in monitor_matches if clean_text(match.get("telegram_chat_id")) == chat_id]
             chat_keywords = clean_matched_keywords([match.get("keyword") for match in chat_matches])
             chat_keywords_text = ", ".join(chat_keywords) or matched_keywords_text
-            chat_message = alert_message(clean_title, source, chat_keywords_text, published_time, link, body_only_excerpt(chat_keywords, matcher, item))
+            chat_message = alert_message(clean_title, source, chat_keywords_text, published_time, link, body_only_excerpt(chat_keywords, matcher, item, monitor_keywords_cache))
             if send_telegram(chat_message, chat_id=chat_id):
                 sent_chats.add(chat_id)
                 sent_any = True
@@ -5948,6 +6042,7 @@ def check_sites(poll_commands=True):
     monitor_keywords_cache = load_active_monitor_keywords()
     competitor_keywords_cache = load_competitor_keywords()
     start_competitor_ai(competitor_keywords_cache)
+    start_keyword_variants(monitor_keywords_cache)
     total = len(sites)
     print(f"Yüklənən sayt sayı: {total}", flush=True)
     print(f"Monitorinq başladı | worker={MAX_WORKERS} | son {NEWS_TIME_LIMIT_HOURS} saat | {datetime.now(BAKU_TZ).strftime('%d.%m.%Y %H:%M:%S')} AZT", flush=True)

@@ -990,3 +990,10 @@ def test_x_posts_build_url_from_author(col):
     posts = col.x_posts([{"id_str": "9", "full_text": "Salam", "created_at": "Tue Oct 20 07:00:00 +0000 2026",
                           "author": {"userName": "apa"}}], "salam")
     assert posts[0]["url"] == "https://x.com/apa/status/9" and posts[0]["text"] == "Salam"
+
+
+def test_keyword_variant_matches_social_post(col):
+    row = {**keyword_row("Azərbaycan Hava Yolları", USER_A), "aliases": ["AZAL"], "az_only": False}
+    post = {"text": "AZAL yeni reyslər açır", "url": "https://facebook.com/p/1"}
+    rows, reason = col.relevant_keyword_rows(post, [row], col.post_matcher("facebook", post), post["text"])
+    assert rows == [row] and reason is None

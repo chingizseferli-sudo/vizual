@@ -19,6 +19,11 @@ export type CustomerKeyword = {
   // exclude word (set_keyword_filters(), migration 20261023000007).
   azOnly: boolean
   excludeWords: string[]
+  // Other spellings (English, Russian, short form) that count as this keyword
+  // (set_keyword_aliases(), migration 20261116000001).
+  aliases: string[]
+  // Spellings suggested once by the worker; null until it has asked.
+  aliasSuggestions: string[] | null
   created_at: string | null
 }
 
@@ -36,6 +41,8 @@ export type KeywordsData = {
   statusSupported: boolean
   // False until migration 20261023000007: the social filter is hidden.
   filtersSupported: boolean
+  // False until migration 20261116000001: keyword variants are hidden.
+  aliasesSupported: boolean
 }
 
 type MonitorRow = { id: string; status: string | null; created_at: string | null }
@@ -47,6 +54,8 @@ type KeywordRow = {
   social_enabled?: boolean | null
   az_only?: boolean | null
   exclude_words?: string[] | null
+  aliases?: string[] | null
+  alias_suggestions?: string[] | null
   created_at: string | null
 }
 type PlanLimitsRow = {
@@ -95,6 +104,7 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
       socialSupported,
       statusSupported: true,
       filtersSupported: false,
+      aliasesSupported: false,
     }
   }
 
@@ -109,6 +119,7 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
   const rows = (data || []) as KeywordRow[]
   const statusSupported = rows.length === 0 || 'status' in rows[0]
   const filtersSupported = rows.length > 0 && 'az_only' in rows[0]
+  const aliasesSupported = rows.length > 0 && 'aliases' in rows[0]
   const keywords = rows.map((row) => ({
     id: row.id,
     monitor_id: row.monitor_id,
@@ -117,6 +128,8 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
     social: row.social_enabled === true,
     azOnly: row.az_only !== false,
     excludeWords: row.exclude_words || [],
+    aliases: row.aliases || [],
+    aliasSuggestions: row.alias_suggestions ?? null,
     status:
       monitorStatus.get(row.monitor_id) === 'active' && row.status !== 'paused'
         ? ('active' as const)
@@ -134,6 +147,7 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
     socialSupported,
     statusSupported,
     filtersSupported,
+    aliasesSupported,
   }
 }
 
@@ -159,6 +173,12 @@ export function keywordErrorMessage(error: { message: string }) {
   }
   if (message.includes('EXCLUDE_WORD_TOO_LONG')) {
     return t("Hər istisna söz ən çox 60 simvol ola bilər.")
+  }
+  if (message.includes('KEYWORD_ALIASES_TOO_MANY')) {
+    return t("Bir açar sözün ən çox {0} variantı ola bilər.", [MAX_KEYWORD_ALIASES])
+  }
+  if (message.includes('KEYWORD_ALIAS_LENGTH_INVALID')) {
+    return t("Hər variant 2-100 simvol olmalıdır.")
   }
   if (message.includes('KEYWORD_LENGTH_INVALID')) {
     return t("Açar söz 1-200 simvol olmalıdır.")
@@ -213,6 +233,30 @@ export async function setKeywordFilters(
     p_keyword_id: id,
     p_az_only: azOnly,
     p_exclude_words: excludeWords,
+  })
+  return error
+}
+
+export const MAX_KEYWORD_ALIASES = 5
+
+// Variants to save: trimmed, inner spaces collapsed, without empties, repeats
+// or the keyword itself (the database applies the same rules).
+export function normalizeAliases(keyword: string, aliases: string[]) {
+  const seen = new Set([keyword.trim().toLocaleLowerCase('az-AZ')])
+  return aliases
+    .map((item) => item.replace(/\s+/g, ' ').trim())
+    .filter((item) => {
+      const key = item.toLocaleLowerCase('az-AZ')
+      if (!item || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+}
+
+export async function setKeywordAliases(id: string, aliases: string[]) {
+  const { error } = await supabase.rpc('set_keyword_aliases', {
+    p_keyword_id: id,
+    p_aliases: aliases,
   })
   return error
 }
