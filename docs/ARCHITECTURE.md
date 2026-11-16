@@ -18,7 +18,7 @@ Customers ◄── Telegram Bot API ◄─────────────�
 
 ## Workers (`apps/worker`)
 One Docker image; `WORKER` picks the process (see `start.sh`).
-- `rss`: polls sources, extracts articles, matches keywords (Azerbaijani-aware folding), writes matches, sends Telegram alerts, links Telegram chats via `/start`.
+- `rss`: polls sources, extracts articles, matches keywords (Azerbaijani-aware folding, Russian case endings for Cyrillic keywords) in the headline and then the article text, writes matches, sends Telegram alerts, links Telegram chats via `/start`. The text is the feed's summary/content plus the body of the article page the worker already downloads for the publish date (`rss/article_text.py`; no extra request, 20k-character cap). A text-only match adds a short excerpt to the alert. Competitor matching stays headline-only.
 - `social`: Facebook, Instagram, YouTube and Telegram channel collector for keywords flagged for social.
 - `discovery`, `discovery_deep`, `sync_sources`, `auto_configure`, `readability`: one-shot jobs for source maintenance.
 
