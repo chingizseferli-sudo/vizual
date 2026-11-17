@@ -398,7 +398,7 @@ function KeywordsPage() {
                 return (
                   <li
                     key={item.id}
-                    className='flex items-center gap-3 px-3 py-2.5'
+                    className='flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3'
                   >
                     <div className='flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2'>
                       <span className='flex min-w-0 flex-col'>
@@ -433,7 +433,7 @@ function KeywordsPage() {
                         {paused ? t("Dayandırılıb") : t("Aktiv")}
                       </span>
                     </div>
-                    <div className='flex shrink-0 items-center gap-1'>
+                    <div className='flex flex-wrap items-center gap-1 sm:shrink-0 sm:flex-nowrap'>
                       {data?.aliasesSupported ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
