@@ -99,3 +99,27 @@ def test_route_and_id_slugs_do_not_reject_titles():
     ]
     for url, title in cases:
         assert m.title_rejection_reason(title, url) == "", (url, title)
+
+
+INNEWS_TITLE = "Хирургический метод, разработанный Рашадом Шоланом, признан победителем программы BANTUC Всемирного конгресса SIU 2026"
+INNEWS_PAGE = f"""<html><head><title>{INNEWS_TITLE} | innews media</title>
+<meta property="og:title" content="{INNEWS_TITLE} | innews media">
+<meta name="twitter:title" content="{INNEWS_TITLE} | innews media"></head>
+<body><div class="category"><h1>Здоровье</h1></div>
+<div class="news-detail"><h1>{INNEWS_TITLE}</h1><p>Азербайджанский уролог представил метод на конгрессе SIU 2026.</p></div>
+</body></html>"""
+
+
+def test_site_name_suffix_and_section_h1_are_not_the_title():
+    info = m.extract_article_title_info_from_html(INNEWS_PAGE, "https://innews.az/ru/news/id-68189", "innews.az")
+    assert info["title"] == INNEWS_TITLE
+
+
+def test_russian_section_label_is_not_a_title():
+    assert m.is_non_news_title("Здоровье")
+    assert m.clean_title_for_message(f"Здоровье | {INNEWS_TITLE}") == INNEWS_TITLE
+
+
+def test_site_name_suffix_kept_when_it_is_not_the_site():
+    title = "Prezident Fransaya səfər edir | Le Monde"
+    assert m.strip_site_name_suffix(title, "innews.az") == title

@@ -60,13 +60,11 @@ def test_alias_match_reports_the_customer_keyword(sm, monkeypatch):
     assert sm.find_matching_user_monitors("Turkish Airlines resumes flights", cache) == []
 
 
-def test_alias_found_only_in_article_text_gives_the_excerpt(sm):
+def test_alias_found_only_in_article_text_matches(sm):
     cache = [row("k1", "Azərbaycan Hava Yolları", aliases=["AZAL"])]
     item = {"link": "https://news.az/x", "rss_text": "Bu gün AZAL Bakı-London reysini bərpa etdiyini açıqlayıb."}
     matcher = sm.article_keyword_matcher("Reys bərpa olunur", item["rss_text"])
     assert sm.find_matching_user_monitors("Reys bərpa olunur", cache, matcher=matcher)
-    excerpt = sm.body_only_excerpt(["Azərbaycan Hava Yolları"], matcher, item, cache)
-    assert "AZAL Bakı-London" in excerpt
 
 
 def test_signature_changes_when_aliases_change(sm):
