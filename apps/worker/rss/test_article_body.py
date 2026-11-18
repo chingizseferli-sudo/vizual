@@ -125,14 +125,6 @@ def test_russian_keywords_do_not_match_other_words(sm, keyword, text):
     assert not sm.keyword_matches_title(keyword, text)
 
 
-def test_body_excerpt_shows_text_around_keyword(sm):
-    body = "Birinci cümlə. " * 20 + "Paytaxtın 23 saylı məktəb direktoru açıqlama verib. " + "Son cümlə. " * 20
-    excerpt = sm.body_excerpt("23 saylı məktəb", body)
-    assert "23 saylı məktəb direktoru" in excerpt
-    assert excerpt.startswith("…") and excerpt.endswith("…")
-    assert len(excerpt) < 260
-
-
 def test_article_page_is_downloaded_once_for_title_and_date(sm, monkeypatch):
     calls = []
 
@@ -156,7 +148,7 @@ def test_body_text_never_makes_a_request(sm, monkeypatch):
     assert sm.article_body_text({"link": "https://news.az/new", "rss_text": "Feed mətni"}) == "Feed mətni"
 
 
-def test_body_only_match_is_alerted_with_excerpt(sm, monkeypatch):
+def test_body_only_match_is_alerted_without_excerpt(sm, monkeypatch):
     item = {
         "title": "Direktor valideynlərə qəribə açıqlama verdi",
         "link": "https://news.az/direktor-aciqlama",
@@ -191,11 +183,97 @@ def test_body_only_match_is_alerted_with_excerpt(sm, monkeypatch):
     assert result["reason"] == "sent"
     chat_id, message = sent[0]
     assert chat_id == "chat-1"
-    assert "Mətndən:\nPaytaxtın 23 saylı məktəb direktoru" in message
+    assert "Mətndən" not in message and "direktoru" not in message
+    assert "Başlıq:\n" in message and "Tarix və saat:\n" in message and "Link:\n" in message
     assert "Açar sözlər:\n23 saylı məktəb" in message
 
 
-def test_title_match_alert_has_no_excerpt(sm):
+def test_alert_has_title_source_keywords_date_link_only(sm):
     message = sm.alert_message("BDU-da yeni il", "news.az", "bdu", "2026-11-16 10:00", "https://news.az/x")
     assert "Mətndən" not in message
     assert "Başlıq:\nBDU-da yeni il\n\nMənbə:" in message
+
+
+INLINE_READ_ALSO_PAGE = """
+<html><body><div class="content">
+  <h1>Nazir məktəbdə görüş keçirdi</h1>
+  <div class="text">
+    <p>Təhsil naziri bu gün paytaxtdakı məktəblərdən birində müəllimlərlə görüş keçirib.</p>
+    <p><strong>Həmçinin oxu:</strong> <a href="/news/2">AZAL Bakı-London reysini bərpa edir</a></p>
+    <p>Görüşdə yeni tədris proqramı və dərsliklər müzakirə olunub, təkliflər dinlənilib.</p>
+    <div class="box">
+      <h3>Oxşar xəbərlər</h3>
+    </div>
+    <ul><li><a href="/news/3">Bakı Dövlət Universitetində yeni fakültə açıldı</a></li>
+        <li><a href="/news/4">Sumqayıtda yol təmiri davam edir</a></li></ul>
+    <div class="cards">
+      <div class="item"><a href="/news/5"><h3>Gəncədə yeni xəstəxana açıldı</h3></a>
+        <p>Gəncə şəhərində 300 çarpayılıq yeni xəstəxana istifadəyə verilib, həkimlər işə başlayıb.</p></div>
+    </div>
+  </div>
+</div></body></html>
+"""
+
+
+def test_read_also_links_and_teaser_cards_are_not_article_text():
+    body = extract_article_body(INLINE_READ_ALSO_PAGE)
+    assert "müəllimlərlə görüş" in body and "yeni tədris proqramı" in body
+    for other_story in ("AZAL", "Bakı Dövlət Universitetində", "Sumqayıtda", "Gəncə"):
+        assert other_story not in body
+
+
+def test_russian_read_also_in_json_ld_body_is_dropped():
+    page = """<html><head><script type="application/ld+json">
+    {"@type": "NewsArticle", "articleBody": "Министр провёл встречу с учителями в одной из школ столицы.\\nЧитайте также: AZAL возобновляет рейсы Баку-Лондон\\nНа встрече обсуждались новые учебники."}
+    </script></head><body></body></html>"""
+    body = extract_article_body(page)
+    assert "встречу с учителями" in body and "новые учебники" in body
+    assert "AZAL" not in body
+
+
+def test_sentence_that_starts_like_a_label_is_kept():
+    page = """<html><body><div class="text">
+    <p>Son xəbərlərə görə, nazir sabah regionlara səfər edəcək və məktəblərlə tanış olacaq.</p>
+    <p>Bu mövzuda danışan rəsmi bildirib ki, səfər bir həftə davam edəcək, proqram hazırdır.</p>
+    </div></body></html>"""
+    body = extract_article_body(page)
+    assert "Son xəbərlərə görə" in body and "Bu mövzuda danışan" in body
+
+
+def test_feed_content_read_also_link_is_dropped():
+    entry = {"content": [{"value": "<p>Nazir məktəbdə müəllimlərlə görüş keçirib.</p><p>Həmçinin oxu: <a href='/x'>AZAL reysi bərpa edir</a></p>"}]}
+    text = feed_entry_text(entry)
+    assert "müəllimlərlə görüş" in text and "AZAL" not in text
+
+
+def test_every_fresh_match_on_a_page_is_sent_in_one_check(sm, monkeypatch):
+    items = [
+        {"title": f"BDU-da {n}-ci yenilik elan olundu", "link": f"https://news.az/bdu-{n}", "source": "news.az", "source_context": "rss"}
+        for n in (1, 2, 3)
+    ]
+    keywords = [{"keyword": "BDU", "monitor_id": "m1", "user_monitors": {"user_id": "u1", "name": "M"}}]
+    sent = []
+    monkeypatch.setattr(sm, "supabase_ready", lambda: True)
+    monkeypatch.setattr(sm, "keyword_is_active", lambda row: True)
+    monkeypatch.setattr(sm, "get_user_telegram_chat_id", lambda user_id: "chat-1")
+    monkeypatch.setattr(sm, "fetch_site", lambda site, patterns: [dict(item) for item in items])
+    monkeypatch.setattr(sm, "choose_best_article_title_info", lambda title, link, source_domain=None, from_feed=False: {"title": title})
+    monkeypatch.setattr(sm, "exists", lambda link, title=None: False)
+    monkeypatch.setattr(sm, "extract_publish_time_from_article", lambda link, return_source=False: ("now", "meta"))
+    monkeypatch.setattr(sm, "evaluate_publish_freshness", lambda *args, **kwargs: ("2026-11-16 10:00", "fresh"))
+    monkeypatch.setattr(sm, "title_rejection_reason", lambda *args, **kwargs: "")
+    monkeypatch.setattr(sm, "save_to_vizual_monitor", lambda site, item, title, published: "item-" + title)
+    monkeypatch.setattr(
+        sm,
+        "match_user_monitors",
+        lambda item_id, title, cache, matcher=None: sm.find_matching_user_monitors(title, cache, matcher=matcher),
+    )
+    monkeypatch.setattr(sm, "reserve_news", lambda *args, **kwargs: True)
+    monkeypatch.setattr(sm, "send_telegram", lambda message, chat_id=None: sent.append(message) or True)
+    monkeypatch.setattr(sm, "update_source_health", lambda site, result: None)
+    monkeypatch.setattr(sm.time, "sleep", lambda seconds: None)
+
+    result = sm.process_site(1, 1, {"name": "News", "url": "https://news.az", "id": "s1"}, {}, keywords, [])
+
+    assert result["reason"] == "sent" and result["sent"] == 3
+    assert [m.split("\n")[3] for m in sent] == [item["title"] for item in items]

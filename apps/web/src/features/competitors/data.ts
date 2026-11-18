@@ -99,17 +99,8 @@ export async function fetchCompetitorsData(): Promise<CompetitorsData> {
   }
 
   const headlines = ((matchesRes.data || []) as unknown as MatchRow[])
-    .filter((row) => row.monitored_items?.title && row.monitored_items.url)
-    .map((row) => ({
-      competitorId: row.competitor_id,
-      title: row.monitored_items!.title!,
-      url: row.monitored_items!.url!,
-      sentiment: row.monitored_items!.ai_sentiment,
-      at:
-        row.monitored_items!.published_at ||
-        row.monitored_items!.detected_at ||
-        row.created_at,
-    }))
+    .filter(hasHeadline)
+    .map(toHeadline)
 
   return {
     competitors: (competitorsRes.data || []) as Competitor[],
@@ -122,6 +113,49 @@ export async function fetchCompetitorsData(): Promise<CompetitorsData> {
     insight: insightRes.error
       ? null
       : ((insightRes.data as CompetitorInsight | null) ?? null),
+  }
+}
+
+function toHeadline(row: MatchRow): CompetitorHeadline {
+  const item = row.monitored_items!
+  return {
+    competitorId: row.competitor_id,
+    title: item.title!,
+    url: item.url!,
+    sentiment: item.ai_sentiment,
+    at: item.published_at || item.detected_at || row.created_at,
+  }
+}
+
+const hasHeadline = (row: MatchRow) =>
+  Boolean(row.monitored_items?.title && row.monitored_items.url)
+
+export const HEADLINE_PAGE_SIZE = 20
+export const HEADLINE_DAYS = 30
+
+// One page of a competitor's news from the last 30 days, newest first.
+export async function fetchCompetitorHeadlinePage(
+  competitorId: string,
+  page: number
+): Promise<{ headlines: CompetitorHeadline[]; total: number }> {
+  const since = new Date(Date.now() - HEADLINE_DAYS * 24 * 60 * 60 * 1000)
+  const from = (page - 1) * HEADLINE_PAGE_SIZE
+  const { data, error, count } = await supabase
+    .from('competitor_matches')
+    .select(
+      'competitor_id,created_at,monitored_items(title,url,ai_sentiment,published_at,detected_at)',
+      { count: 'exact' }
+    )
+    .eq('competitor_id', competitorId)
+    .gte('created_at', since.toISOString())
+    .order('created_at', { ascending: false })
+    .range(from, from + HEADLINE_PAGE_SIZE - 1)
+  if (error) throw failed(error)
+  return {
+    headlines: ((data || []) as unknown as MatchRow[])
+      .filter(hasHeadline)
+      .map(toHeadline),
+    total: count || 0,
   }
 }
 
@@ -192,6 +226,13 @@ export function competitorErrorMessage(error: { message: string }) {
     )
   }
   return friendlyError(error)
+}
+
+// True when some news exists but none has an AI tone label yet.
+export function toneMissing(
+  row: Pick<EntityStats, 'mentions' | 'positive' | 'neutral' | 'negative'>
+) {
+  return row.mentions > 0 && row.positive + row.neutral + row.negative === 0
 }
 
 // Share of each tone among labelled and unlabelled mentions, in percent.

@@ -6,6 +6,15 @@ beforeEach(() => {
 })
 
 describe('friendlyError', () => {
+  it('treats an expired session as a session problem, not an expired link', () => {
+    expect(friendlyError({ message: 'Invalid or expired session' })).toBe(
+      'Sessiyanın vaxtı bitib. Zəhmət olmasa yenidən daxil olun.'
+    )
+    expect(friendlyError({ message: 'Token has expired or is invalid' })).toBe(
+      'Linkin və ya kodun vaxtı bitib. Zəhmət olmasa yenisini istəyin.'
+    )
+  })
+
   it('maps Supabase Auth rate limits by code and by text', () => {
     expect(
       friendlyError({ code: 'over_email_send_rate_limit', status: 429 })

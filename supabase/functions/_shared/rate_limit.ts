@@ -1,3 +1,5 @@
+import { serviceAuthHeaders, serviceKey } from "./service_key.ts";
+
 // Per-user fixed-window rate limit backed by public.consume_edge_rate_limit
 // (migration 20261019000003). Fails open if the RPC is unavailable so a
 // missing migration cannot take the feature down; failures are logged.
@@ -8,15 +10,14 @@ export async function consumeRateLimit(
   windowSeconds: number,
 ): Promise<boolean> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")?.replace(/\/$/, "");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceRoleKey = serviceKey();
   if (!supabaseUrl || !serviceRoleKey) return true;
 
   try {
     const response = await fetch(`${supabaseUrl}/rest/v1/rpc/consume_edge_rate_limit`, {
       method: "POST",
       headers: {
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
+        ...serviceAuthHeaders(serviceRoleKey),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import {
   ExternalLink,
@@ -12,7 +16,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { dateLocale, t } from '@/lib/i18n'
+import { formatDayMonth } from '@/lib/dates'
+import { t } from '@/lib/i18n'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -30,9 +35,12 @@ import {
   competitorErrorMessage,
   deleteCompetitor,
   type EntityStats,
+  fetchCompetitorHeadlinePage,
   fetchCompetitorsData,
+  HEADLINE_PAGE_SIZE,
   parseCompetitorKeywords,
   type Sentiment,
+  toneMissing,
   toneShares,
   updateCompetitor,
 } from '@/features/competitors/data'
@@ -66,13 +74,7 @@ const TONES = [
 ] as const
 
 function formatDate(value: string | null, withTime = false) {
-  if (!value) return ''
-  return new Date(value).toLocaleString(dateLocale(), {
-    day: '2-digit',
-    month: '2-digit',
-    year: withTime ? undefined : 'numeric',
-    ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}),
-  })
+  return value ? formatDayMonth(value, { withTime }) : ''
 }
 
 function entityName(row: EntityStats) {
@@ -157,12 +159,14 @@ function Comparison({ rows, period }: { rows: EntityStats[]; period: Period }) {
               <div className='grid gap-1'>
                 <ToneBar row={row} />
                 <span className='text-xs text-muted-foreground'>
-                  {shares
-                    ? t('{0}% müsbət · {1}% mənfi', [
-                        Math.round(shares.positive),
-                        Math.round(shares.negative),
-                      ])
-                    : t('Son {0} gündə xəbər yoxdur', [period])}
+                  {!shares
+                    ? t('Son {0} gündə xəbər yoxdur', [period])
+                    : toneMissing(row)
+                      ? t('Ton hələ təhlil olunmayıb')
+                      : t('{0}% müsbət · {1}% mənfi', [
+                          Math.round(shares.positive),
+                          Math.round(shares.negative),
+                        ])}
                 </span>
               </div>
             </li>
@@ -276,6 +280,109 @@ function CompetitorForm({
   )
 }
 
+function HeadlineList({ headlines }: { headlines: CompetitorHeadline[] }) {
+  return (
+    <ul className='grid gap-1.5'>
+      {headlines.map((item) => (
+        <li key={item.url} className='flex items-start gap-2 text-sm'>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className={cn(
+                  'mt-1.5 h-2 w-2 shrink-0 rounded-full',
+                  TONES.find(
+                    (tone) => tone.key === (item.sentiment ?? 'unlabelled')
+                  )?.dot
+                )}
+                aria-label={sentimentLabel(item.sentiment)}
+              />
+            </TooltipTrigger>
+            <TooltipContent>
+              {sentimentLabel(item.sentiment)}
+            </TooltipContent>
+          </Tooltip>
+          <a
+            href={item.url}
+            target='_blank'
+            rel='noreferrer'
+            className='min-w-0 flex-1 break-words hover:underline'
+          >
+            {item.title}
+            <ExternalLink className='ml-1 inline h-3 w-3 text-muted-foreground' />
+          </a>
+          <span className='shrink-0 text-xs text-muted-foreground tabular-nums'>
+            {formatDate(item.at, true)}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function AllHeadlines({ competitorId }: { competitorId: string }) {
+  const [page, setPage] = useState(1)
+  const query = useQuery({
+    queryKey: [
+      ...customerQueryKeys.competitors(),
+      'headlines',
+      competitorId,
+      page,
+    ],
+    queryFn: () => fetchCompetitorHeadlinePage(competitorId, page),
+    placeholderData: keepPreviousData,
+    staleTime: 60 * 1000,
+  })
+  if (query.isLoading) {
+    return (
+      <div className='flex items-center gap-2 text-sm text-muted-foreground'>
+        <Loader2 className='h-4 w-4 animate-spin' />
+        {t('Yüklənir...')}
+      </div>
+    )
+  }
+  if (query.error) {
+    return (
+      <p className='text-sm text-destructive'>
+        {query.error instanceof Error
+          ? query.error.message
+          : t('Rəqiblər yüklənmədi.')}
+      </p>
+    )
+  }
+  const total = query.data?.total ?? 0
+  const pages = Math.max(1, Math.ceil(total / HEADLINE_PAGE_SIZE))
+  return (
+    <div className='grid gap-2'>
+      <HeadlineList headlines={query.data?.headlines ?? []} />
+      {pages > 1 ? (
+        <div className='flex items-center justify-between gap-2 text-xs text-muted-foreground'>
+          <span>{t('Səhifə {0} / {1}', [page, pages])}</span>
+          <div className='flex gap-2'>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              disabled={page <= 1 || query.isFetching}
+              onClick={() => setPage(page - 1)}
+            >
+              {t('Əvvəlki')}
+            </Button>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              disabled={page >= pages || query.isFetching}
+              onClick={() => setPage(page + 1)}
+            >
+              {t('Növbəti')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function CompetitorCard({
   competitor,
   paused,
@@ -294,6 +401,7 @@ function CompetitorCard({
   onDelete: () => void
 }) {
   const [editing, setEditing] = useState(false)
+  const [showAll, setShowAll] = useState(false)
 
   return (
     <li className='grid content-start gap-3 rounded-xl border bg-card p-4 shadow-sm'>
@@ -385,41 +493,10 @@ function CompetitorCard({
         </div>
       </div>
 
-      {headlines.length ? (
-        <ul className='grid gap-1.5'>
-          {headlines.map((item) => (
-            <li key={item.url} className='flex items-start gap-2 text-sm'>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className={cn(
-                      'mt-1.5 h-2 w-2 shrink-0 rounded-full',
-                      TONES.find(
-                        (tone) => tone.key === (item.sentiment ?? 'unlabelled')
-                      )?.dot
-                    )}
-                    aria-label={sentimentLabel(item.sentiment)}
-                  />
-                </TooltipTrigger>
-                <TooltipContent>
-                  {sentimentLabel(item.sentiment)}
-                </TooltipContent>
-              </Tooltip>
-              <a
-                href={item.url}
-                target='_blank'
-                rel='noreferrer'
-                className='min-w-0 flex-1 break-words hover:underline'
-              >
-                {item.title}
-                <ExternalLink className='ml-1 inline h-3 w-3 text-muted-foreground' />
-              </a>
-              <span className='shrink-0 text-xs text-muted-foreground tabular-nums'>
-                {formatDate(item.at, true)}
-              </span>
-            </li>
-          ))}
-        </ul>
+      {showAll ? (
+        <AllHeadlines competitorId={competitor.id} />
+      ) : headlines.length ? (
+        <HeadlineList headlines={headlines} />
       ) : (
         <p className='text-sm text-muted-foreground'>
           {paused
@@ -429,6 +506,20 @@ function CompetitorCard({
               )}
         </p>
       )}
+
+      {stats.month > headlines.length ? (
+        <Button
+          type='button'
+          variant='outline'
+          size='sm'
+          className='h-auto w-fit max-w-full py-1.5 whitespace-normal'
+          onClick={() => setShowAll(!showAll)}
+        >
+          {showAll
+            ? t('Yalnız son xəbərlər')
+            : t('Bütün xəbərlər ({0})', [stats.month])}
+        </Button>
+      ) : null}
     </li>
   )
 }

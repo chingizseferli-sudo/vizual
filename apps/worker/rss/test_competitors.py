@@ -56,25 +56,22 @@ class FakeRequests:
         return [call for call in self.calls if call["method"] == method and call["name"] == name]
 
 
-class FakeClaude:
-    """Stands in for anthropic.Anthropic: answers each messages.create with the next reply."""
+class FakeAI:
+    """Stands in for competitor_ai.OpenAIClient: answers each chat call with the next reply."""
 
-    def __init__(self, replies):
+    def __init__(self, replies, model="gpt-5-nano"):
         self.replies = list(replies)
         self.requests = []
-        self.messages = SimpleNamespace(create=self.create)
+        self.model = model
 
-    def create(self, **kwargs):
-        self.requests.append(kwargs)
+    def chat(self, body):
+        self.requests.append(body)
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
         if isinstance(reply, str):
-            return SimpleNamespace(stop_reason=reply, content=[])
-        return SimpleNamespace(
-            stop_reason="end_turn",
-            content=[SimpleNamespace(type="thinking", thinking=""), SimpleNamespace(type="text", text=json.dumps(reply))],
-        )
+            return {"choices": [{"finish_reason": reply, "message": {"content": None}}]}
+        return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(reply)}}]}
 
 
 USER_ID = "11111111-2222-3333-4444-555555555555"
@@ -121,7 +118,7 @@ def test_competitor_only_verdict_expires_when_keywords_change(sm):
 def test_classify_headlines_batches_and_marks_skipped(monkeypatch):
     monkeypatch.setattr(competitor_ai, "CLASSIFY_BATCH_SIZE", 2)
     items = [{"id": f"i{n}", "title": f"Başlıq {n}"} for n in range(1, 6)]
-    client = FakeClaude([
+    client = FakeAI([
         {"results": [{"n": 1, "sentiment": "positive", "topic": "tarif"}, {"n": 9, "sentiment": "negative", "topic": "x"}]},
         RuntimeError("overloaded"),
         {"results": [{"n": 1, "sentiment": "negative", "topic": "  şəbəkə nasazlığı  "}]},
@@ -133,20 +130,57 @@ def test_classify_headlines_batches_and_marks_skipped(monkeypatch):
         "i5": {"sentiment": "negative", "topic": "şəbəkə nasazlığı"},
     }
     request = client.requests[0]
-    assert request["model"] == "claude-haiku-5-5"
-    assert request["output_config"]["effort"] == "low"
-    assert request["output_config"]["format"]["type"] == "json_schema"
-    assert "1. Başlıq 1" in request["messages"][0]["content"]
+    assert request["reasoning_effort"] == "minimal"
+    assert request["response_format"]["type"] == "json_schema"
+    assert request["response_format"]["json_schema"]["strict"] is True
+    assert request["messages"][0]["role"] == "system"
+    assert "1. Başlıq 1" in request["messages"][1]["content"]
 
 
 def test_refusal_or_cut_off_reply_leaves_batch_for_next_run():
-    client = FakeClaude(["refusal"])
+    client = FakeAI(["length"])
     assert competitor_ai.classify_headlines(client, [{"id": "i1", "title": "x"}]) == {}
 
 
 def test_make_client_needs_api_key(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert competitor_ai.make_client() is None
+
+
+class FakeHttp:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def post(self, url, **kwargs):
+        self.calls.append({"url": url, **kwargs})
+        return self.responses.pop(0)
+
+
+def test_openai_client_sends_key_and_model_and_retries_rate_limit():
+    ok = FakeResponse(200, {"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]})
+    http = FakeHttp([FakeResponse(429, {"error": {"code": "rate_limit_exceeded"}}), ok])
+    client = competitor_ai.OpenAIClient("sk-test", model="gpt-5-nano", http=http)
+    assert client.chat({"messages": []})["choices"][0]["finish_reason"] == "stop"
+    assert len(http.calls) == 2
+    assert http.calls[0]["headers"]["Authorization"] == "Bearer sk-test"
+    assert http.calls[0]["json"]["model"] == "gpt-5-nano"
+
+
+def test_no_credit_is_not_retried_and_is_noted():
+    http = FakeHttp([FakeResponse(429, {"error": {"code": "insufficient_quota", "message": "quota"}})])
+    client = competitor_ai.OpenAIClient("sk-test", http=http)
+    competitor_ai.CREDIT_LOW["seen"] = False
+    assert competitor_ai.classify_headlines(client, [{"id": "i1", "title": "x"}]) == {}
+    assert len(http.calls) == 1
+    assert competitor_ai.CREDIT_LOW["seen"] is True
+    competitor_ai.CREDIT_LOW["seen"] = False
+
+
+def test_older_models_get_no_reasoning_effort():
+    client = FakeAI([{"results": []}], model="gpt-4o-mini")
+    competitor_ai.classify_headlines(client, [{"id": "i1", "title": "x"}])
+    assert "reasoning_effort" not in client.requests[0]
 
 
 def test_classify_pending_sentiment_saves_labels(sm):
@@ -155,7 +189,7 @@ def test_classify_pending_sentiment_saves_labels(sm):
         ("PATCH", "monitored_items"): FakeResponse(204, None),
     })
     sm.requests = fake
-    client = FakeClaude([{"results": [{"n": 1, "sentiment": "positive", "topic": "mükafat"}]}])
+    client = FakeAI([{"results": [{"n": 1, "sentiment": "positive", "topic": "mükafat"}]}])
     assert sm.classify_pending_sentiment(client) == 1
     patch = fake.find("PATCH", "monitored_items")[0]
     assert patch["params"] == {"id": "eq.i1"}
@@ -183,20 +217,20 @@ def summary_routes(stats, existing=()):
 def test_daily_summary_written_once_per_customer(sm):
     fake = FakeRequests(summary_routes(stats_rows(3), existing=["someone-else"]))
     sm.requests = fake
-    client = FakeClaude([{"summary": "Bakcell bu həftə daha çox xəbərdə keçir."}])
+    client = FakeAI([{"summary": "Bakcell bu həftə daha çox xəbərdə keçir."}])
     assert sm.write_competitor_summaries(client, [USER_ID, "someone-else"], date(2026, 10, 22)) == 1
-    prompt = client.requests[0]["messages"][0]["content"]
+    prompt = client.requests[0]["messages"][1]["content"]
     assert "Bakcell: 3 xəbər" in prompt and "Bakcell şəbəkəsində nasazlıq" in prompt and "ABB yeni filial açdı" in prompt
     saved = fake.find("POST", "competitor_insights")[0]["json"]
     assert saved["user_id"] == USER_ID and saved["insight_date"] == "2026-10-22"
-    assert saved["summary"].startswith("Bakcell") and saved["model"] == "claude-haiku-5-5"
+    assert saved["summary"].startswith("Bakcell") and saved["model"] == "gpt-5-nano"
     assert fake.find("GET", "monitor_matches")[0]["params"]["user_monitors.user_id"] == f"eq.{USER_ID}"
 
 
 def test_no_news_saves_stats_without_calling_ai(sm):
     fake = FakeRequests(summary_routes(stats_rows(0)))
     sm.requests = fake
-    client = FakeClaude([])
+    client = FakeAI([])
     assert sm.write_competitor_summaries(client, [USER_ID], date(2026, 10, 22)) == 1
     saved = fake.find("POST", "competitor_insights")[0]["json"]
     assert saved["summary"] is None and saved["model"] is None
@@ -206,13 +240,13 @@ def test_no_news_saves_stats_without_calling_ai(sm):
 def test_failed_summary_is_not_saved(sm):
     fake = FakeRequests(summary_routes(stats_rows(2)))
     sm.requests = fake
-    client = FakeClaude([RuntimeError("down")])
+    client = FakeAI([RuntimeError("down")])
     assert sm.write_competitor_summaries(client, [USER_ID], date(2026, 10, 22)) == 0
     assert not fake.find("POST", "competitor_insights")
 
 
 def test_ai_skipped_without_api_key_or_competitors(sm, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     fake = FakeRequests({})
     sm.requests = fake
     sm.competitor_ai_if_needed(KEYWORDS)
