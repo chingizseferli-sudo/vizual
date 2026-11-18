@@ -24,6 +24,25 @@ NOISE_HINT_RE = re.compile(
     r"breadcrumb|menu|footer|header|subscribe|newsletter|cookie|widget|login",
     re.IGNORECASE,
 )
+# Labels of the "read also" boxes sites put inside or right after the article text. The
+# headlines under them belong to other stories, so a keyword there is not this article's.
+_READ_ALSO_STRONG = (
+    r"həmçinin\s+(?:oxu|bax|izlə)|hemcinin\s+(?:oxu|bax)|oxşar\s+xəbər|oxsar\s+xeber|"
+    r"читайте\s+также|также\s+читайте|похожие\s+новости|read\s+also|also\s+read|see\s+also|"
+    r"related\s+(?:news|articles|stories)"
+)
+# Words that may also open a normal sentence ("Bu mövzuda nazir..."): only a label when
+# a colon/dash/end follows.
+_READ_ALSO_WEAK = (
+    r"digər\s+xəbərlər|diger\s+xeberler|bu\s+mövzuda|mövzu\s+ilə\s+bağlı|daha\s+çox\s+oxu|"
+    r"ən\s+çox\s+oxunan|son\s+xəbərlər|по\s+теме|читайте\s+по\s+теме|смотрите\s+также|"
+    r"другие\s+новости|последние\s+новости|read\s+more|more\s+news"
+)
+READ_ALSO_RE = re.compile(
+    rf"^\W*(?:(?:{_READ_ALSO_STRONG})|(?:{_READ_ALSO_WEAK})\s*(?:[:\-\u2013\u2014\u00bb>|]|$))",
+    re.IGNORECASE,
+)
+SHORT_BLOCK_CHARS = 400
 SPACE_RE = re.compile(r"\s+")
 
 
@@ -31,13 +50,19 @@ def _clean(text):
     return SPACE_RE.sub(" ", unescape(str(text or ""))).strip()
 
 
+def _drop_read_also_lines(text):
+    return "\n".join(line for line in str(text).splitlines() if not READ_ALSO_RE.match(line.strip()))
+
+
 def html_fragment_text(fragment):
-    """Plain text of an HTML snippet (RSS description, content:encoded)."""
+    """Plain text of an HTML snippet (RSS description, content:encoded), without "read also" links."""
     fragment = str(fragment or "")
     if "<" not in fragment:
-        return _clean(fragment)
+        return _clean(_drop_read_also_lines(fragment))
     try:
-        return _clean(BeautifulSoup(fragment[:MAX_HTML_CHARS], "lxml").get_text(" "))
+        soup = BeautifulSoup(fragment[:MAX_HTML_CHARS], "lxml")
+        _drop_other_stories(soup)
+        return _clean(soup.get_text(" "))
     except Exception:
         return _clean(re.sub(r"<[^>]+>", " ", fragment))
 
@@ -70,7 +95,7 @@ def _json_ld_body(soup):
             nodes.extend(child for child in node.get("@graph") or [] if isinstance(child, dict))
             body = node.get("articleBody")
             if isinstance(body, str) and len(_clean(body)) >= MIN_PARAGRAPH_CHARS:
-                return html_fragment_text(body)
+                return html_fragment_text(_drop_read_also_lines(body))
     return ""
 
 
@@ -90,6 +115,75 @@ def _is_noise(tag):
     return bool(hint.strip()) and bool(NOISE_HINT_RE.search(hint))
 
 
+def _text_len(tag):
+    return len(_clean(tag.get_text(" ")))
+
+
+def _link_share(tag):
+    text = _text_len(tag)
+    if not text:
+        return 0.0
+    return sum(_text_len(link) for link in tag.find_all("a")) / text
+
+
+def _plain_len(tag):
+    """Length of the text that is not link text."""
+    return _text_len(tag) - sum(_text_len(link) for link in tag.find_all("a"))
+
+
+def _short_block(tag):
+    """The largest box around tag that holds no article text of its own besides links."""
+    block = tag
+    while block.parent is not None and block.parent.name not in ("body", "html", "[document]", "article", "main"):
+        parent = block.parent
+        if _text_len(parent) > SHORT_BLOCK_CHARS or _plain_len(parent) - _plain_len(block) >= MIN_PARAGRAPH_CHARS:
+            break
+        block = parent
+    return block
+
+
+def _drop_other_stories(soup):
+    """Remove "read also" boxes and headline teasers that sit inside the article text."""
+    for label in soup.find_all(["p", "div", "span", "strong", "b", "em", "h2", "h3", "h4", "h5", "h6", "li", "section"]):
+        if label.decomposed or label.parent is None:
+            continue
+        text = _clean(label.get_text(" "))
+        if not text or not READ_ALSO_RE.match(text):
+            continue
+        if len(text) <= 40:
+            # A bare label ("Oxşar xəbərlər"): the list after it is the other stories.
+            block = _short_block(label)
+            following = block.find_next_sibling()
+            if following is not None and _link_share(following) >= 0.5:
+                following.decompose()
+            block.decompose()
+        elif len(text) <= SHORT_BLOCK_CHARS or _link_share(label) >= 0.3:
+            # "Həmçinin oxu: <a>Other story headline</a>"
+            _short_block(label).decompose()
+    for heading in soup.find_all(["h2", "h3", "h4", "h5"]):
+        if heading.decomposed or heading.parent is None:
+            continue
+        if heading.find_parent("a") is None and heading.find("a") is None:
+            continue
+        # A linked headline is a teaser card of another story, maybe with one lead paragraph.
+        anchor = heading.find_parent("a") or heading
+        card = heading.find_parent(["li", "article"]) or anchor.parent
+        if (
+            card is not None
+            and card.name not in ("body", "html", "[document]", "main")
+            and _text_len(card) <= SHORT_BLOCK_CHARS
+            and len(card.find_all("p")) <= 1
+        ):
+            card.decompose()
+        else:
+            anchor.decompose()
+    for block in soup.find_all(["p", "li", "ul", "ol", "div", "section", "table"]):
+        if block.decomposed or block.parent is None:
+            continue
+        if block.find("a") is not None and _link_share(block) >= 0.6:
+            block.decompose()
+
+
 def _paragraph_body(soup):
     """Text of the element holding most of the page's paragraph text (a small readability)."""
     for tag in soup(NOISE_TAGS):
@@ -97,6 +191,7 @@ def _paragraph_body(soup):
     for tag in soup.find_all(_is_noise):
         if tag.name not in ("html", "body"):
             tag.decompose()
+    _drop_other_stories(soup)
     marked = soup.find(attrs={"itemprop": "articleBody"})
     if marked:
         text = _clean(marked.get_text(" "))
