@@ -4941,6 +4941,56 @@ def notify_admins_about_demo_requests():
         print(f"Demo müraciəti bildirişi istisnasi: {exc}", flush=True)
 
 
+def notify_admins_about_feedback():
+    """Every cycle: tell admins on Telegram about suggestions and complaints from the site."""
+    if not supabase_ready():
+        return
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/feedback_messages",
+            headers=supabase_headers(),
+            params={
+                "select": "id,kind,name,email,message,page",
+                "notified_at": "is.null",
+                "order": "created_at.asc",
+                "limit": "10",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code != 200:
+            print(f"Təklif/irad oxuma xetasi: {response.status_code} | {response.text[:200]}", flush=True)
+            return
+        rows = response.json() or []
+        if not rows:
+            return
+        chat_ids = admin_chat_ids()
+        if not chat_ids:
+            return
+        blocks = []
+        for row in rows:
+            kind = "İrad" if row.get("kind") == "complaint" else "Təklif"
+            who = clean_text(row.get("name")) or "Adsız"
+            if row.get("email"):
+                who += f" ({clean_text(row.get('email'))})"
+            lines = [f"• {kind} — {who}", f"  {clean_text(row.get('message'))[:500]}"]
+            if row.get("page"):
+                lines.append(f"  Səhifə: {clean_text(row.get('page'))}")
+            blocks.append("\n".join(lines))
+        message = f"💬 Yeni təklif və iradlar ({len(rows)}):\n" + "\n\n".join(blocks) + "\n\nAdmin paneldə Təklif və iradlar bölməsinə baxın."
+        if not any([send_telegram(message, chat_id=chat_id, bypass_pause=True) for chat_id in chat_ids]):
+            return
+        ids = ",".join(row["id"] for row in rows if row.get("id"))
+        requests.patch(
+            f"{SUPABASE_URL}/rest/v1/feedback_messages",
+            headers=supabase_headers({"Prefer": "return=minimal"}),
+            params={"id": f"in.({ids})"},
+            json={"notified_at": datetime.now(BAKU_TZ).isoformat()},
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as exc:
+        print(f"Təklif/irad bildirişi istisnasi: {exc}", flush=True)
+
+
 def log_retention_rules(now):
     """(table, timestamp column, cutoff) for rows that are logs, not customer data."""
     log_cutoff = now - timedelta(days=max(LOG_RETENTION_DAYS, 1))
@@ -6010,6 +6060,7 @@ def check_sites(poll_commands=True):
     cleanup_old_monitor_data_if_needed()
     account_housekeeping_if_needed()
     notify_admins_about_demo_requests()
+    notify_admins_about_feedback()
     try:
         email_reports.send_due_reports(requests, SUPABASE_URL if supabase_ready() else "", supabase_headers(), REQUEST_TIMEOUT)
     except Exception as exc:

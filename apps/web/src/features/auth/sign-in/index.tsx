@@ -114,7 +114,7 @@ export function SignIn({ mode = 'customer', redirectTo }: SignInProps) {
         <CardHeader className='space-y-3'>
           <div className='text-xs font-medium text-muted-foreground'>{t("İstifadəçi iş masası")}</div>
           <CardTitle className='text-xl font-semibold tracking-tight text-foreground'>{t("Hesabınıza daxil olun")}</CardTitle>
-          <CardDescription className='leading-6'>{t("Monitorlarınızı, nəticələri və bildirişləri görmək üçün email və şifrənizi yazın. Hesabınız yoxdur?")}{' '}
+          <CardDescription className='leading-6'>{t("Açar sözlərinizi, nəticələri və bildirişləri görmək üçün email və şifrənizi yazın. Hesabınız yoxdur?")}{' '}
             <Link
               to='/sign-up'
               className='font-medium text-primary underline underline-offset-4 hover:opacity-80'

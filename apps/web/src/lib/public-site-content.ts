@@ -134,7 +134,7 @@ function storeContent(value: PublicSiteContent) {
 }
 
 export function initialPublicSiteContent(): PublicSiteContent {
-  if (getLang() === 'ru') return defaultPublicSiteContent
+  if (getLang() !== 'az') return defaultPublicSiteContent
   return contentCache?.value ?? readStoredContent() ?? defaultPublicSiteContent
 }
 
@@ -143,39 +143,38 @@ export const defaultPublicSiteContent: PublicSiteContent = {
     badge: t("Azərbaycan mediası üçün monitorinq"),
     tagline: t("Adınız xəbərə düşəndə ilk siz bilin."),
     description:
-      t("Vizual 280-dən çox Azərbaycan xəbər saytını hər 15 dəqiqədən bir, Facebook və Instagram-ı isə planınıza görə yoxlayır. Açar sözünüz harada çıxsa, linki Telegram-a göndəririk. Səhər mətbuat icmalını əl ilə yığmağa ehtiyac qalmır."),
+      t("280-dən çox xəbər saytını və sosial şəbəkələri sizin yerinizə izləyirik. Açar sözünüz harada çıxsa, linki dərhal Telegram-a göndəririk."),
     primaryCta: t("7 gün pulsuz sına"),
     secondaryCta: t("İstifadəçi girişi"),
   },
   services: {
     eyebrow: t("Xidmətlər"),
     title: t("Vizual.Az nə edir?"),
-    description:
-      t("Media gündəmini, sosial şəbəkələri və təşkilatınız haqqında yayımlanan məlumatları bir platformadan izləyin."),
+    description: '',
     items: [
       {
-        title: t("Media monitorinqi"),
-        description: t("Açar sözlərinizlə bağlı yerli media xəbərlərini avtomatik toplayır."),
+        title: t("Xəbər saytları"),
+        description: t("280-dən çox yerli sayt hər 15 dəqiqədən bir yoxlanılır."),
         icon: 'newspaper',
         status: t("Aktiv"),
       },
       {
-        title: t("Facebook və Instagram"),
-        description: t("Açar sözlərinizlə bağlı paylaşımları izləyir və Telegram-a göndərir."),
+        title: t("Sosial şəbəkələr"),
+        description: t("Facebook, Instagram, YouTube, X, LinkedIn və Telegram kanalları."),
         icon: 'file',
-        status: 'Beta',
+        status: t("Aktiv"),
       },
       {
-        title: t("Kommunikasiya analitikası"),
-        description: t("Nəticələrin ümumi mənzərəsi və kommunikasiyanın effektivliyi."),
+        title: t("Rəqib analizi"),
+        description: t("Rəqiblər haqqında xəbərlər və onların müsbət, neytral, mənfi tonu."),
         icon: 'megaphone',
-        status: t("Tezliklə"),
+        status: t("Aktiv"),
       },
       {
-        title: t("Qlobal xəbər axını"),
-        description: t("Beynəlxalq mənbələrdə seçdiyiniz mövzular üzrə xəbərlər."),
+        title: t("Email hesabatları"),
+        description: t("Gündəlik, həftəlik və aylıq xülasə email-inizə gəlir."),
         icon: 'search',
-        status: t("Tezliklə"),
+        status: t("Aktiv"),
       },
     ],
   },
@@ -186,17 +185,17 @@ export const defaultPublicSiteContent: PublicSiteContent = {
       {
         title: t("Universitetin mətbuat xidməti"),
         description:
-          t("Əvvəl hər səhər 20 saytı açıb universitetin adını axtarırdılar. İndi axşamdan bəri çıxan hər xəbər Telegram-dadır, həftəlik hesabat isə emailə gəlir."),
+          t("Hər səhər 20 saytı açmaq lazım deyil: universitet haqqında çıxan hər xəbər Telegram-a gəlir."),
       },
       {
         title: t("Bankın PR komandası"),
         description:
-          t("Müştəri şikayəti Facebook-da çıxanda bildiriş gəlir. Cavab saatlar sonra yox, eyni səhər verilir."),
+          t("Facebook-da müştəri şikayəti çıxanda bildiriş gəlir, cavab eyni gün verilir."),
       },
       {
         title: t("PR agentliyi"),
         description:
-          t("Hər müştərinin adı ayrıca açar sözdür. Kampaniyadan sonra neçə saytda çıxdığını saymaq üçün nəticələri bir kliklə ixrac edirsiniz."),
+          t("Hər müştəri ayrıca açar sözdür, kampaniya nəticələri bir kliklə ixrac olunur."),
       },
     ],
   },
@@ -297,32 +296,32 @@ export const defaultPublicSiteContent: PublicSiteContent = {
   },
   about: {
     eyebrow: t("Haqqımızda"),
-    title: t("Vizual.Az nədir və nə üçün lazımdır?"),
+    title: t("Vizual.Az nədir?"),
     description:
-      t("Vizual.Az təşkilatlar, universitetlər, şirkətlər, banklar, media və PR komandaları üçün kommunikasiya və media monitorinq platformasıdır. Məqsəd çox məlumat göstərmək deyil, vacib məlumatı vaxtında çatdırmaq və düzgün qərar verməyə kömək etməkdir."),
+      t("Vizual Azərbaycanda hazırlanmış media monitorinq xidmətidir. Təşkilatınızın, rəhbərlərinizin və rəqiblərinizin adı xəbər saytlarında və sosial şəbəkələrdə çıxanda sizə ilk xəbər verən biz oluruq."),
     principles: [
       {
         title: t("Yerli bazar üçün"),
         description:
-          t("Azərbaycan media mənbələri və təşkilatların real kommunikasiya ehtiyacları nəzərə alınır."),
+          t("Azərbaycan dilinin xüsusiyyətlərini (İ/ı, şəkilçilər) və yerli saytları yaxşı tanıyırıq."),
       },
       {
-        title: t("Vaxtında xəbərdarlıq"),
+        title: t("Vaxtında xəbər"),
         description:
-          t("Açar sözlər üzrə vacib xəbərlər və paylaşımlar vaxtında görünür."),
+          t("Xəbər tapılan kimi Telegram-a gəlir, səhər icmalını gözləmirsiniz."),
       },
       {
-        title: t("Qərar üçün siqnal"),
+        title: t("Az, amma vacib"),
         description:
-          t("Məqsəd məlumatı artırmaq yox, vacib siqnalı aydın və istifadəyə hazır formada göstərməkdir."),
+          t("Hər şeyi yox, yalnız sizin açar sözlərinizə uyğun olanı göstəririk."),
       },
     ],
   },
   contact: {
     eyebrow: t("Əlaqə"),
-    title: t("Sınaq, əməkdaşlıq və dəstək üçün əlaqə saxlayın"),
+    title: t("Bizimlə əlaqə saxlayın"),
     description:
-      t("Vizual.Az-ı komandanızın media monitorinqi, sosial şəbəkə izləmə və bildiriş ehtiyaclarına görə necə istifadə edə biləcəyinizi birlikdə nəzərdən keçirək."),
+      t("Sınaq, əməkdaşlıq və ya sual üçün bizə yazın və ya zəng edin."),
     cardTitle: t("Sınaq müraciəti"),
     cardDescription:
       t("Formu doldurun, komandamız sizinlə əlaqə saxlayacaq."),
@@ -360,9 +359,9 @@ function mergeWithDefaults<T>(defaults: T, value: unknown): T {
 }
 
 export async function loadPublicSiteContent(): Promise<PublicSiteContent> {
-  // Sections edited in the admin panel are Azerbaijani only; Russian visitors
-  // get the translated built-in texts.
-  if (getLang() === 'ru') return defaultPublicSiteContent
+  // Sections edited in the admin panel are Azerbaijani only; Russian and
+  // English visitors get the translated built-in texts.
+  if (getLang() !== 'az') return defaultPublicSiteContent
 
   if (contentCache && contentCache.expiresAt > Date.now()) {
     return contentCache.value

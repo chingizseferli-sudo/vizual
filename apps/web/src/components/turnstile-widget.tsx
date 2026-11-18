@@ -75,7 +75,7 @@ export function TurnstileWidget({
           sitekey: siteKey,
           theme: resolvedTheme,
           // Turnstile has no Azerbaijani; 'auto' follows the browser.
-          language: getLang() === 'ru' ? 'ru' : 'auto',
+          language: getLang() === 'az' ? 'auto' : getLang(),
           size: 'flexible',
           callback: (token) => onToken(token),
           'expired-callback': () => onToken(null),
