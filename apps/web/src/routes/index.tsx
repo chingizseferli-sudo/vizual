@@ -16,19 +16,6 @@ import {
   SectionHeading,
 } from '@/components/public-site/public-site-shell'
 
-// A few of the news sites the worker reads. The full list lives in the
-// database; these are only named so visitors see real, familiar sources.
-const sampleSources = [
-  'azertag.az',
-  'apa.az',
-  'report.az',
-  'oxu.az',
-  'trend.az',
-  'qafqazinfo.az',
-  'musavat.com',
-  'axar.az',
-]
-
 // Mirrors the layout of the worker's real Telegram alert (alert_message in
 // apps/worker/rss/site_monitor.py) so the hero shows what customers receive.
 function TelegramAlertPreview({ items }: { items: PublicDemoItem[] }) {
@@ -117,19 +104,6 @@ function IndexPage() {
           </div>
 
           <TelegramAlertPreview items={content.demo.items} />
-        </section>
-
-        <section className='border-y border-slate-200 bg-white'>
-          <div className='mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-5 py-5 text-sm md:px-8'>
-            {sampleSources.map((source) => (
-              <span key={source} className='text-slate-500'>
-                {source}
-              </span>
-            ))}
-            <span className='text-slate-500'>
-              {t('və 280-dən çox başqa sayt')}
-            </span>
-          </div>
         </section>
 
         <section id='services' className='mx-auto max-w-7xl px-5 py-20 md:px-8'>
