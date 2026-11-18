@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { Check, ChevronRight, Contact, Phone } from 'lucide-react'
+import { Check, ChevronRight, Contact } from 'lucide-react'
 import { t } from '@/lib/i18n'
 import {
   initialPublicSiteContent,
@@ -9,7 +9,6 @@ import {
   type PublicDemoItem,
 } from '@/lib/public-site-content'
 import { DemoRequestForm } from '@/components/public-site/demo-request-form'
-import { CONTACT_PHONE } from '@/components/public-site/contact'
 import {
   PublicFooter,
   PublicHeader,
@@ -213,13 +212,6 @@ function IndexPage() {
                 <p className='mt-4 max-w-2xl text-base leading-7 text-slate-300'>
                   {content.contact.description}
                 </p>
-                <a
-                  href={`tel:${CONTACT_PHONE.replace(/\s/g, '')}`}
-                  className='mt-6 inline-flex items-center gap-2 text-lg font-bold text-white hover:underline'
-                >
-                  <Phone className='h-5 w-5' />
-                  {CONTACT_PHONE}
-                </a>
               </div>
               <div className='rounded-2xl bg-white p-5 text-slate-950 md:p-6'>
                 <Contact className='h-6 w-6 text-[#1463ff]' />
