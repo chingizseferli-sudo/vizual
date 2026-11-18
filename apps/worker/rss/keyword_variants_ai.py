@@ -1,8 +1,8 @@
-"""One-time Claude suggestions of other spellings for customer keywords.
+"""One-time AI suggestions of other spellings for customer keywords.
 
 A keyword is usually Azerbaijani; the same name in English or Russian news is written
 differently ("Azərbaycan Hava Yolları" / "Azerbaijan Airlines" / "Азербайджанские
-авиалинии"). Claude is asked once per keyword, never per article; the customer picks
+авиалинии"). The model is asked once per keyword, never per article; the customer picks
 which suggestions to keep. Only the keyword text is sent.
 """
 from competitor_ai import _json_reply, note_api_error
@@ -59,7 +59,7 @@ def clean_variants(keyword, variants):
 
 
 def suggest_variants(client, keywords):
-    """keywords: [str] -> {keyword: [variant, ...]} for every keyword of each batch Claude answered.
+    """keywords: [str] -> {keyword: [variant, ...]} for every keyword of each batch the model answered.
 
     A batch that failed is left out, so its keywords are asked again later."""
     suggestions = {}

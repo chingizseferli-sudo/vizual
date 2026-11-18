@@ -20,7 +20,7 @@ After you open a PR, or when asked to land work, go through every open PR agains
    - `supabase/functions/` (owner runs `npx supabase functions deploy <name>`)
    - new env vars or secrets (Vercel, Railway, Supabase)
    - Railway/CI setup: `Dockerfile`, `railway.json`, `start.sh`, `.github/workflows/`
-   - anything that raises paid API usage (Apify, SocialFetch, Anthropic, YouTube quota)
+   - anything that raises paid API usage (Apify, SocialFetch, OpenAI, YouTube quota)
    Such PRs stay open; tell the owner the exact steps they need.
 4. Merge one PR at a time and re-check the next one against the new `main`.
 5. A push to `main` deploys to production (Vercel + Railway). If unsure a PR is safe, do not merge; ask.

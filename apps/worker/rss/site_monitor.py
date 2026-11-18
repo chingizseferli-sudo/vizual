@@ -5271,7 +5271,7 @@ def competitor_ai_client():
         COMPETITOR_AI["client"] = competitor_ai.make_client()
         COMPETITOR_AI["client_ready"] = True
         if COMPETITOR_AI["client"] is None:
-            print("ANTHROPIC_API_KEY yoxdur: rəqiblər səhifəsi AI təhlilsiz işləyir.", flush=True)
+            print("OPENAI_API_KEY yoxdur: rəqiblər səhifəsi və açar söz variantları AI-siz işləyir.", flush=True)
     return COMPETITOR_AI["client"]
 
 
@@ -5281,7 +5281,7 @@ KEYWORD_VARIANTS_RETRY = timedelta(minutes=30)
 
 
 def keyword_rows_needing_variants(rows):
-    """Active keyword rows never sent to Claude. Rows without the column (before
+    """Active keyword rows never sent to the AI. Rows without the column (before
     migration 20261116000001) are skipped."""
     return [row for row in rows or [] if row.get("id") and "alias_suggestions" in row and row.get("alias_suggestions") is None]
 
@@ -5308,7 +5308,7 @@ def save_keyword_variant_suggestions(rows, suggestions_by_fold):
 
 
 def keyword_variants_if_needed(monitor_keywords_cache, now=None):
-    """Ask Claude once per distinct keyword for its English/Russian forms (few calls a day)."""
+    """Ask the AI once per distinct keyword for its English/Russian forms (few calls a day)."""
     rows = keyword_rows_needing_variants(monitor_keywords_cache)
     if not rows or not supabase_ready():
         return
@@ -5383,7 +5383,7 @@ def competitor_ai_if_needed(competitor_keywords_cache, now=None):
         write_competitor_summaries(client, user_ids, now.date())
     if competitor_ai.CREDIT_LOW["seen"]:
         competitor_ai.CREDIT_LOW["seen"] = False
-        save_runtime_state("anthropic_credit_low", {"at": datetime.now(BAKU_TZ).isoformat()})
+        save_runtime_state("ai_credit_low", {"at": datetime.now(BAKU_TZ).isoformat()})
 
 
 def classify_pending_sentiment(client):
