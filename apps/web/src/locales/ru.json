@@ -877,5 +877,6 @@
   "Hesab məlumatları və plan istifadəsi bu bölmədə göstərilir.": "Здесь показаны данные аккаунта и использование тарифа.",
   "Bildirişlərin hara getdiyini burada seçin və göndərilən bildirişlərin tarixçəsinə baxın.": "Выберите, куда приходят уведомления, и смотрите историю отправленных уведомлений.",
   "CSV ixrac et": "Экспорт CSV",
-  "Bütün xəbərlər ({0})": "Все новости ({0})"
+  "Bütün xəbərlər ({0})": "Все новости ({0})",
+  "Daha çox göstər ({0} / {1})": "Показать ещё ({0} / {1})"
 }
