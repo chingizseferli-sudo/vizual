@@ -147,6 +147,11 @@ NEWS_CATEGORIES = {
     "sosial", "siyasət", "hadisə", "cəmiyyət", "iqtisadiyyat", "dünya",
     "ölkə", "təhsil", "elm", "mədəniyyət", "idman", "kriminal",
     "region", "bölgə", "maraqlı", "şou", "sağlamlıq", "texnologiya",
+    # /ru/ and /en/ editions label their cards the same way.
+    "политика", "общество", "экономика", "мир", "в мире", "происшествия", "криминал",
+    "спорт", "культура", "здоровье", "образование", "наука", "технологии", "регионы",
+    "интересное", "шоу-бизнес", "politics", "society", "economy", "world", "incidents",
+    "sport", "sports", "culture", "health", "education", "science", "technology", "regions",
 }
 
 TITLE_NOISE_LABELS = {
@@ -2232,6 +2237,18 @@ def slug_consensus_title(slug_rejected):
     return None
 
 
+def strip_site_name_suffix(title, domain):
+    """'Headline | innews media' -> 'Headline' when the tail names the site itself."""
+    base = re.sub(r"[^a-z0-9]", "", clean_text(domain).lower().replace("www.", "").split(".")[0])
+    found = re.search(r"\s+[|\-\u2013\u2014:\u2022\u00bb]+\s*([^|\-\u2013\u2014]{2,40})$", title or "")
+    if not base or len(base) < 3 or not found:
+        return title
+    tail = re.sub(r"[^a-z0-9]", "", found.group(1).lower())
+    if tail and (tail.startswith(base) or base.startswith(tail)):
+        return title[:found.start()].strip()
+    return title
+
+
 def extract_article_title_info_from_html(page_html, article_url=None, source_domain=None):
     try:
         soup = BeautifulSoup(page_html or "", "html.parser")
@@ -2239,9 +2256,10 @@ def extract_article_title_info_from_html(page_html, article_url=None, source_dom
         return {"title": "", "method": "parse_error", "raw_title": "", "reject_reason": "parse_error"}
 
     candidates = []
+    site_domain = source_domain or get_domain(article_url)
 
     def add_candidate(method, value):
-        value = clean_text(value)
+        value = strip_site_name_suffix(clean_text(value), site_domain)
         if value:
             candidates.append((method, value))
 
@@ -2274,8 +2292,8 @@ def extract_article_title_info_from_html(page_html, article_url=None, source_dom
             add_candidate(f"meta_{key}", tag.get("content"))
 
     for selector in ("article h1", "main h1", "h1", ".article-title", ".news-title", ".post-title", ".entry-title"):
-        tag = soup.select_one(selector)
-        if tag:
+        # Some pages put the section name in an earlier <h1> ("Здоровье"), so look past the first.
+        for tag in soup.select(selector)[:3]:
             add_candidate(f"selector:{selector}", tag.get_text(" ", strip=True))
 
     for selector in ("article h2", "main h2"):
@@ -2627,25 +2645,6 @@ def article_keyword_matcher(title, body=""):
 
     matcher.body_only = body_only
     return matcher
-
-
-def body_excerpt(keyword, body, width=180):
-    """A short piece of the text around the keyword, for the alert."""
-    body = clean_text(body)
-    folded = keyword_fold(body)
-    if not body or len(folded) != len(body):
-        return ""
-    found = keyword_span(keyword_fold(keyword), folded)
-    if not found:
-        return ""
-    start = max(0, found[0] - width // 2)
-    end = min(len(body), found[1] + width // 2)
-    if start > 0:
-        start = body.rfind(" ", 0, start) + 1
-    if end < len(body):
-        space = body.find(" ", end)
-        end = space if space != -1 else len(body)
-    return ("…" if start > 0 else "") + body[start:end].strip() + ("…" if end < len(body) else "")
 
 
 def keyword_match(title, keywords):
@@ -5779,29 +5778,12 @@ def expand_language_variants(sites):
     return sites + extra
 
 
-def body_only_excerpt(keywords, matcher, item, keyword_rows=None):
-    """Text around the first keyword (or variant) that is not in the headline, so the alert shows why it matched."""
-    body_only = getattr(matcher, "body_only", set())
-    wanted = {keyword_fold(keyword).strip() for keyword in keywords}
-    terms = list(keywords)
-    for row in keyword_rows or []:
-        if keyword_fold(row.get("keyword")).strip() in wanted:
-            terms.extend(keyword_terms(row)[1:])
-    for term in terms:
-        if keyword_fold(term).strip() in body_only:
-            excerpt = body_excerpt(term, article_body_text(item))
-            if excerpt:
-                return excerpt
-    return ""
-
-
-def alert_message(title, source, keywords_text, published_time, link, excerpt=""):
-    excerpt_block = f"\nMətndən:\n{excerpt}\n" if excerpt else ""
+def alert_message(title, source, keywords_text, published_time, link):
     return f"""Yeni uyğun xəbər
 
 Başlıq:
 {title}
-{excerpt_block}
+
 Mənbə:
 {source}
 
@@ -5978,8 +5960,7 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
         if not target_chat_ids:
             result["reason"] = "no_telegram_recipient"
             print(f"Telegram alıcısı yoxdur, xəbər panel üçün saxlandı: {source} | {clean_title[:70]}", flush=True)
-            update_source_health(site, result)
-            return result
+            continue
 
         sent_chats = set()
         sent_any = False
@@ -5992,26 +5973,31 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
             chat_matches = [match for match in monitor_matches if clean_text(match.get("telegram_chat_id")) == chat_id]
             chat_keywords = clean_matched_keywords([match.get("keyword") for match in chat_matches])
             chat_keywords_text = ", ".join(chat_keywords) or matched_keywords_text
-            chat_message = alert_message(clean_title, source, chat_keywords_text, published_time, link, body_only_excerpt(chat_keywords, matcher, item, monitor_keywords_cache))
+            chat_message = alert_message(clean_title, source, chat_keywords_text, published_time, link)
             if send_telegram(chat_message, chat_id=chat_id):
                 sent_chats.add(chat_id)
                 sent_any = True
 
         if sent_any:
+            published_dt = parse_datetime_to_baku(published_time)
+            lag = f"{max(0, int((datetime.now(BAKU_TZ) - published_dt).total_seconds() // 60))} dəq" if published_dt else "-"
             print(
                 f"✅ [{index}/{total}] Göndərildi: {source} | method={item.get('title_method') or '-'} "
+                f"| oxuma={site.get('_read_method') or site.get('monitor_method') or '-'} | gecikmə={lag} "
                 f"| title={clean_title[:70]} | Açar sözlər: {matched_keywords_text}",
                 flush=True,
             )
-            result["sent"] = 1
-            result["reason"] = "sent"
+            # Every fresh match on the page goes out in this check; waiting for the next
+            # check of the site (5-20 min each) delayed the 2nd, 3rd... story of a busy hour.
+            result["sent"] += 1
             time.sleep(1)
-            update_source_health(site, result)
-            return result
+            continue
 
         release_reserved_news(link)
         result["reason"] = TELEGRAM_LAST_ERROR or "telegram_error"
 
+    if result["sent"]:
+        result["reason"] = "sent"
     print(f"📊 [{index}/{total}] {site['name']} | namizəd={len(items)} | göndərildi=0 | nəticə={result['reason']} | vaxt={time.time() - started:.1f}s", flush=True)
     update_source_health(site, result)
     return result
