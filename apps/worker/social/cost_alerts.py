@@ -6,9 +6,8 @@ Checked by the social collector every COST_ALERT_CHECK_MINUTES:
 - SocialFetch: spendable credits (GET /v1/balance, free) and billing state.
 - Our own monthly budgets in social_settings (total and per platform).
 - YouTube: the daily quota is used up.
-- Anthropic: the rss worker saw a "credit balance is too low" error in the
-  last 24 hours (runtime state anthropic_credit_low). Anthropic has no
-  balance API for normal keys.
+- OpenAI: the rss worker saw an insufficient_quota error in the last 24 hours
+  (runtime state ai_credit_low). OpenAI has no balance API for normal keys.
 
 Each alert has an id that includes its period (month, billing cycle, day), and
 goes out once per level ("warn" at social_settings.cost_alert_percent, "full"
@@ -34,8 +33,8 @@ APIFY_BASE = "https://api.apify.com/v2"
 SOCIALFETCH_BASE = "https://api.socialfetch.dev"
 CHECK_EVERY = timedelta(minutes=max(5, int(os.getenv("COST_ALERT_CHECK_MINUTES", "30"))))
 STATE_KEY = "cost_alerts_sent"
-ANTHROPIC_STATE_KEY = "anthropic_credit_low"
-ANTHROPIC_ALERT_HOURS = 24
+AI_STATE_KEY = "ai_credit_low"
+AI_ALERT_HOURS = 24
 DEFAULT_PERCENT = 80
 DEFAULT_SOCIALFETCH_CREDITS = 1000
 LEVEL_RANK = {"warn": 1, "full": 2}
@@ -120,7 +119,7 @@ def percent_level(used, limit, percent):
     return None
 
 
-def find_alerts(settings, now, usage, youtube_used=0, apify=None, socialfetch=None, anthropic_low_at=None):
+def find_alerts(settings, now, usage, youtube_used=0, apify=None, socialfetch=None, ai_low_at=None):
     """Pure: the alerts that apply now. Each: {"id", "level", "text"}."""
     percent = alert_percent(settings)
     month = f"{now:%Y-%m}"
@@ -181,11 +180,11 @@ def find_alerts(settings, now, usage, youtube_used=0, apify=None, socialfetch=No
                 "text": f"YouTube gündəlik kvotası dolub ({youtube_used} / {quota} vahid): axtarış sabaha qədər dayanıb.",
             })
 
-    if anthropic_low_at and now - anthropic_low_at <= timedelta(hours=ANTHROPIC_ALERT_HOURS):
+    if ai_low_at and now - ai_low_at <= timedelta(hours=AI_ALERT_HOURS):
         alerts.append({
-            "id": "anthropic_credit",
+            "id": "ai_credit",
             "level": "full",
-            "text": "Anthropic (Claude API): kredit balansı bitib. Rəqib təhlili işləmir; console.anthropic.com-da balansı artırın.",
+            "text": "OpenAI API: balans bitib. Rəqib təhlili və açar söz variantları işləmir; platform.openai.com-da balansı artırın.",
         })
     return alerts
 
@@ -269,8 +268,8 @@ def deliver(alerts, recipients, send_telegram=None, send_email=None, smtp=None):
 # Check --------------------------------------------------------------------------------
 
 
-def anthropic_low_since():
-    ok, value = sm.load_runtime_state(ANTHROPIC_STATE_KEY)
+def ai_low_since():
+    ok, value = sm.load_runtime_state(AI_STATE_KEY)
     if not ok or not isinstance(value, dict) or not value.get("at"):
         return None
     try:
@@ -295,7 +294,7 @@ def check(settings, now, read_usage, read_youtube_used, apify_token, socialfetch
             youtube_used=read_youtube_used(),
             apify=apify_limits(apify_token),
             socialfetch=socialfetch_balance(socialfetch_key),
-            anthropic_low_at=anthropic_low_since(),
+            ai_low_at=ai_low_since(),
         )
         ok, sent = sm.load_runtime_state(STATE_KEY)
         if not ok:
