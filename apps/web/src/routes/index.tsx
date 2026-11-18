@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { Check, ChevronRight, Contact, PlayCircle } from 'lucide-react'
+import { Check, ChevronRight, Contact, Phone } from 'lucide-react'
 import { t } from '@/lib/i18n'
 import {
   initialPublicSiteContent,
@@ -9,8 +9,8 @@ import {
   type PublicDemoItem,
 } from '@/lib/public-site-content'
 import { DemoRequestForm } from '@/components/public-site/demo-request-form'
+import { CONTACT_PHONE } from '@/components/public-site/contact'
 import {
-  PublicFaq,
   PublicFooter,
   PublicHeader,
   SectionHeading,
@@ -115,9 +115,7 @@ function IndexPage() {
               </Link>
             </div>
             <p className='mt-4 text-sm text-slate-500'>
-              {t(
-                'Ödəniş kartı tələb olunmur. Açar sözü yazırsınız, Telegram-ı qoşursunuz.'
-              )}
+              {t('Ödəniş kartı tələb olunmur.')}
             </p>
           </div>
 
@@ -146,7 +144,7 @@ function IndexPage() {
             title={content.services.title}
             description={content.services.description}
           />
-          <div className='mx-auto grid max-w-4xl gap-4 sm:grid-cols-2'>
+          <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
             {live.map((service) => (
               <article
                 key={service.title}
@@ -196,34 +194,6 @@ function IndexPage() {
           </div>
         </section>
 
-        <section id='demo' className='mx-auto max-w-7xl px-5 py-12 md:px-8'>
-          <div className='flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 md:flex-row md:items-center md:justify-between md:p-8'>
-            <div className='max-w-2xl'>
-              <h2 className='text-2xl font-extrabold tracking-tight text-slate-950 md:text-3xl'>
-                {content.demo.title}
-              </h2>
-              <p className='mt-3 text-base leading-7 text-slate-600'>
-                {content.demo.description}
-              </p>
-            </div>
-            <div className='flex shrink-0 flex-wrap gap-3'>
-              <Link
-                to='/monitor/workspace-preview'
-                className='inline-flex h-11 items-center gap-2 rounded-lg bg-[#1463ff] px-4 text-sm font-bold text-white hover:bg-blue-700'
-              >
-                {content.demo.primaryCta}
-                <PlayCircle className='h-4 w-4' />
-              </Link>
-              <Link
-                to='/contact'
-                className='inline-flex h-11 items-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-800 hover:bg-slate-50'
-              >
-                {content.demo.secondaryCta}
-              </Link>
-            </div>
-          </div>
-        </section>
-
         <section id='pricing' className='mx-auto max-w-7xl px-5 py-20 md:px-8'>
           <SectionHeading
             eyebrow={content.pricing.eyebrow}
@@ -241,9 +211,6 @@ function IndexPage() {
                 <p className='mt-3 text-3xl font-black text-slate-950'>
                   {plan.price}
                 </p>
-                <p className='mt-3 text-sm leading-6 text-slate-600'>
-                  {plan.description}
-                </p>
                 <ul className='mt-5 grid gap-3 text-sm text-slate-700'>
                   {plan.features.map((feature) => (
                     <li key={feature} className='flex gap-2'>
@@ -255,9 +222,15 @@ function IndexPage() {
               </article>
             ))}
           </div>
+          <p className='mt-6 text-center text-sm'>
+            <Link
+              to='/pricing'
+              className='font-bold text-[#1463ff] hover:underline'
+            >
+              {t('Planları müqayisə et və suallara bax')}
+            </Link>
+          </p>
         </section>
-
-        <PublicFaq />
 
         <section id='contact' className='mx-auto max-w-7xl px-5 py-20 md:px-8'>
           <div className='rounded-2xl bg-slate-900 p-6 text-white md:p-10'>
@@ -272,6 +245,13 @@ function IndexPage() {
                 <p className='mt-4 max-w-2xl text-base leading-7 text-slate-300'>
                   {content.contact.description}
                 </p>
+                <a
+                  href={`tel:${CONTACT_PHONE.replace(/\s/g, '')}`}
+                  className='mt-6 inline-flex items-center gap-2 text-lg font-bold text-white hover:underline'
+                >
+                  <Phone className='h-5 w-5' />
+                  {CONTACT_PHONE}
+                </a>
               </div>
               <div className='rounded-2xl bg-white p-5 text-slate-950 md:p-6'>
                 <Contact className='h-6 w-6 text-[#1463ff]' />

@@ -93,3 +93,48 @@ export async function submitDemoRequest(
     return 'error'
   }
 }
+
+export type FeedbackInput = {
+  kind: 'suggestion' | 'complaint'
+  name: string
+  email: string
+  message: string
+  page: string
+  lang: string
+  // Hidden from people; bots fill it, and the server then drops the message.
+  website: string
+}
+
+// Sends the public "suggestions and complaints" form (submit_feedback in SQL).
+export async function submitFeedback(
+  input: FeedbackInput
+): Promise<'ok' | 'rate_limited' | 'error'> {
+  if (!clientEnv.isConfigured) return 'error'
+  try {
+    const response = await fetch(
+      `${clientEnv.supabaseUrl}/rest/v1/rpc/submit_feedback`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: clientEnv.supabaseAnonKey,
+          Authorization: `Bearer ${clientEnv.supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_kind: input.kind,
+          p_name: input.name,
+          p_email: input.email,
+          p_message: input.message,
+          p_page: input.page,
+          p_lang: input.lang,
+          p_website: input.website,
+        }),
+      }
+    )
+    if (response.ok) return 'ok'
+    const body = await response.text()
+    return body.includes('too_many_requests') ? 'rate_limited' : 'error'
+  } catch {
+    return 'error'
+  }
+}

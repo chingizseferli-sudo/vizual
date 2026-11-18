@@ -18,7 +18,7 @@ const label = {
   contact: t('Əlaqə'),
   login: t('İstifadəçi girişi'),
   register: t('Hesab yarat'),
-  demoRequest: t('Sınaq müraciəti'),
+  feedback: t('Təklif və iradlar'),
   demo: t('Sınaq'),
   trial: t('7 gün pulsuz sına'),
   openMenu: t('Menyunu aç'),
@@ -144,7 +144,10 @@ export function PublicFooter() {
           <Link to='/contact'>{label.contact}</Link>
           <Link to='/sign-in'>{label.login}</Link>
           <Link to='/sign-up'>{label.register}</Link>
-          <Link to='/contact'>{label.demoRequest}</Link>
+          <Link to='/about'>{label.about}</Link>
+          <Link to='/contact' hash='feedback'>
+            {label.feedback}
+          </Link>
         </div>
       </div>
     </footer>
@@ -227,11 +230,11 @@ export function PublicFaq() {
     },
     {
       q: t("Xəbərlər nə qədər tez gəlir?"),
-      a: t("Mənbələr dövri yoxlanılır (adətən hər 5–10 dəqiqədə) və uyğun xəbər tapılan kimi Telegram-a göndərilir."),
+      a: t("Xəbər saytları hər 15 dəqiqədən bir yoxlanılır və uyğun xəbər tapılan kimi Telegram-a göndərilir. Sosial şəbəkələr planınıza görə gündə 1–4 dəfə yoxlanılır."),
     },
     {
       q: t("Hansı mənbələr izlənir?"),
-      a: t("Yüzlərlə yerli xəbər mənbəyi izlənir. Facebook və Instagram izləməsi beta mərhələsindədir."),
+      a: t("280-dən çox yerli xəbər saytı, həmçinin Facebook, Instagram, YouTube, X, LinkedIn və seçilmiş Telegram kanalları."),
     },
     {
       q: t("Bildirişləri harada alıram?"),

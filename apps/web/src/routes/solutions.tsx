@@ -107,7 +107,7 @@ function SolutionsPage() {
             </PublicCard>
             <PublicCard>
               <h3 className='font-extrabold text-slate-950'>{t("Sosial şəbəkə izləmə")}</h3>
-              <p className='mt-3 text-sm leading-6 text-slate-600'>{t("Facebook və Instagram paylaşımları açar sözlər üzrə toplanır və bildiriş göndərilir.")}</p>
+              <p className='mt-3 text-sm leading-6 text-slate-600'>{t("Facebook, Instagram, YouTube, X və LinkedIn paylaşımları açar sözlər üzrə toplanır və bildiriş göndərilir.")}</p>
             </PublicCard>
           </div>
         </section>

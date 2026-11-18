@@ -189,9 +189,9 @@ function DemoRequestsPage() {
                     >
                       {request.status === 'new' ? 'Yeni' : 'Cavablandı'}
                     </span>
-                    {request.lang === 'ru' ? (
-                      <span className='rounded-full border px-2 py-0.5 text-xs text-muted-foreground'>
-                        RU
+                    {request.lang !== 'az' ? (
+                      <span className='rounded-full border px-2 py-0.5 text-xs text-muted-foreground uppercase'>
+                        {request.lang}
                       </span>
                     ) : null}
                   </div>

@@ -4,6 +4,7 @@
   Inbox,
   Globe,
   LayoutDashboard,
+  MessageSquareText,
   Send,
   Settings,
   Share2,
@@ -45,6 +46,11 @@ export const sidebarData: SidebarData = {
           title: 'Demo müraciətləri',
           url: '/admin/demo-requests',
           icon: Inbox,
+        },
+        {
+          title: 'Təklif və iradlar',
+          url: '/admin/feedback',
+          icon: MessageSquareText,
         },
         {
           title: 'Plan və abunəliklər',

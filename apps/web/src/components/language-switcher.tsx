@@ -14,7 +14,7 @@ export function LanguageSwitcher({ className }: LanguageSwitcherProps) {
   return (
     <div
       role='group'
-      aria-label='Dil / Язык'
+      aria-label='Dil / Язык / Language'
       className={cn(
         'inline-flex h-9 shrink-0 items-center rounded-lg border border-border bg-card p-0.5 text-xs font-semibold',
         className

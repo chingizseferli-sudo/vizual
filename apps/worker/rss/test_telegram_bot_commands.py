@@ -524,6 +524,45 @@ def test_no_demo_requests_sends_nothing(sm):
     assert not fake.find("PATCH", "demo_requests")
 
 
+def feedback_routes(rows):
+    return {
+        ("GET", "feedback_messages"): FakeResponse(200, rows),
+        ("PATCH", "feedback_messages"): FakeResponse(204, None, text=""),
+        ("GET", "user_profiles"): FakeResponse(200, [{"telegram_chat_id": CHAT_ID}]),  # admin's chat
+        ("POST", "sendMessage"): FakeResponse(200, {"ok": True}),
+        **ADMIN,
+    }
+
+
+def test_new_feedback_is_sent_to_admins_and_marked(sm):
+    message_id = "99999999-0000-0000-0000-000000000002"
+    fake = FakeRequests(feedback_routes([{
+        "id": message_id, "kind": "complaint", "name": "Leyla", "email": "leyla@example.az",
+        "message": "Bildirişlər gec gəlir", "page": "/contact",
+    }]))
+    sm.requests = fake
+    sm.notify_admins_about_feedback()
+    assert fake.find("GET", "feedback_messages")[0]["params"]["notified_at"] == "is.null"
+    text = fake.sent_texts()[0]
+    assert "İrad — Leyla (leyla@example.az)" in text
+    assert "Bildirişlər gec gəlir" in text and "/contact" in text
+    mark = fake.find("PATCH", "feedback_messages")[0]
+    assert mark["params"] == {"id": f"in.({message_id})"}
+
+
+def test_anonymous_feedback_and_no_rows(sm):
+    fake = FakeRequests(feedback_routes([{"id": "f1", "kind": "suggestion", "message": "EN dili əla olardı"}]))
+    sm.requests = fake
+    sm.notify_admins_about_feedback()
+    assert "Təklif — Adsız" in fake.sent_texts()[0]
+
+    empty = FakeRequests(feedback_routes([]))
+    sm.requests = empty
+    sm.notify_admins_about_feedback()
+    assert not empty.sent_texts()
+    assert not empty.find("PATCH", "feedback_messages")
+
+
 def test_demo_request_stays_unmarked_when_telegram_fails(sm):
     routes = demo_request_routes([{"id": "r1", "name": "A", "company": "B", "email": "a@b.az"}])
     routes[("POST", "sendMessage")] = FakeResponse(500, {"ok": False, "description": "boom"})
