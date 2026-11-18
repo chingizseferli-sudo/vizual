@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { Building2, Mail, Phone, ShieldCheck, Sparkles } from 'lucide-react'
+import { Building2, Mail, ShieldCheck, Sparkles } from 'lucide-react'
+import { t } from '@/lib/i18n'
 import {
   initialPublicSiteContent,
   loadPublicSiteContent,
@@ -11,8 +12,6 @@ import {
   PublicPageShell,
   SectionHeading,
 } from '@/components/public-site/public-site-shell'
-import { CONTACT_PHONE } from '@/components/public-site/contact'
-import { t } from '@/lib/i18n'
 
 const principleIcons = [Building2, ShieldCheck, Sparkles]
 
@@ -30,7 +29,9 @@ function AboutPage() {
     },
     {
       title: t('Biz izləyirik'),
-      description: t('Xəbər saytlarını və sosial şəbəkələri gecə-gündüz yoxlayırıq.'),
+      description: t(
+        'Xəbər saytlarını və sosial şəbəkələri gecə-gündüz yoxlayırıq.'
+      ),
     },
     {
       title: t('Siz xəbər tutursunuz'),
@@ -73,7 +74,10 @@ function AboutPage() {
         <SectionHeading eyebrow={t('Necə işləyir')} title={t('Üç addım')} />
         <ol className='grid gap-5 md:grid-cols-3'>
           {steps.map((step, index) => (
-            <li key={step.title} className='border-l-[3px] border-[#1463ff] pl-5'>
+            <li
+              key={step.title}
+              className='border-l-[3px] border-[#1463ff] pl-5'
+            >
               <p className='text-sm font-bold text-[#1463ff]'>{index + 1}</p>
               <h3 className='mt-1 text-lg font-extrabold text-slate-950'>
                 {step.title}
@@ -87,7 +91,10 @@ function AboutPage() {
       </section>
 
       <section className='mx-auto max-w-7xl px-5 pb-16 md:px-8'>
-        <SectionHeading eyebrow={t('Prinsiplər')} title={t('Nəyə önəm veririk')} />
+        <SectionHeading
+          eyebrow={t('Prinsiplər')}
+          title={t('Nəyə önəm veririk')}
+        />
         <div className='grid gap-5 md:grid-cols-3'>
           {content.about.principles.map((item, index) => {
             const Icon = principleIcons[index] ?? Sparkles
@@ -122,13 +129,6 @@ function AboutPage() {
               >
                 <Mail className='h-4 w-4' />
                 {content.contact.email}
-              </a>
-              <a
-                href={`tel:${CONTACT_PHONE.replace(/\s/g, '')}`}
-                className='inline-flex items-center gap-2 hover:text-white hover:underline'
-              >
-                <Phone className='h-4 w-4' />
-                {CONTACT_PHONE}
               </a>
             </div>
           </div>
