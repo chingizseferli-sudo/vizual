@@ -15,7 +15,8 @@ import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
 import { fetchKeywordsData } from '@/features/keywords/data'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
-import { dateLocale, t } from '@/lib/i18n'
+import { formatDayMonth, greeting } from '@/lib/dates'
+import { t } from '@/lib/i18n'
 
 type MatchRow = {
   id: string
@@ -30,20 +31,6 @@ type MatchRow = {
   } | null
 }
 
-type AlertRow = {
-  id: string
-  status: string | null
-  channel: string | null
-  sent_at: string | null
-  monitor_matches: {
-    matched_keyword: string | null
-    monitored_items: {
-      title: string | null
-      url: string | null
-    } | null
-  } | null
-}
-
 type ProfileRow = {
   telegram_chat_id: string | null
   plan_id?: string | null
@@ -52,10 +39,10 @@ type ProfileRow = {
 type WorkspaceData = {
   activeKeywordCount: number
   keywordCount: number
-  resultCount: number
+  // Last 24 hours: distinct news items matched, and alerts sent.
+  newItemCount: number
   alertCount: number
   recentMatches: MatchRow[]
-  recentAlerts: AlertRow[]
   telegramConnected: boolean
   planName: string | null
   maxKeywords: number | null
@@ -65,10 +52,9 @@ type WorkspaceData = {
 const EMPTY_WORKSPACE: WorkspaceData = {
   activeKeywordCount: 0,
   keywordCount: 0,
-  resultCount: 0,
+  newItemCount: 0,
   alertCount: 0,
   recentMatches: [],
-  recentAlerts: [],
   telegramConnected: false,
   planName: null,
   maxKeywords: null,
@@ -82,17 +68,11 @@ function decodeHtml(text: string) {
   return textarea.value
 }
 
-function formatDate(value: string | null) {
-  if (!value) return '-'
+const formatDate = (value: string | null) => formatDayMonth(value)
 
-  return new Date(value).toLocaleString(dateLocale(), {
-    timeZone: 'Asia/Baku',
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
+const DAY_MS = 24 * 60 * 60 * 1000
+const PAGE_ROWS = 1000
+const MAX_DAY_ROWS = 5000
 
 function getHost(url: string | null | undefined) {
   if (!url) return t("Mənbə yoxdur")
@@ -160,11 +140,17 @@ async function fetchWorkspaceData(): Promise<WorkspaceData> {
     return { ...EMPTY_WORKSPACE, ...keywordStats }
   }
 
-  const [resultCountRes, matchesRes] = await Promise.all([
+  const since = new Date(Date.now() - DAY_MS).toISOString()
+  const [newItemCount, alertCountRes, matchesRes] = await Promise.all([
+    countNewItems(monitorIds, since),
     supabase
-      .from('monitor_matches')
-      .select('id', { count: 'exact', head: true })
-      .in('monitor_id', monitorIds),
+      .from('monitor_alerts')
+      .select('id,monitor_matches!inner(user_monitors!inner(user_id))', {
+        count: 'exact',
+        head: true,
+      })
+      .eq('monitor_matches.user_monitors.user_id', user.id)
+      .gte('sent_at', since),
     supabase
       .from('monitor_matches')
       .select(
@@ -175,43 +161,37 @@ async function fetchWorkspaceData(): Promise<WorkspaceData> {
       .limit(40),
   ])
 
-  const recentMatches = uniqueByArticle(
-    (matchesRes.data || []) as unknown as MatchRow[]
-  ).slice(0, 8)
-  const matchIds = recentMatches.map((match) => match.id)
-  let alertCount = 0
-  let recentAlerts: AlertRow[] = []
-
-  if (matchIds.length > 0) {
-    const [alertCountRes, alertsRes] = await Promise.all([
-      supabase
-        .from('monitor_alerts')
-        .select('id', { count: 'exact', head: true })
-        .in('match_id', matchIds),
-      supabase
-        .from('monitor_alerts')
-        .select(
-          'id,status,channel,sent_at,monitor_matches(matched_keyword,monitored_items(title,url))'
-        )
-        .in('match_id', matchIds)
-        .order('sent_at', { ascending: false })
-        .limit(5),
-    ])
-
-    alertCount = alertCountRes.count || 0
-    recentAlerts = (alertsRes.data || []) as unknown as AlertRow[]
-  }
-
   return {
     ...keywordStats,
-    resultCount: resultCountRes.count || recentMatches.length,
-    alertCount,
-    recentMatches,
-    recentAlerts,
+    newItemCount,
+    alertCount: alertCountRes.count || 0,
+    recentMatches: uniqueByArticle(
+      (matchesRes.data || []) as unknown as MatchRow[]
+    ).slice(0, 8),
     errorMessage: matchesRes.error
       ? t("Son nəticələri yükləmək mümkün olmadı.")
       : '',
   }
+}
+
+// One news item is stored once per matched keyword, so count distinct items.
+async function countNewItems(monitorIds: string[], since: string) {
+  const items = new Set<string>()
+  for (let from = 0; from < MAX_DAY_ROWS; from += PAGE_ROWS) {
+    const { data, error } = await supabase
+      .from('monitor_matches')
+      .select('item_id')
+      .in('monitor_id', monitorIds)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .range(from, from + PAGE_ROWS - 1)
+    if (error || !data) break
+    for (const row of data as { item_id: string | null }[]) {
+      if (row.item_id) items.add(row.item_id)
+    }
+    if (data.length < PAGE_ROWS) break
+  }
+  return items.size
 }
 
 // One article can match several keywords and is stored once per match.
@@ -307,12 +287,12 @@ function WorkspacePreviewPage() {
       ? `${data.activeKeywordCount} / ${data.maxKeywords}`
       : `${data.activeKeywordCount}`
   const signals = [
-    data.resultCount > 0
-      ? t("{0} uyğun media nəticəsi tapılıb.", [data.resultCount])
-      : t("Hələ uyğun media nəticəsi yoxdur."),
+    data.newItemCount > 0
+      ? t("Son 24 saatda {0} yeni xəbər tapılıb.", [data.newItemCount])
+      : t("Son 24 saatda yeni xəbər tapılmayıb."),
     data.alertCount > 0
-      ? t("{0} bildiriş qeydi mövcuddur.", [data.alertCount])
-      : t("Bildiriş yaranması üçün əvvəlcə uyğun nəticə tapılmalıdır."),
+      ? t("Son 24 saatda {0} bildiriş göndərilib.", [data.alertCount])
+      : t("Son 24 saatda bildiriş göndərilməyib."),
     data.activeKeywordCount > 0
       ? t("{0} açar söz aktiv izləmədədir.", [data.activeKeywordCount])
       : t("Aktiv açar söz yoxdur. Açar söz əlavə edərək izləməyə başlayın."),
@@ -333,7 +313,7 @@ function WorkspacePreviewPage() {
         <div className='grid gap-5 lg:grid-cols-[1.4fr_0.75fr] lg:items-end'>
           <div>
             <div className='inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary'>{t("Dinamik iş masası")}</div>
-            <p className='mt-4 text-sm font-semibold text-muted-foreground'>{t("Sabahınız xeyir.")}</p>
+            <p className='mt-4 text-sm font-semibold text-muted-foreground'>{greeting()}</p>
             <h1 className='mt-2 max-w-3xl text-3xl font-semibold tracking-tight text-foreground md:text-5xl'>{t("Bu gün təşkilatınız haqqında nə baş verir?")}</h1>
             <p className='mt-4 max-w-2xl text-base leading-7 text-muted-foreground'>{t("Açar sözlərinizin son vəziyyəti, tapılan nəticələr və bildirişlər burada bir səhifədə toplanır.")}</p>
           </div>
@@ -345,7 +325,8 @@ function WorkspacePreviewPage() {
                 ? t("Monitorinq aktivdir")
                 : t("Başlamağa hazırdır")}
             </p>
-            <p className='mt-2 text-sm text-muted-foreground'>{t("Son yoxlama:")}{' '}{latestMatchTime}
+            <p className='mt-2 text-sm text-muted-foreground'>
+              {t("Son nəticə:")} {latestMatchTime}
             </p>
           </div>
         </div>
@@ -367,19 +348,19 @@ function WorkspacePreviewPage() {
 
       <SectionShell
         title={t("Bugünkü xülasə")}
-        description={t("İstifadəçi hesabınızdan oxunan real monitorinq göstəriciləri.")}
+        description={t("Son 24 saat. Səhifəni hər açanda yenilənir.")}
       >
         <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
           <SummaryCard
-            label={t("Yeni media materialı")}
-            value={data.resultCount}
-            note={t("Tapılan uyğun nəticələr")}
+            label={t("Yeni xəbər")}
+            value={data.newItemCount}
+            note={t("Açar sözlərinizə uyğun, son 24 saat")}
             icon={Newspaper}
           />
           <SummaryCard
             label={t("Bildiriş")}
             value={data.alertCount}
-            note={t("Son nəticələr üzrə bildiriş qeydləri")}
+            note={t("Göndərilən bildirişlər, son 24 saat")}
             icon={Bell}
           />
           <SummaryCard
@@ -399,7 +380,7 @@ function WorkspacePreviewPage() {
 
       <div className='grid gap-4 xl:grid-cols-[0.85fr_1.15fr]'>
         <SectionShell
-          title='Vacib siqnallar'
+          title={t("Vacib siqnallar")}
           description={t("Cari hesab datasına görə qısa qərar siqnalları.")}
         >
           <div className='grid gap-2'>

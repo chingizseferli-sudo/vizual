@@ -11,6 +11,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { fetchCustomerAlerts } from '@/features/keywords/alerts'
+import { NotificationChannels } from '@/features/notifications/channels'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { dateLocale, t } from '@/lib/i18n'
 
@@ -261,8 +262,10 @@ function AlertsPage() {
       <div className='grid gap-4 p-4 md:p-6'>
         <div>
           <h1 className='text-2xl font-bold tracking-tight'>{t("Bildirişlər")}</h1>
-          <p className='text-muted-foreground'>{t("Vacib uyğunluqlar üzrə yaradılan və göndərilən bildirişlərin tarixçəsi burada görünür.")}</p>
+          <p className='text-muted-foreground'>{t("Bildirişlərin hara getdiyini burada seçin və göndərilən bildirişlərin tarixçəsinə baxın.")}</p>
         </div>
+
+        <NotificationChannels />
 
         <div className='rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-sm text-destructive'>
           <div className='font-medium'>{errorMessage}</div>
@@ -284,7 +287,7 @@ function AlertsPage() {
       <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
         <div>
           <h1 className='text-2xl font-bold tracking-tight'>{t("Bildirişlər")}</h1>
-          <p className='text-muted-foreground'>{t("Vacib uyğunluqlar üzrə yaradılan və göndərilən bildirişlərin tarixçəsi burada görünür.")}</p>
+          <p className='text-muted-foreground'>{t("Bildirişlərin hara getdiyini burada seçin və göndərilən bildirişlərin tarixçəsinə baxın.")}</p>
         </div>
         <button
           type='button'
@@ -293,9 +296,11 @@ function AlertsPage() {
           className='inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50'
         >
           <Download className='h-4 w-4' />
-          CSV ixrac et
+          {t("CSV ixrac et")}
         </button>
       </div>
+
+      <NotificationChannels />
 
       <section className='rounded-2xl border border-border bg-card p-4 shadow-sm'>
         <h2 className='text-base font-semibold'>{t("Bildirişlər necə yaranır?")}</h2>
