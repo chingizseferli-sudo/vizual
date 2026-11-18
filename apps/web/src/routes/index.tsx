@@ -114,9 +114,6 @@ function IndexPage() {
                 {content.hero.secondaryCta}
               </Link>
             </div>
-            <p className='mt-4 text-sm text-slate-500'>
-              {t('Ödəniş kartı tələb olunmur.')}
-            </p>
           </div>
 
           <TelegramAlertPreview items={content.demo.items} />
@@ -124,9 +121,6 @@ function IndexPage() {
 
         <section className='border-y border-slate-200 bg-white'>
           <div className='mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-5 py-5 text-sm md:px-8'>
-            <span className='font-semibold text-slate-900'>
-              {t('İzlənən saytlardan bəziləri:')}
-            </span>
             {sampleSources.map((source) => (
               <span key={source} className='text-slate-500'>
                 {source}
