@@ -80,6 +80,17 @@ const matches = items.map((item, i) => ({
   user_monitors: monitor,
   monitored_items: item,
 }))
+// Flat match rows, as my_results_page and my_story_matches return them.
+const storyRows = matches.map((match) => ({
+  id: match.id,
+  item_id: match.item_id,
+  matched_keyword: match.matched_keyword,
+  created_at: match.created_at,
+  title: match.monitored_items.title,
+  url: match.monitored_items.url,
+  published_at: match.monitored_items.published_at,
+  detected_at: match.monitored_items.detected_at,
+}))
 const competitors = [
   {
     id: 'fixture-competitor-1',
@@ -239,6 +250,29 @@ export const fixtureSupabase = {
     if (name === 'my_competitor_stats') {
       return Promise.resolve({
         data: portalFixture.state === 'empty' ? [] : competitorStats,
+        error: null,
+      })
+    }
+    if (name === 'my_results_page') {
+      const rows = portalFixture.state === 'empty' ? [] : storyRows
+      return Promise.resolve({
+        data: { total: rows.length, media: rows.length, keywords: 1, rows },
+        error: null,
+      })
+    }
+    if (name === 'my_result_filters') {
+      return Promise.resolve({
+        data: {
+          keywords: ['Bakı Dövlət Universiteti'],
+          sites: items.map((item) => new URL(item.url).hostname),
+          networks: [],
+        },
+        error: null,
+      })
+    }
+    if (name === 'my_story_matches') {
+      return Promise.resolve({
+        data: portalFixture.state === 'empty' ? [] : storyRows,
         error: null,
       })
     }

@@ -18,89 +18,24 @@ import {
 } from 'lucide-react'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { supabase } from '@/lib/supabase'
-import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
+import {
+  buildStoryGroups,
+  minutesBetween,
+  type StoryGroup,
+  type StoryItem,
+  type StoryMatchRow,
+} from '@/features/story-map/groups'
 import { dateLocale, t } from '@/lib/i18n'
 import logoSvg from '../../../../public/images/vizual-logo.svg?raw'
 
 const COLLAPSED_ITEM_COUNT = 5
-const STORY_PAGE_SIZE = 1000
-const STORY_MAX_PAGES = 3
-// Headlines of one story are close in time; the same words weeks later are a new story.
-const STORY_WINDOW_MS = 72 * 60 * 60 * 1000
-const STORY_MIN_SHARED_WORDS = 3
-const STORY_MIN_OVERLAP = 0.7
-const STORY_MIN_DISTINCT_SHARED_WORDS = 2
-// A word in more than this share of all headlines ("yeni", "təyin", "direktor") says nothing about the story.
-const STORY_COMMON_WORD_SHARE = 0.04
-const STORY_COMMON_WORD_MIN_ITEMS = 20
-
-type StoryMatchRow = {
-  id: string
-  monitor_id: string
-  item_id: string
-  matched_keyword: string | null
-  created_at: string | null
-  monitored_items: {
-    title: string | null
-    url: string | null
-    published_at: string | null
-    detected_at: string | null
-    status: string | null
-  } | null
-}
-
-type StoryItem = {
-  id: string
-  title: string
-  normalizedTitle: string
-  words: Set<string>
-  source: string
-  url: string
-  // When the article was published; falls back to when the bot found it.
-  detectedAt: string | null
-  keyword: string
-}
-
-type StoryGroup = {
-  key: string
-  title: string
-  firstSource: string
-  firstDetectedAt: string | null
-  totalCoverage: number
-  uniqueSourceCount: number
-  spreadMinutes: number | null
-  coverageLevel: string
-  items: StoryItem[]
-}
+// The topic list shows this many topics, then more on request.
+const TOPIC_PAGE_SIZE = 20
 
 type StoryData = {
   groups: StoryGroup[]
   totalRows: number
   errorMessage: string
-}
-
-function decodeHtml(text: string) {
-  if (typeof document === 'undefined') return text
-  const textarea = document.createElement('textarea')
-  textarea.innerHTML = text
-  return textarea.value
-}
-
-function cleanTitle(title: string | null | undefined) {
-  return decodeHtml(title || '')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function normalizeTitle(title: string) {
-  return title
-    .toLocaleLowerCase('az-AZ')
-    .replace(/[“”"'.:,;!?()[\]{}<>/\\|_-]+/g, ' ')
-    .replace(/\b\d{1,2}[:.]\d{2}\b/g, ' ')
-    .replace(/\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 function formatDate(value: string | null) {
@@ -334,91 +269,12 @@ function formatTime(value: string | null) {
   })
 }
 
-function getHost(url: string | null | undefined) {
-  if (!url) return t("Mənbə yoxdur")
-
-  try {
-    return new URL(url).hostname.replace(/^www\./, '')
-  } catch {
-    return url
-  }
-}
-
-// Order by when the site published the article. The bot's detection time
-// depends on its crawl order and on blocked sites, so it only backs up a
-// missing or implausible publish time (empty, or later than detection).
-function getDetectedAt(row: StoryMatchRow) {
-  const item = row.monitored_items
-  const found = item?.detected_at || row.created_at || null
-  const published = item?.published_at || null
-  if (!published) return found
-  if (!found) return published
-
-  const publishedMs = new Date(published).getTime()
-  const foundMs = new Date(found).getTime()
-  if (!Number.isFinite(publishedMs)) return found
-  if (Number.isFinite(foundMs) && publishedMs > foundMs + 5 * 60 * 1000) {
-    return found
-  }
-  return published
-}
-
-// Word stems (first 5 letters) so Azerbaijani case endings do not split a story.
-function titleWords(normalizedTitle: string) {
-  return new Set(
-    normalizedTitle
-      .split(' ')
-      .filter((word) => word.length > 2)
-      .map((word) => word.slice(0, 5))
-  )
-}
-
-function sharedWordCount(a: Set<string>, b: Set<string>) {
-  let shared = 0
-  for (const word of a) if (b.has(word)) shared += 1
-  return shared
-}
-
-// `words` are all headline words, `distinct` the ones left after dropping common words.
-type StoryWords = { words: Set<string>; distinct: Set<string> }
-
-function sameStory(a: StoryWords, b: StoryWords) {
-  // Two headlines that differ only in a place or a name ("Bakıda müəllim vəfat etdi"
-  // vs "Beyləqanda müəllim vəfat edib") share generic words but are different stories,
-  // so enough of the shared words must be uncommon ones.
-  const distinctShared = sharedWordCount(a.distinct, b.distinct)
-  if (distinctShared < STORY_MIN_DISTINCT_SHARED_WORDS) return false
-  if (sharedWordCount(a.words, b.words) < STORY_MIN_SHARED_WORDS) return false
-  return (
-    distinctShared / Math.min(a.distinct.size, b.distinct.size) >=
-    STORY_MIN_OVERLAP
-  )
-}
-
-function timeMs(value: string | null) {
-  const ms = value ? new Date(value).getTime() : NaN
-  return Number.isFinite(ms) ? ms : 0
-}
-
-function minutesBetween(start: string | null, end: string | null) {
-  if (!start || !end) return null
-  const diff = new Date(end).getTime() - new Date(start).getTime()
-  if (!Number.isFinite(diff) || diff < 0) return null
-  return Math.round(diff / 60000)
-}
-
 function formatSpread(minutes: number | null, total: number) {
   if (minutes === null) return t("{0} media üzrə yayılma", [total])
   if (minutes < 60) return t("İlk {0} dəqiqədə {1} media", [Math.max(1, minutes), total])
 
   const hours = Math.round(minutes / 60)
   return t("İlk {0} saatda {1} media", [hours, total])
-}
-
-function getCoverageLevel(count: number) {
-  if (count >= 20) return t("Yüksək")
-  if (count >= 8) return t("Orta")
-  return t("Aşağı")
 }
 
 function getSimilarityLabel(item: StoryItem, firstItem: StoryItem) {
@@ -431,179 +287,19 @@ function getSimilarityLabel(item: StoryItem, firstItem: StoryItem) {
   return t("Başlıq dəyişib")
 }
 
-function buildStoryGroups(rows: StoryMatchRow[]): StoryGroup[] {
-  // One article can match several keywords and may be stored under several
-  // URLs: count it once per site and headline and keep every keyword.
-  const unique = new Map<string, StoryItem>()
-
-  for (const row of rows) {
-    const title = cleanTitle(row.monitored_items?.title)
-    const url = row.monitored_items?.url || ''
-    if (!title || !url) continue
-
-    const source = getHost(url)
-    const normalizedTitle = normalizeTitle(title)
-    const keyword = row.matched_keyword || t("Açar söz")
-    const key = `${source}|${normalizedTitle}`
-    const existing = unique.get(key)
-
-    if (existing) {
-      const keywords = existing.keyword.split(', ')
-      if (!keywords.includes(keyword)) existing.keyword += `, ${keyword}`
-      const at = getDetectedAt(row)
-      if (timeMs(at) && (!existing.detectedAt || timeMs(at) < timeMs(existing.detectedAt))) {
-        existing.detectedAt = at
-      }
-      continue
-    }
-
-    unique.set(key, {
-      id: row.id,
-      title,
-      normalizedTitle,
-      words: titleWords(normalizedTitle),
-      source,
-      url,
-      detectedAt: getDetectedAt(row),
-      keyword,
-    })
-  }
-
-  // Cluster by shared headline words, oldest first, within a time window.
-  const items = [...unique.values()].sort(
-    (a, b) => timeMs(a.detectedAt) - timeMs(b.detectedAt)
-  )
-
-  // Words that appear in many unrelated headlines must not join stories.
-  const common = new Set<string>()
-  if (items.length >= STORY_COMMON_WORD_MIN_ITEMS) {
-    const counts = new Map<string, number>()
-    for (const item of items)
-      for (const word of item.words) counts.set(word, (counts.get(word) || 0) + 1)
-    for (const [word, count] of counts)
-      if (count / items.length > STORY_COMMON_WORD_SHARE) common.add(word)
-  }
-  const wordsOf = new Map<StoryItem, StoryWords>(
-    items.map((item) => [
-      item,
-      {
-        words: item.words,
-        distinct: new Set([...item.words].filter((word) => !common.has(word))),
-      },
-    ])
-  )
-
-  // A headline joins a story only if it resembles most of its members, so a
-  // chain of look-alikes cannot glue different stories together.
-  const clusters: StoryItem[][] = []
-
-  for (const item of items) {
-    const mine = wordsOf.get(item) as StoryWords
-    const cluster = clusters.find((members) => {
-      if (
-        Math.abs(timeMs(item.detectedAt) - timeMs(members[0].detectedAt)) >
-        STORY_WINDOW_MS
-      )
-        return false
-      const similar = members.filter((member) =>
-        sameStory(mine, wordsOf.get(member) as StoryWords)
-      ).length
-      return similar >= Math.floor(members.length / 2) + 1
-    })
-    if (cluster) cluster.push(item)
-    else clusters.push([item])
-  }
-
-  return clusters
-    .map((sorted, index) => {
-      const first = sorted[0]
-      const last = sorted[sorted.length - 1]
-      const sources = new Set(sorted.map((item) => item.source))
-      const spreadMinutes = minutesBetween(
-        first?.detectedAt || null,
-        last?.detectedAt || null
-      )
-
-      return {
-        key: `${index}-${first.normalizedTitle.slice(0, 40)}`,
-        title: first?.title || t("Xəbər mövzusu"),
-        firstSource: first?.source || '-',
-        firstDetectedAt: first?.detectedAt || null,
-        totalCoverage: sorted.length,
-        uniqueSourceCount: sources.size,
-        spreadMinutes,
-        coverageLevel: getCoverageLevel(sources.size),
-        items: sorted,
-      } satisfies StoryGroup
-    })
-    .filter((group) => group.uniqueSourceCount >= 2)
-    .sort((a, b) => {
-      if (b.uniqueSourceCount !== a.uniqueSourceCount)
-        return b.uniqueSourceCount - a.uniqueSourceCount
-      if (b.totalCoverage !== a.totalCoverage)
-        return b.totalCoverage - a.totalCoverage
-      return timeMs(b.firstDetectedAt) - timeMs(a.firstDetectedAt)
-    })
-}
-
+// One call: the server returns the newest 3000 matches of the caller's own
+// monitors with only the fields the grouping needs.
 async function fetchStoryData(): Promise<StoryData> {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
-
-  if (userError || !user) {
+  const { data, error } = await supabase.rpc('my_story_matches')
+  if (error) {
     return {
       groups: [],
       totalRows: 0,
-      errorMessage: t("Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun."),
+      errorMessage: t("Story Intelligence məlumatlarını yükləmək mümkün olmadı."),
     }
   }
 
-  let monitorIds: string[]
-  try {
-    monitorIds = await fetchAllMonitorIds(user.id)
-  } catch {
-    return {
-      groups: [],
-      totalRows: 0,
-      errorMessage: t("Nəticələri yükləmək mümkün olmadı."),
-    }
-  }
-  if (monitorIds.length === 0) {
-    return { groups: [], totalRows: 0, errorMessage: '' }
-  }
-
-  const retentionStart = new Date()
-  retentionStart.setDate(retentionStart.getDate() - 31)
-
-  const rows: StoryMatchRow[] = []
-
-  for (let page = 0; page < STORY_MAX_PAGES; page += 1) {
-    const from = page * STORY_PAGE_SIZE
-    const { data, error } = await supabase
-      .from('monitor_matches')
-      .select(
-        'id,monitor_id,item_id,matched_keyword,created_at,monitored_items(title,url,published_at,detected_at,status)'
-      )
-      .in('monitor_id', monitorIds)
-      .gte('created_at', retentionStart.toISOString())
-      .order('created_at', { ascending: false })
-      .range(from, from + STORY_PAGE_SIZE - 1)
-
-    if (error) {
-      return {
-        groups: [],
-        totalRows: 0,
-        errorMessage: t("Story Intelligence məlumatlarını yükləmək mümkün olmadı."),
-      }
-    }
-
-    const batch = (data || []) as unknown as StoryMatchRow[]
-    rows.push(...batch)
-    if (batch.length < STORY_PAGE_SIZE) break
-  }
-
+  const rows = (data || []) as StoryMatchRow[]
   return {
     groups: buildStoryGroups(rows),
     totalRows: rows.length,
@@ -614,6 +310,7 @@ async function fetchStoryData(): Promise<StoryData> {
 function StoryIntelligence() {
   const [selectedStoryKey, setSelectedStoryKey] = useState<string | null>(null)
   const [isTopicListOpen, setIsTopicListOpen] = useState(false)
+  const [topicListSize, setTopicListSize] = useState(TOPIC_PAGE_SIZE)
   // The story whose full list is open; picking another story collapses it again.
   const [expandedStoryKey, setExpandedStoryKey] = useState<string | null>(null)
   const { data, isLoading, isFetching, refetch } = useQuery({
@@ -728,7 +425,10 @@ function StoryIntelligence() {
                   <ExportButtons label={t("Bütün mövzular")} groups={storyData.groups} />
                   <button
                     type='button'
-                    onClick={() => setIsTopicListOpen((value) => !value)}
+                    onClick={() => {
+                      setIsTopicListOpen((value) => !value)
+                      setTopicListSize(TOPIC_PAGE_SIZE)
+                    }}
                     className='inline-flex items-center justify-center rounded-xl border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-blue-100'
                   >
                     {isTopicListOpen ? t("Siyahını bağla") : t("Bütün mövzuları aç")}
@@ -743,7 +443,7 @@ function StoryIntelligence() {
                     <p className='text-xs text-muted-foreground'>{t("Seçdiyiniz mövzu aşağıdakı xəritədə açılır.")}</p>
                   </div>
                   <div className='max-h-[360px] overflow-y-auto rounded-xl border border-border'>
-                    {storyData.groups.map((group) => {
+                    {storyData.groups.slice(0, topicListSize).map((group) => {
                       const isSelected = group.key === story.key
                       return (
                         <button
@@ -773,6 +473,18 @@ function StoryIntelligence() {
                         </button>
                       )
                     })}
+                    {storyData.groups.length > topicListSize ? (
+                      <button
+                        type='button'
+                        onClick={() => setTopicListSize((size) => size + TOPIC_PAGE_SIZE)}
+                        className='w-full px-4 py-3 text-sm font-semibold text-primary hover:bg-muted/50'
+                      >
+                        {t("Daha çox göstər ({0} / {1})", [
+                          topicListSize,
+                          storyData.groups.length,
+                        ])}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

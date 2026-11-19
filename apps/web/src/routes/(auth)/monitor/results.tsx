@@ -18,34 +18,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { fetchAllMonitorIds } from '@/features/keywords/dashboard'
+import {
+  fetchResultFilters,
+  fetchResultsPage,
+  RESULTS_PAGE_SIZE,
+  type ResultRow,
+  type ResultsQuery,
+} from '@/features/results/data'
 import { customerQueryKeys } from '@/lib/query-keys'
-import { supabase } from '@/lib/supabase'
 import { dateLocale, t } from '@/lib/i18n'
-import { detectNewsLanguage, type NewsLanguage } from '@/lib/news-language'
+import { type NewsLanguage } from '@/lib/news-language'
 import iconSvg from '../../../../public/images/vizual-icon.svg?raw'
 
 // The export is one offline file, so the logo is embedded instead of linked.
 const VIZUAL_ICON_URI = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(iconSvg)}`
 
-const PAGE_SIZE = 12
-const RESULT_FETCH_BATCH_SIZE = 1000
+// Export downloads up to this many results (the server caps it too).
+const EXPORT_LIMIT = 5000
+const SEARCH_DEBOUNCE_MS = 300
 const ALL = 'all'
-
-type ResultRow = {
-  id: string
-  monitor_id: string
-  item_id: string
-  matched_keyword: string | null
-  created_at: string | null
-  monitored_items: {
-    title: string
-    url: string
-    published_at: string | null
-    detected_at: string | null
-    status: string | null
-  } | null
-}
 
 type FilterOption = {
   value: string
@@ -114,11 +105,6 @@ function formatDate(value: string | null) {
   })
 }
 
-function toDateInputValue(value: string | null) {
-  if (!value) return ''
-  return new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Baku' })
-}
-
 function getHost(url: string | undefined) {
   if (!url) return '-'
 
@@ -127,53 +113,6 @@ function getHost(url: string | undefined) {
   } catch {
     return url
   }
-}
-
-// Classified by link host, so it works for every row, including ones saved
-// before sources had a source_type.
-function getSocialNetwork(host: string): SocialNetwork | null {
-  if (/(^|\.)(facebook\.com|fb\.com|fb\.watch)$/.test(host)) return 'facebook'
-  if (/(^|\.)instagram\.com$/.test(host)) return 'instagram'
-  if (/(^|\.)(youtube\.com|youtu\.be)$/.test(host)) return 'youtube'
-  if (/(^|\.)(x\.com|twitter\.com)$/.test(host)) return 'x'
-  if (/(^|\.)linkedin\.com$/.test(host)) return 'linkedin'
-  if (/^(t\.me|telegram\.me)$/.test(host)) return 'telegram'
-  return null
-}
-
-function matchesSourceFilter(
-  host: string,
-  category: SourceCategory | undefined,
-  sites: string[],
-  network: SocialNetwork | undefined
-) {
-  if (!category) return true
-  const rowNetwork = getSocialNetwork(host)
-  if (category === 'social') {
-    return rowNetwork !== null && (!network || rowNetwork === network)
-  }
-  return rowNetwork === null && (sites.length === 0 || sites.includes(host))
-}
-
-function getRowDate(row: ResultRow) {
-  return (
-    row.monitored_items?.detected_at ||
-    row.created_at ||
-    row.monitored_items?.published_at ||
-    null
-  )
-}
-
-function getResultFoundDate(row: ResultRow) {
-  return row.monitored_items?.detected_at || row.created_at || null
-}
-
-function getRangeStart(range: ExportRange) {
-  if (range === 'all') return null
-
-  const start = new Date()
-  start.setDate(start.getDate() - Number(range))
-  return start
 }
 
 function csvCell(value: string | number | null | undefined) {
@@ -209,14 +148,13 @@ function escapeHtml(value: string | null | undefined) {
 }
 
 function mapExportRow(row: ResultRow) {
-  const item = row.monitored_items
   return {
     keyword: row.matched_keyword || '-',
-    title: item?.title ? decodeHtml(item.title) : t("Xəbər tapılmadı"),
-    source: getHost(item?.url),
-    url: item?.url || '',
-    published_at: formatDate(item?.published_at || null),
-    detected_at: formatDate(item?.detected_at || row.created_at),
+    title: row.title ? decodeHtml(row.title) : t("Xəbər tapılmadı"),
+    source: getHost(row.url ?? undefined),
+    url: row.url || '',
+    published_at: formatDate(row.published_at),
+    detected_at: formatDate(row.detected_at || row.created_at),
   }
 }
 
@@ -281,99 +219,20 @@ function Pagination({
   )
 }
 
-type ResultsData = {
-  rows: ResultRow[]
-  errorMessage: string
-}
+const exportRangeDays: Record<ExportRange, number> = { '1': 1, '7': 7, '30': 30, all: 31 }
 
-async function fetchResultsData(): Promise<ResultsData> {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
-
-  if (userError || !user) {
-    return {
-      rows: [],
-      errorMessage: t("Sessiya tapılmadı. Zəhmət olmasa yenidən daxil olun."),
-    }
-  }
-
-  // Archived monitors are included: their results stay visible.
-  let monitorIds: string[]
-  try {
-    monitorIds = await fetchAllMonitorIds(user.id)
-  } catch (error) {
-    console.error('User monitor load error:', error)
-    return {
-      rows: [],
-      errorMessage: t("Nəticələri yükləmək mümkün olmadı."),
-    }
-  }
-
-  if (monitorIds.length === 0) return { rows: [], errorMessage: '' }
-
-  const retentionStart = new Date()
-  retentionStart.setDate(retentionStart.getDate() - 31)
-
-  const rows: ResultRow[] = []
-  let offset = 0
-
-  while (true) {
-    const { data, error } = await supabase
-      .from('monitor_matches')
-      .select(
-        'id,monitor_id,item_id,matched_keyword,created_at,monitored_items(title,url,published_at,detected_at,status)'
-      )
-      .in('monitor_id', monitorIds)
-      .gte('created_at', retentionStart.toISOString())
-      .order('created_at', { ascending: false })
-      .range(offset, offset + RESULT_FETCH_BATCH_SIZE - 1)
-
-    if (error) {
-      console.error('User results error:', error)
-      return { rows: [], errorMessage: t("Nəticələri yükləmək mümkün olmadı.") }
-    }
-
-    const batch = (data || []) as unknown as ResultRow[]
-    rows.push(...batch)
-
-    if (batch.length < RESULT_FETCH_BATCH_SIZE) break
-    offset += RESULT_FETCH_BATCH_SIZE
-  }
-
-  return { rows, errorMessage: '' }
-}
-
-function collapseByItem(rows: ResultRow[]): ResultRow[] {
-  const byItem = new Map<string, { row: ResultRow; keywords: Set<string> }>()
-  for (const row of rows) {
-    const entry = byItem.get(row.item_id)
-    if (!entry) {
-      byItem.set(row.item_id, {
-        row,
-        keywords: new Set(row.matched_keyword ? [row.matched_keyword] : []),
-      })
-      continue
-    }
-    if (row.matched_keyword) entry.keywords.add(row.matched_keyword)
-  }
-  return [...byItem.values()].map(({ row, keywords }) => ({
-    ...row,
-    matched_keyword: keywords.size ? [...keywords].join(', ') : row.matched_keyword,
-  }))
+function useDebouncedValue<T>(value: T, delayMs: number) {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs)
+    return () => window.clearTimeout(timer)
+  }, [value, delayMs])
+  return debounced
 }
 
 function ResultsPage() {
-  const { data, isLoading } = useQuery({
-    queryKey: customerQueryKeys.results(),
-    queryFn: fetchResultsData,
-    staleTime: 30 * 1000,
-    placeholderData: keepPreviousData,
-  })
-  const rows = useMemo(() => data?.rows ?? [], [data?.rows])
-  const errorMessage = data?.errorMessage || ''
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS)
   const [keywordFilter, setKeywordFilter] = useState(ALL)
   const [languageFilter, setLanguageFilter] = useState<NewsLanguage | typeof ALL>(ALL)
   const sourceSearch = Route.useSearch()
@@ -388,11 +247,12 @@ function ResultsPage() {
   const [dateFilter, setDateFilter] = useState('')
   const [exportRange, setExportRange] = useState<ExportRange>('1')
   const [page, setPage] = useState(1)
+  const [isExporting, setIsExporting] = useState(false)
 
   useEffect(() => {
     setPage(1)
   }, [
-    search,
+    debouncedSearch,
     keywordFilter,
     languageFilter,
     sourceCategory,
@@ -402,42 +262,72 @@ function ResultsPage() {
     exportRange,
   ])
 
-  const periodRows = useMemo(() => {
-    const start = getRangeStart(exportRange)
-    if (!start) return rows
+  const filterQuery = useMemo<Omit<ResultsQuery, 'limit' | 'offset'>>(
+    () => ({
+      days: exportRangeDays[exportRange],
+      category: sourceCategory,
+      sites: sourceCategory === 'web' ? selectedSites : [],
+      network: sourceCategory === 'social' ? socialNetwork : undefined,
+      keyword: keywordFilter === ALL ? undefined : keywordFilter,
+      language: languageFilter === ALL ? undefined : languageFilter,
+      search: debouncedSearch,
+      date: dateFilter || undefined,
+    }),
+    [
+      exportRange,
+      sourceCategory,
+      selectedSites,
+      socialNetwork,
+      keywordFilter,
+      languageFilter,
+      debouncedSearch,
+      dateFilter,
+    ]
+  )
 
-    return rows.filter((row) => {
-      const value = getRowDate(row)
-      return value ? new Date(value) >= start : false
-    })
-  }, [rows, exportRange])
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: customerQueryKeys.results({ ...filterQuery, page }),
+    queryFn: () =>
+      fetchResultsPage({
+        ...filterQuery,
+        limit: RESULTS_PAGE_SIZE,
+        offset: (page - 1) * RESULTS_PAGE_SIZE,
+      }),
+    staleTime: 30 * 1000,
+    placeholderData: keepPreviousData,
+  })
+  const { data: filters } = useQuery({
+    queryKey: customerQueryKeys.resultFilters(filterQuery.days),
+    queryFn: () => fetchResultFilters(filterQuery.days),
+    staleTime: 60 * 1000,
+    placeholderData: keepPreviousData,
+  })
 
-  const keywordOptions = useMemo<FilterOption[]>(() => {
-    const values = Array.from(
-      new Set(periodRows.map((row) => row.matched_keyword).filter(Boolean))
-    ) as string[]
-    return values
-      .sort((a, b) => a.localeCompare(b, 'az'))
-      .map((value) => ({ value, label: value }))
-  }, [periodRows])
+  const errorMessage = data?.errorMessage || ''
+  const totalItems = data?.total ?? 0
+  const uniqueMedia = data?.media ?? 0
+  const uniqueKeywords = data?.keywords ?? 0
+  const paginatedRows = data?.rows ?? []
+  const totalPages = Math.max(1, Math.ceil(totalItems / RESULTS_PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
 
-  const siteOptions = useMemo<string[]>(() => {
-    const values = new Set(
-      periodRows
-        .map((row) => getHost(row.monitored_items?.url))
-        .filter((value) => value !== '-' && !getSocialNetwork(value))
-    )
-    return Array.from(values).sort((a, b) => a.localeCompare(b, 'az'))
-  }, [periodRows])
+  const keywordOptions = useMemo<FilterOption[]>(
+    () =>
+      [...(filters?.keywords ?? [])]
+        .sort((a, b) => a.localeCompare(b, 'az'))
+        .map((value) => ({ value, label: value })),
+    [filters?.keywords]
+  )
+
+  const siteOptions = useMemo<string[]>(
+    () => [...(filters?.sites ?? [])].sort((a, b) => a.localeCompare(b, 'az')),
+    [filters?.sites]
+  )
 
   const networkOptions = useMemo<SocialNetwork[]>(() => {
-    const values = new Set(
-      periodRows
-        .map((row) => getSocialNetwork(getHost(row.monitored_items?.url)))
-        .filter((value): value is SocialNetwork => value !== null)
-    )
+    const values = new Set(filters?.networks ?? [])
     return SOCIAL_NETWORKS.filter((value) => values.has(value))
-  }, [periodRows])
+  }, [filters?.networks])
 
   const visibleSiteOptions = useMemo(() => {
     const q = siteQuery.toLocaleLowerCase('az-AZ').trim()
@@ -455,61 +345,6 @@ function ResultsPage() {
     setSourceSearch({ cat: 'web', sites: next.join(',') || undefined })
   }
 
-  const filteredRows = useMemo(() => {
-    const q = search.toLocaleLowerCase('az-AZ').trim()
-
-    return periodRows.filter((row) => {
-      const item = row.monitored_items
-      const host = getHost(item?.url)
-      const foundDate = toDateInputValue(getResultFoundDate(row))
-
-      const matchesSearch =
-        !q ||
-        (item?.title || '').toLocaleLowerCase('az-AZ').includes(q) ||
-        (item?.url || '').toLocaleLowerCase('az-AZ').includes(q) ||
-        (row.matched_keyword || '').toLocaleLowerCase('az-AZ').includes(q)
-
-      return (
-        matchesSearch &&
-        (keywordFilter === ALL || row.matched_keyword === keywordFilter) &&
-        (languageFilter === ALL ||
-          detectNewsLanguage(item?.title || '', item?.url || '') === languageFilter) &&
-        matchesSourceFilter(host, sourceCategory, selectedSites, socialNetwork) &&
-        (!dateFilter || foundDate === dateFilter)
-      )
-    })
-  }, [
-    periodRows,
-    search,
-    keywordFilter,
-    languageFilter,
-    sourceCategory,
-    selectedSites,
-    socialNetwork,
-    dateFilter,
-  ])
-
-  // One article matched by several keywords (or by an old and the current
-  // monitor) is one result.
-  const itemRows = useMemo(() => collapseByItem(filteredRows), [filteredRows])
-
-  const exportRows = itemRows
-
-  const totalPages = Math.max(1, Math.ceil(itemRows.length / PAGE_SIZE))
-  const safePage = Math.min(page, totalPages)
-  const paginatedRows = itemRows.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE
-  )
-  const uniqueMedia = new Set(
-    filteredRows
-      .map((row) => getHost(row.monitored_items?.url))
-      .filter((value) => value !== '-')
-  ).size
-  const uniqueKeywords = new Set(
-    filteredRows.map((row) => row.matched_keyword).filter(Boolean)
-  ).size
-
   function clearResultFilters() {
     setSearch('')
     setKeywordFilter(ALL)
@@ -518,8 +353,15 @@ function ResultsPage() {
     setDateFilter('')
   }
 
-  function exportResults(format: 'csv' | 'json' | 'html') {
-    const mappedRows = exportRows.map(mapExportRow)
+  async function exportResults(format: 'csv' | 'json' | 'html') {
+    setIsExporting(true)
+    const result = await fetchResultsPage({
+      ...filterQuery,
+      limit: EXPORT_LIMIT,
+      offset: 0,
+    }).finally(() => setIsExporting(false))
+    if (result.errorMessage) return
+    const mappedRows = result.rows.map(mapExportRow)
 
     if (format === 'csv') {
       downloadCsv('tapilan-xeberler.csv', [
@@ -740,7 +582,7 @@ function ResultsPage() {
         <Pagination
           page={safePage}
           totalPages={totalPages}
-          totalItems={itemRows.length}
+          totalItems={totalItems}
           onPageChange={setPage}
           compact
         />
@@ -764,7 +606,7 @@ function ResultsPage() {
               onClick={clearResultFilters}
               className='rounded-xl bg-muted/50 px-3 py-2 font-semibold text-muted-foreground transition hover:bg-muted'
             >
-              {exportRows.length}{' '}{t("nəticə")}</button>
+              {totalItems}{' '}{t("nəticə")}</button>
             <button
               type='button'
               onClick={() => setSourceSearch({})}
@@ -797,8 +639,8 @@ function ResultsPage() {
             </select>
             <button
               type='button'
-              onClick={() => exportResults('csv')}
-              disabled={exportRows.length === 0}
+              onClick={() => void exportResults('csv')}
+              disabled={totalItems === 0 || isExporting}
               className='inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-semibold hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50'
             >
               <FileText className='h-4 w-4' />
@@ -806,8 +648,8 @@ function ResultsPage() {
             </button>
             <button
               type='button'
-              onClick={() => exportResults('json')}
-              disabled={exportRows.length === 0}
+              onClick={() => void exportResults('json')}
+              disabled={totalItems === 0 || isExporting}
               className='inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-semibold hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50'
             >
               <FileJson2 className='h-4 w-4' />
@@ -815,8 +657,8 @@ function ResultsPage() {
             </button>
             <button
               type='button'
-              onClick={() => exportResults('html')}
-              disabled={exportRows.length === 0}
+              onClick={() => void exportResults('html')}
+              disabled={totalItems === 0 || isExporting}
               className='inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-semibold hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50'
             >
               <FileCode2 className='h-4 w-4' />
@@ -983,22 +825,26 @@ function ResultsPage() {
       <div className='overflow-hidden rounded-2xl border border-border bg-card shadow-sm'>
         <div className='flex items-center justify-between border-b border-border px-3 py-2 text-sm text-muted-foreground'>
           <span>
-            {itemRows.length}{' '}{t("nəticə | səhifə")}{' '}{safePage} / {totalPages}
+            {totalItems}{' '}{t("nəticə | səhifə")}{' '}{safePage} / {totalPages}
           </span>
           <Pagination
             page={safePage}
             totalPages={totalPages}
-            totalItems={itemRows.length}
+            totalItems={totalItems}
             onPageChange={setPage}
             compact
           />
         </div>
 
-        <div className='divide-y divide-slate-100'>
+        <div
+          className={
+            isFetching ? 'divide-y divide-slate-100 opacity-60' : 'divide-y divide-slate-100'
+          }
+        >
           {paginatedRows.map((row) => {
-            const item = row.monitored_items
-            const title = item ? decodeHtml(item.title) : t("Xəbər tapılmadı")
-            const detectedAt = item?.detected_at || row.created_at
+            const item = row.url ? { url: row.url } : null
+            const title = row.title ? decodeHtml(row.title) : t("Xəbər tapılmadı")
+            const detectedAt = row.detected_at || row.created_at
 
             return (
               <article
@@ -1012,7 +858,7 @@ function ResultsPage() {
                         {row.matched_keyword || t("Açar söz yoxdur")}
                       </span>
                       <span className='rounded-full bg-muted px-2 py-0.5'>
-                        {getHost(item?.url)}
+                        {getHost(row.url ?? undefined)}
                       </span>
                     </div>
 
@@ -1032,7 +878,7 @@ function ResultsPage() {
                     )}
 
                     <div className='mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground'>
-                      <span>{t("Dərc:")}{' '}{formatDate(item?.published_at || null)}
+                      <span>{t("Dərc:")}{' '}{formatDate(row.published_at)}
                       </span>
                       <span>{t("Tapıldı:")}{' '}{formatDate(detectedAt)}</span>
                     </div>
