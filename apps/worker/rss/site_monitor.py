@@ -3497,6 +3497,19 @@ def choose_publish_time(title, article_time, rss_time=None, listing_time=None, s
     return None
 
 
+# A feed or listing date this far past the freshness window means the article is old
+# whatever its own page says; the margin covers sites that label local time as UTC.
+STALE_FEED_MARGIN_HOURS = 6
+
+
+def feed_date_is_stale(item, now=None):
+    feed_time = parse_datetime_to_baku(item.get("rss_published") or item.get("listing_published") or "")
+    if not feed_time:
+        return False
+    now = now or datetime.now(BAKU_TZ)
+    return now - feed_time > timedelta(hours=NEWS_TIME_LIMIT_HOURS + STALE_FEED_MARGIN_HOURS)
+
+
 def evaluate_publish_freshness(title_text, article_time, rss_time=None, listing_time=None, source_context=None, item_position=None):
     published_time = choose_publish_time(
         title_text,
@@ -5923,6 +5936,12 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
         verdict = cached_article_verdict(link, keyword_signature)
         if verdict:
             result["reason"] = verdict
+            continue
+        if feed_date_is_stale(item):
+            # Skips the article page, title check and duplicate lookup; after a restart
+            # (empty verdict cache) this is what keeps each site to a few seconds.
+            result["reason"] = "old_news"
+            remember_article_verdict(link, "old_news")
             continue
         matched_keywords = item.get("matched_keywords", [])
         raw_title = item.get("raw_title") or title
