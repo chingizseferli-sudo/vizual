@@ -8,7 +8,7 @@ import threading
 import unicodedata
 from collections import Counter, OrderedDict
 from html import unescape
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from urllib.parse import parse_qsl, urlencode, unquote, urljoin, urlparse, urlunparse
@@ -333,9 +333,20 @@ def clean_article_text(text):
 
 MOJIBAKE_MARKERS = (
     "\u00c3", "\u00c2", "\u00e2", "\u00ce", "\u00d0", "\u00d1",
-    "\u0413", "\u0414", "\u0415", "\u0419", "\u00b3", "\u00be", "\u00ba", "\ufffd",
+    "\u00b3", "\u00be", "\u00ba", "\ufffd",
     "\u00ee", "\u00f4", "\u00f1", "\u00df", "\u00d5", "\u00f5",
 )
+
+# UTF-8 read as Windows-1251: every Cyrillic or Azerbaijani letter becomes a
+# capital Cyrillic letter (the lead byte: Р/С for Russian, Г/Д/Е/Й for ç ğ ş ə)
+# followed by a character from bytes 0x80-0xBF ("РќР°" for "На", "Й™" for "ə").
+# Real text never has these pairs; the single letters alone are ordinary Russian.
+# Punctuation that legitimately follows a capital («», dashes, quotes) is left out.
+_CP1251_TRAIL = "".join(
+    ch for ch in bytes(range(0x80, 0xC0)).decode("cp1251", errors="ignore")
+    if ch not in "«»–—…‘’“”„\u00a0\u00ad№·"
+)
+CP1251_MOJIBAKE_RE = re.compile("[\u0410-\u042f][" + re.escape(_CP1251_TRAIL) + "\ufffd]")
 
 
 def mojibake_score(text, original_length=None):
@@ -343,26 +354,44 @@ def mojibake_score(text, original_length=None):
     score = value.count("\ufffd") * 8
     for marker in MOJIBAKE_MARKERS:
         score += value.count(marker) * 3
+    score += len(CP1251_MOJIBAKE_RE.findall(value)) * 3
     score += len(re.findall(r"[\u00c0-\u00ff]{2,}", value))
     if original_length is not None:
         score += abs(len(value) - original_length) * 2
     return score
 
 
+def _cp1251_bytes(value):
+    # Windows-1251 has no character for byte 0x98 (the second byte of "И"), so a
+    # lenient decode left U+FFFD there; put the byte back.
+    out = bytearray()
+    for ch in value:
+        if ch == "\ufffd":
+            out.append(0x98)
+        else:
+            out.extend(ch.encode("cp1251"))
+    return bytes(out)
+
+
 def repair_mojibake(text):
     value = str(text or "")
-    if not value or not any(marker in value for marker in MOJIBAKE_MARKERS):
+    if not value or not (
+        any(marker in value for marker in MOJIBAKE_MARKERS) or CP1251_MOJIBAKE_RE.search(value)
+    ):
         return value
 
     candidates = [value]
     for encoding in ("latin1", "cp1252", "cp1251", "cp1254", "iso-8859-9"):
         try:
-            candidates.append(value.encode(encoding).decode("utf-8"))
+            raw = _cp1251_bytes(value) if encoding == "cp1251" else value.encode(encoding)
+            candidates.append(raw.decode("utf-8"))
         except Exception:
             pass
 
     original_length = len(value)
     return min(candidates, key=lambda item: mojibake_score(item, original_length))
+
+
 def looks_like_xml_content(text):
     sample = str(text or "").lstrip()[:500].lower()
     if not sample:
@@ -380,6 +409,13 @@ def looks_like_xml_content(text):
 
 def decode_response_text(response):
     raw = response.content or b""
+    # Bytes that are valid UTF-8 are UTF-8: legacy pages (cp1251, cp1254) almost
+    # never pass a strict UTF-8 decode, while guessing between code pages turned
+    # correct Russian pages into "РќР°..." text.
+    try:
+        return repair_mojibake(raw.decode("utf-8"))
+    except UnicodeDecodeError:
+        pass
     candidates = []
 
     for encoding in (
@@ -453,10 +489,10 @@ def get_scheduler_base_interval_minutes(site):
         "latest_page": 8,
         "selector": 8,
         "xpath_pattern": 8,
-        "homepage": 15,
-        "sitemap": 20,
+        "homepage": 10,
+        "sitemap": 10,
         "recoverable": 30,
-        "default": 15,
+        "default": 10,
     }
     return method_intervals.get(method, method_intervals["default"])
 
@@ -6053,7 +6089,61 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
     return result
 
 
-def check_sites(poll_commands=True):
+# Long-running mode keeps one pool across cycles. A cycle waits at most
+# CYCLE_WAIT_SECONDS for its sites; a slow site (timeouts, reader fallback,
+# many article pages) keeps running in the pool and is skipped by later cycles
+# until it finishes, so it no longer holds back every other source.
+CYCLE_WAIT_SECONDS = 60
+# The same source is not read again sooner than this, even when it is due.
+SITE_MIN_GAP_SECONDS = 180
+SITE_POOL = {"executor": None}
+SITES_IN_FLIGHT = {}
+SITE_LAST_STARTED = {}
+SITES_LOCK = threading.Lock()
+
+
+def site_pool():
+    if SITE_POOL["executor"] is None:
+        SITE_POOL["executor"] = ThreadPoolExecutor(max_workers=max(1, MAX_WORKERS), thread_name_prefix="site")
+    return SITE_POOL["executor"]
+
+
+def site_key(site):
+    return normalize_link(site.get("url") or "")
+
+
+def take_sites_to_read(sites, now=None):
+    """Drop sites still being read or read less than SITE_MIN_GAP_SECONDS ago."""
+    now = time.time() if now is None else now
+    ready, busy, recent = [], 0, 0
+    with SITES_LOCK:
+        for site in sites:
+            key = site_key(site)
+            if key in SITES_IN_FLIGHT:
+                busy += 1
+            elif now - SITE_LAST_STARTED.get(key, 0) < SITE_MIN_GAP_SECONDS:
+                recent += 1
+            else:
+                ready.append(site)
+    return ready, busy, recent
+
+
+def submit_site(executor, key, *args):
+    with SITES_LOCK:
+        SITE_LAST_STARTED[key] = time.time()
+        future = executor.submit(process_site, *args)
+        SITES_IN_FLIGHT[key] = future
+
+    def done(_future):
+        with SITES_LOCK:
+            if SITES_IN_FLIGHT.get(key) is _future:
+                del SITES_IN_FLIGHT[key]
+
+    future.add_done_callback(done)
+    return future
+
+
+def check_sites(poll_commands=True, wait_all=True):
     started = time.time()
     if poll_commands:
         connect_telegram_users_from_updates()
@@ -6080,8 +6170,9 @@ def check_sites(poll_commands=True):
     competitor_keywords_cache = load_competitor_keywords()
     start_competitor_ai(competitor_keywords_cache)
     start_keyword_variants(monitor_keywords_cache)
+    sites, busy, recent = take_sites_to_read(sites)
     total = len(sites)
-    print(f"Yüklənən sayt sayı: {total}", flush=True)
+    print(f"Yüklənən sayt sayı: {total} | hələ oxunan: {busy} | yaxın vaxtda oxunmuş: {recent}", flush=True)
     print(f"Monitorinq başladı | worker={MAX_WORKERS} | son {NEWS_TIME_LIMIT_HOURS} saat | {datetime.now(BAKU_TZ).strftime('%d.%m.%Y %H:%M:%S')} AZT", flush=True)
 
     sent_count = 0
@@ -6101,18 +6192,22 @@ def check_sites(poll_commands=True):
         "latest_page_empty": 0, "fallback_empty": 0,
         "unsafe_url": 0, "unknown": 0,
     }
-    max_workers = max(1, min(MAX_WORKERS, total or 1))
+    max_workers = max(1, MAX_WORKERS)
+    executor = site_pool()
+    futures = {}
+    for index, site in enumerate(sites, start=1):
+        future = submit_site(executor, site_key(site), index, total, site, patterns_data, monitor_keywords_cache, competitor_keywords_cache)
+        future.add_done_callback(lambda f, site=site: note_language_variant_result(site, f.result() if not f.exception() else {}))
+        futures[future] = site
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(process_site, index, total, site, patterns_data, monitor_keywords_cache, competitor_keywords_cache): site for index, site in enumerate(sites, start=1)}
-        for future in as_completed(futures):
+    try:
+        for future in as_completed(futures, timeout=None if wait_all else CYCLE_WAIT_SECONDS):
             try:
                 result = future.result() or {}
             except Exception as exc:
                 print(f"Worker xətası: {redact_secrets(exc)}", flush=True)
                 stats["site_error"] += 1
                 continue
-            note_language_variant_result(futures[future], result)
             sent = int(result.get("sent", 0) or 0)
             reason = result.get("reason", "unknown")
             sent_count += sent
@@ -6122,6 +6217,12 @@ def check_sites(poll_commands=True):
             if sent_count >= MAX_SEND_PER_RUN:
                 print("Bu dövr üçün göndərmə limiti tamamlandı. Qalan başladılmış yoxlamalar tamamlanacaq.", flush=True)
                 break
+    except FuturesTimeoutError:
+        still_running = sum(1 for future in futures if not future.done())
+        print(f"⏳ {still_running} sayt hələ oxunur; növbəti dövr onları gözləmədən başlayır.", flush=True)
+    if wait_all:
+        for future in futures:
+            future.exception()
 
     if BOT_TOKEN and supabase_ready():
         save_telegram_heartbeat()
@@ -6153,7 +6254,7 @@ def check_sites(poll_commands=True):
 # Source lifecycle: trial (read-only) sampling of newly discovered sources.
 # Logic lives in source_lifecycle.py; discovery itself runs as its own Railway cron.
 # ---------------------------------------------------------------------------
-LIFECYCLE_STATE = {"last_trial": 0.0}
+LIFECYCLE_STATE = {"last_trial": 0.0, "trial_running": False}
 
 
 def load_trial_rows():
@@ -6308,11 +6409,26 @@ def run_lifecycle_tick(patterns_data):
         return
     now = time.time()
     try:
-        if lifecycle.TRIAL_ENABLED and now - LIFECYCLE_STATE["last_trial"] >= lifecycle.TRIAL_INTERVAL_MINUTES * 60:
+        if (
+            lifecycle.TRIAL_ENABLED
+            and not LIFECYCLE_STATE["trial_running"]
+            and now - LIFECYCLE_STATE["last_trial"] >= lifecycle.TRIAL_INTERVAL_MINUTES * 60
+        ):
             LIFECYCLE_STATE["last_trial"] = now
-            run_trial_pass(patterns_data)
+            LIFECYCLE_STATE["trial_running"] = True
+            # Trial reads of new sources take minutes; they must not pause news checks.
+            threading.Thread(target=run_trial_pass_safely, args=(patterns_data,), name="trial-pass", daemon=True).start()
     except Exception as exc:
         print(f"Lifecycle xətası: {exc}", flush=True)
+
+
+def run_trial_pass_safely(patterns_data):
+    try:
+        run_trial_pass(patterns_data)
+    except Exception as exc:
+        print(f"Lifecycle xətası: {exc}", flush=True)
+    finally:
+        LIFECYCLE_STATE["trial_running"] = False
 
 
 def main():
@@ -6339,7 +6455,7 @@ def main():
         threading.Thread(target=telegram_command_loop, name="telegram-commands", daemon=True).start()
     while True:
         print("🔎 Yeni xəbərlər yoxlanılır...", flush=True)
-        check_sites(poll_commands=False)
+        check_sites(poll_commands=False, wait_all=False)
         run_lifecycle_tick(load_patterns())
         time.sleep(CHECK_INTERVAL_SECONDS)
 
