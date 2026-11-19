@@ -15,13 +15,31 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
   return (
     <main className='relative min-h-svh bg-muted/30 text-foreground'>
-      {/* In the page flow on phones so the buttons never cover the brand; floating over the corners on desktop. */}
+      {/* Phones: brand on the left, switchers on the right, in the page flow.
+          Desktop: a back link and the switchers float over the corners. */}
       <div className='relative z-10 flex items-center justify-between gap-2 px-4 pt-4 lg:absolute lg:inset-x-0 lg:top-0'>
         <Link
           to='/'
-          className='inline-flex h-9 items-center rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground'
+          aria-label={siteName}
+          className='flex min-w-0 items-center gap-2.5 lg:hidden'
+        >
+          <BrandMark
+            logoUrl={logoUrl}
+            iconUrl={iconUrl}
+            siteName={siteName}
+            variant='icon'
+            className='size-9 shrink-0'
+            imageClassName='size-9'
+          />
+          <span className='truncate font-semibold text-foreground'>
+            {siteName}
+          </span>
+        </Link>
+        <Link
+          to='/'
+          className='hidden h-9 items-center rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground lg:inline-flex'
         >{t("← Sayta qayıt")}</Link>
-        <div className='flex items-center gap-2'>
+        <div className='flex shrink-0 items-center gap-2'>
           <LanguageSwitcher />
           <ThemeSwitch />
         </div>
@@ -43,8 +61,8 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           <div className='mt-16 max-w-xl'>
             <div className='inline-flex items-center gap-2 text-sm font-medium text-muted-foreground'>
               <Sparkles className='h-4 w-4' />{t("Kommunikasiya və Media Monitorinq Platforması")}</div>
-            <h1 className='mt-6 text-4xl font-semibold tracking-tight text-foreground'>{t("İzləyin. Anlayın. Qərar verin.")}</h1>
-            <p className='mt-5 text-lg leading-8 text-muted-foreground'>{t("İstifadəçi iş masasına təhlükəsiz giriş edin, monitorlarınızı, nəticələri və bildirişləri bir yerdə izləyin.")}</p>
+            <h1 className='mt-6 text-4xl font-semibold tracking-tight text-foreground'>{t("Adınız xəbərə düşəndə ilk siz bilin.")}</h1>
+            <p className='mt-5 text-lg leading-8 text-muted-foreground'>{t("Açar sözlərinizi, nəticələri və bildirişləri bir yerdə izləyin.")}</p>
           </div>
 
           <div className='mt-10 grid max-w-xl gap-3'>
@@ -66,22 +84,8 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           </div>
         </section>
 
-        <section className='flex min-h-[calc(100svh-5rem)] items-center justify-center lg:min-h-0'>
+        <section className='flex items-start justify-center pt-6 sm:min-h-[calc(100svh-5rem)] sm:items-center sm:pt-0 lg:min-h-0'>
           <div className='w-full max-w-md'>
-            <Link to='/' className='mb-6 flex items-center justify-center gap-3 lg:hidden'>
-              <BrandMark
-                logoUrl={logoUrl}
-                iconUrl={iconUrl}
-                siteName={siteName}
-                variant='icon'
-                className='size-10'
-                imageClassName='size-10'
-              />
-              <div>
-                <div className='font-semibold text-foreground'>{siteName}</div>
-                <div className='text-xs text-muted-foreground'>{t("İstifadəçi girişi")}</div>
-              </div>
-            </Link>
             {children}
           </div>
         </section>

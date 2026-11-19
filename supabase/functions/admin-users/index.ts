@@ -1,5 +1,6 @@
 import { requireAdmin } from "../_shared/auth.ts";
 import { withCors } from "../_shared/cors.ts";
+import { serviceAuthHeaders, serviceKey } from "../_shared/service_key.ts";
 
 type AuthUser = {
   id: string;
@@ -37,8 +38,7 @@ function json(body: unknown, status = 200) {
 
 function serviceHeaders(serviceRoleKey: string) {
   return {
-    apikey: serviceRoleKey,
-    Authorization: `Bearer ${serviceRoleKey}`,
+    ...serviceAuthHeaders(serviceRoleKey),
     Accept: "application/json",
     "Content-Type": "application/json",
   };
@@ -245,7 +245,7 @@ Deno.serve(withCors(async (req) => {
   if (auth instanceof Response) return auth;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")?.replace(/\/$/, "");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceRoleKey = serviceKey();
 
   if (!supabaseUrl || !serviceRoleKey) {
     return json({ error: "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing" }, 500);
@@ -366,10 +366,7 @@ Deno.serve(withCors(async (req) => {
 
   while (page <= 20) {
     const response = await fetch(`${supabaseUrl}/auth/v1/admin/users?page=${page}&per_page=${perPage}`, {
-      headers: {
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
-      },
+      headers: serviceAuthHeaders(serviceRoleKey),
     });
 
     if (!response.ok) {

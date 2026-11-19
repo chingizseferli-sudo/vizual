@@ -135,6 +135,8 @@ const TEXT_RULES: [RegExp, string][] = [
   [/password should|password is too weak|weak password/i, AUTH_CODES.weak_password],
   [/captcha/i, AUTH_CODES.captcha_failed],
   [/invalid totp|invalid mfa|mfa verification/i, AUTH_CODES.mfa_verification_failed],
+  // Session texts first: a stale login is not an expired email link.
+  [/(expired|invalid) (session|jwt)|session (has )?expired|jwt expired/i, SESSION_EXPIRED],
   [/expired|invalid or has expired|token is invalid|invalid token/i, AUTH_CODES.otp_expired],
   [/jwt|session/i, SESSION_EXPIRED],
   [/failed to fetch|networkerror|network request failed|load failed|fetch failed|err_network|timeout|timed out/i, NETWORK],

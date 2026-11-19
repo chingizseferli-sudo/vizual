@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 import keyword_variants_ai
-from test_competitors import FakeClaude, FakeRequests, FakeResponse, load_site_monitor
+from test_competitors import FakeAI, FakeRequests, FakeResponse, load_site_monitor
 
 BAKU = ZoneInfo("Asia/Baku")
 
@@ -37,16 +37,16 @@ def test_clean_variants_drops_keyword_repeats_and_bad_lengths():
 
 
 def test_suggest_variants_maps_numbers_and_keeps_empty_answers():
-    client = FakeClaude([{"results": [{"n": 1, "variants": ["Azerbaijan Airlines", "АЗАЛ"]}, {"n": 9, "variants": ["x y"]}]}])
+    client = FakeAI([{"results": [{"n": 1, "variants": ["Azerbaijan Airlines", "АЗАЛ"]}, {"n": 9, "variants": ["x y"]}]}])
     assert keyword_variants_ai.suggest_variants(client, ["AZAL", "təhsil"]) == {
         "AZAL": ["Azerbaijan Airlines", "АЗАЛ"],
         "təhsil": [],
     }
-    assert "1. AZAL\n2. təhsil" in client.requests[0]["messages"][0]["content"]
+    assert "1. AZAL\n2. təhsil" in client.requests[0]["messages"][1]["content"]
 
 
 def test_failed_batch_is_left_out_to_be_asked_again():
-    client = FakeClaude([RuntimeError("overloaded")])
+    client = FakeAI([RuntimeError("overloaded")])
     assert keyword_variants_ai.suggest_variants(client, ["AZAL"]) == {}
 
 
@@ -76,7 +76,7 @@ def test_variants_are_asked_once_per_distinct_keyword_and_saved(sm, monkeypatch)
     patches = []
     fake = FakeRequests({("PATCH", "monitor_keywords"): lambda kwargs: patches.append(kwargs) or FakeResponse(204)})
     monkeypatch.setattr(sm, "requests", fake)
-    client = FakeClaude([{"results": [{"n": 1, "variants": ["Azerbaijan Airlines"]}, {"n": 2, "variants": []}]}])
+    client = FakeAI([{"results": [{"n": 1, "variants": ["Azerbaijan Airlines"]}, {"n": 2, "variants": []}]}])
     monkeypatch.setattr(sm, "competitor_ai_client", lambda: client)
     cache = [
         row("k1", "AZAL", user="u1"),
@@ -88,7 +88,7 @@ def test_variants_are_asked_once_per_distinct_keyword_and_saved(sm, monkeypatch)
     sm.keyword_variants_if_needed(cache, now=datetime(2026, 11, 16, 12, 0, tzinfo=BAKU))
 
     assert len(client.requests) == 1
-    assert "1. AZAL\n2. təhsil" in client.requests[0]["messages"][0]["content"]
+    assert "1. AZAL\n2. təhsil" in client.requests[0]["messages"][1]["content"]
     saved = sorted((p["params"]["id"], tuple(p["json"]["alias_suggestions"])) for p in patches)
     assert saved == [("in.(k1,k2)", ("Azerbaijan Airlines",)), ("in.(k3)", ())]
 
@@ -100,7 +100,7 @@ def test_variants_are_asked_once_per_distinct_keyword_and_saved(sm, monkeypatch)
 
 def test_failed_call_waits_before_asking_again(sm, monkeypatch):
     monkeypatch.setattr(sm, "requests", FakeRequests({}))
-    client = FakeClaude([RuntimeError("overloaded"), {"results": [{"n": 1, "variants": ["Azerbaijan Airlines"]}]}])
+    client = FakeAI([RuntimeError("overloaded"), {"results": [{"n": 1, "variants": ["Azerbaijan Airlines"]}]}])
     monkeypatch.setattr(sm, "competitor_ai_client", lambda: client)
     cache = [row("k1", "AZAL")]
     sm.keyword_variants_if_needed(cache, now=datetime(2026, 11, 16, 12, 0, tzinfo=BAKU))

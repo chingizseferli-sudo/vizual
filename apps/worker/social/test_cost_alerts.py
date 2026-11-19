@@ -50,12 +50,12 @@ def test_socialfetch_balance_levels():
     assert ids(ca.find_alerts({}, NOW, {}, socialfetch=payment)) == {"socialfetch_balance": "warn"}
 
 
-def test_youtube_and_anthropic():
+def test_youtube_and_ai_credit():
     settings = {"youtube_enabled": True, "youtube_daily_quota": 9000}
     assert ca.find_alerts(settings, NOW, {}, youtube_used=8900) == []
     assert ids(ca.find_alerts(settings, NOW, {}, youtube_used=9000)) == {"youtube_quota:2026-11-05": "full"}
-    assert ids(ca.find_alerts({}, NOW, {}, anthropic_low_at=NOW - timedelta(hours=2))) == {"anthropic_credit": "full"}
-    assert ca.find_alerts({}, NOW, {}, anthropic_low_at=NOW - timedelta(hours=30)) == []
+    assert ids(ca.find_alerts({}, NOW, {}, ai_low_at=NOW - timedelta(hours=2))) == {"ai_credit": "full"}
+    assert ca.find_alerts({}, NOW, {}, ai_low_at=NOW - timedelta(hours=30)) == []
 
 
 def test_each_level_is_sent_once_and_rearms_when_cleared():
@@ -114,7 +114,7 @@ def test_check_saves_state_only_after_delivery(monkeypatch):
     monkeypatch.setattr(ca, "_state", {"last_check": None})
     monkeypatch.setattr(ca, "apify_limits", lambda token: None)
     monkeypatch.setattr(ca, "socialfetch_balance", lambda key: None)
-    monkeypatch.setattr(ca, "anthropic_low_since", lambda: None)
+    monkeypatch.setattr(ca, "ai_low_since", lambda: None)
     monkeypatch.setattr(ca.sm, "load_runtime_state", lambda key: (True, None))
     monkeypatch.setattr(ca.sm, "save_runtime_state", lambda key, value: saved.update({key: value}))
     monkeypatch.setattr(ca, "load_recipients", lambda: [{"email": "", "chat_id": "1"}])

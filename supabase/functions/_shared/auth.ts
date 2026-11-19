@@ -1,3 +1,5 @@
+import { serviceKey, serviceAuthHeaders } from "./service_key.ts";
+
 export type AuthContext = {
   token: string;
   user: {
@@ -42,7 +44,10 @@ async function getUserFromJwt(supabaseUrl: string, serviceRoleKey: string, token
     },
   });
 
-  if (!response.ok) return null;
+  if (!response.ok) {
+    console.error("auth: session check failed", response.status, (await response.text()).slice(0, 300));
+    return null;
+  }
   return await response.json();
 }
 
@@ -56,14 +61,16 @@ async function readSingleProfile(
     `${supabaseUrl}/rest/v1/${table}?user_id=eq.${encodeURIComponent(userId)}&select=role,status&limit=1`,
     {
       headers: {
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
+        ...serviceAuthHeaders(serviceRoleKey),
         Accept: "application/json",
       },
     },
   );
 
-  if (!response.ok) return null;
+  if (!response.ok) {
+    console.error(`auth: ${table} read failed`, response.status, (await response.text()).slice(0, 300));
+    return null;
+  }
   const rows = await response.json();
   return Array.isArray(rows) ? rows[0] || null : null;
 }
@@ -78,24 +85,25 @@ async function getAdminProfile(supabaseUrl: string, serviceRoleKey: string, user
 
 export async function requireAuthenticated(req: Request, json: JsonResponder): Promise<AuthContext | Response> {
   const token = bearerToken(req);
-  if (!token) return json({ error: "Authentication required" }, 401);
+  if (!token) return json({ error: "Sessiyanın vaxtı bitib. Zəhmət olmasa yenidən daxil olun." }, 401);
 
   let supabaseUrl: string;
   let serviceRoleKey: string;
   try {
     supabaseUrl = env("SUPABASE_URL").replace(/\/$/, "");
-    serviceRoleKey = env("SUPABASE_SERVICE_ROLE_KEY");
+    serviceRoleKey = serviceKey() || "";
+    if (!serviceRoleKey) throw new Error("SUPABASE_SECRET_KEYS / SUPABASE_SERVICE_ROLE_KEY is missing");
   } catch (error) {
     console.error("auth failed", error);
     return json({ error: "Xəta baş verdi. Bir az sonra yenidən cəhd edin." }, 500);
   }
 
   const user = await getUserFromJwt(supabaseUrl, serviceRoleKey, token);
-  if (!user?.id) return json({ error: "Invalid or expired session" }, 401);
+  if (!user?.id) return json({ error: "Sessiyanın vaxtı bitib. Zəhmət olmasa yenidən daxil olun." }, 401);
 
   const profile = await getProfile(supabaseUrl, serviceRoleKey, user.id);
   if (profile?.status === "blocked" || profile?.status === "inactive") {
-    return json({ error: "Account is not active" }, 403);
+    return json({ error: "Hesabınız aktiv deyil." }, 403);
   }
 
   return {
@@ -110,33 +118,34 @@ export async function requireAuthenticated(req: Request, json: JsonResponder): P
 
 export async function requireAdmin(req: Request, json: JsonResponder): Promise<AuthContext | Response> {
   const token = bearerToken(req);
-  if (!token) return json({ error: "Authentication required" }, 401);
+  if (!token) return json({ error: "Sessiyanın vaxtı bitib. Zəhmət olmasa yenidən daxil olun." }, 401);
 
   let supabaseUrl: string;
   let serviceRoleKey: string;
   try {
     supabaseUrl = env("SUPABASE_URL").replace(/\/$/, "");
-    serviceRoleKey = env("SUPABASE_SERVICE_ROLE_KEY");
+    serviceRoleKey = serviceKey() || "";
+    if (!serviceRoleKey) throw new Error("SUPABASE_SECRET_KEYS / SUPABASE_SERVICE_ROLE_KEY is missing");
   } catch (error) {
     console.error("auth failed", error);
     return json({ error: "Xəta baş verdi. Bir az sonra yenidən cəhd edin." }, 500);
   }
 
   const user = await getUserFromJwt(supabaseUrl, serviceRoleKey, token);
-  if (!user?.id) return json({ error: "Invalid or expired session" }, 401);
+  if (!user?.id) return json({ error: "Sessiyanın vaxtı bitib. Zəhmət olmasa yenidən daxil olun." }, 401);
 
   const adminProfile = await getAdminProfile(supabaseUrl, serviceRoleKey, user.id);
   const role = adminProfile?.role || "";
   const status = adminProfile?.status || "";
 
   if ((role !== "admin" && role !== "superadmin") || status !== "active") {
-    return json({ error: "Admin access required" }, 403);
+    return json({ error: "Bu əməliyyat üçün admin icazəsi lazımdır." }, 403);
   }
 
   // Same rule as public.is_admin_user(): admin rights need two-step login.
   // Auth already validated this token above, so reading its claims is safe.
   if (tokenAal(token) !== "aal2") {
-    return json({ error: "Two-step verification required" }, 403);
+    return json({ error: "Admin əməliyyatı üçün iki addımlı kodu yazın. Çıxıb yenidən daxil olun." }, 403);
   }
 
   return {

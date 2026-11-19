@@ -1,12 +1,16 @@
-"""Claude calls for the competitors page: headline tone and the daily summary.
+"""OpenAI calls for the competitors page: headline tone and the daily summary.
 
 Only headlines and counts are sent; nothing about the customer's account. Without
-ANTHROPIC_API_KEY the worker skips both and the page shows counts only.
+OPENAI_API_KEY the worker skips both and the page shows counts only.
 """
 import json
 import os
 
-AI_MODEL = "claude-haiku-5-5"
+import requests
+
+AI_MODEL = os.getenv("OPENAI_MODEL", "").strip() or "gpt-5-nano"
+OPENAI_URL = "https://api.openai.com/v1/chat/completions"
+REQUEST_TIMEOUT = 90
 SENTIMENTS = ("positive", "neutral", "negative")
 CLASSIFY_BATCH_SIZE = 40
 TOPIC_MAX_CHARS = 60
@@ -59,47 +63,80 @@ SUMMARY_SCHEMA = {
 }
 
 
-# Set when the API answers "credit balance is too low"; the rss worker stores it
-# (runtime state anthropic_credit_low) so the social worker can alert admins.
+# Set when OpenAI answers insufficient_quota (no credit left); the rss worker
+# stores it (runtime state ai_credit_low) so the social worker can alert admins.
 CREDIT_LOW = {"seen": False}
 
 
 def note_api_error(exc):
-    if "credit balance" in str(exc).lower():
+    if "insufficient_quota" in str(exc).lower():
         CREDIT_LOW["seen"] = True
 
 
-def make_client():
-    """An Anthropic client, or None when no API key is configured."""
-    if not os.getenv("ANTHROPIC_API_KEY", "").strip():
-        return None
-    import anthropic
+class OpenAIError(RuntimeError):
+    pass
 
-    return anthropic.Anthropic(max_retries=2, timeout=60)
+
+class OpenAIClient:
+    """Chat Completions over plain HTTP; one retry on 429 rate limits and 5xx."""
+
+    def __init__(self, api_key, model=AI_MODEL, http=requests):
+        self.api_key = api_key
+        self.model = model
+        self.http = http
+
+    def chat(self, body):
+        for attempt in range(2):
+            response = self.http.post(
+                OPENAI_URL,
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                json={"model": self.model, **body},
+                timeout=REQUEST_TIMEOUT,
+            )
+            if response.status_code == 200:
+                return response.json()
+            error = _error_text(response)
+            retryable = response.status_code >= 500 or (response.status_code == 429 and "insufficient_quota" not in error)
+            if not retryable or attempt == 1:
+                raise OpenAIError(f"HTTP {response.status_code}: {error}")
+        raise OpenAIError("unreachable")
+
+
+def _error_text(response):
+    try:
+        error = (response.json() or {}).get("error") or {}
+        return f"{error.get('code') or error.get('type') or ''} {error.get('message') or ''}".strip()[:300]
+    except ValueError:
+        return str(response.text or "")[:300]
+
+
+def make_client():
+    """An OpenAI client, or None when no API key is configured."""
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    return OpenAIClient(api_key) if api_key else None
 
 
 def _json_reply(client, system, user_text, schema, max_tokens):
-    """One Messages call with a JSON-schema answer; None when Claude declined or was cut off."""
-    response = client.messages.create(
-        model=AI_MODEL,
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": user_text}],
-        output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
-    )
-    if response.stop_reason in ("refusal", "max_tokens"):
-        print(f"Competitor AI cavabı alınmadı: stop_reason={response.stop_reason}", flush=True)
+    """One call with a JSON-schema answer; None when the model declined or was cut off."""
+    reply = client.chat({
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user_text}],
+        "response_format": {"type": "json_schema", "json_schema": {"name": "answer", "strict": True, "schema": schema}},
+        "max_completion_tokens": max_tokens,
+        # gpt-5 nano/mini think before answering; labels need no reasoning.
+        **({"reasoning_effort": "minimal"} if client.model.startswith("gpt-5") else {}),
+    })
+    choice = (reply.get("choices") or [{}])[0]
+    message = choice.get("message") or {}
+    if message.get("refusal") or choice.get("finish_reason") != "stop" or not message.get("content"):
+        print(f"Competitor AI cavabı alınmadı: finish_reason={choice.get('finish_reason')}", flush=True)
         return None
-    for block in response.content:
-        if block.type == "text":
-            return json.loads(block.text)
-    return None
+    return json.loads(message["content"])
 
 
 def classify_headlines(client, items):
     """items: [{"id", "title"}] -> {id: {"sentiment", "topic"}}.
 
-    Headlines of a batch Claude answered but skipped get sentiment None, so they
+    Headlines of a batch the model answered but skipped get sentiment None, so they
     are not sent again; a batch that failed is left out and retried next run.
     """
     labels = {}

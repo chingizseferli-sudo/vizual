@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { Check, ChevronRight, Contact, PlayCircle } from 'lucide-react'
+import { Check, ChevronRight, Contact } from 'lucide-react'
 import { t } from '@/lib/i18n'
 import {
   initialPublicSiteContent,
@@ -10,24 +10,10 @@ import {
 } from '@/lib/public-site-content'
 import { DemoRequestForm } from '@/components/public-site/demo-request-form'
 import {
-  PublicFaq,
   PublicFooter,
   PublicHeader,
   SectionHeading,
 } from '@/components/public-site/public-site-shell'
-
-// A few of the news sites the worker reads. The full list lives in the
-// database; these are only named so visitors see real, familiar sources.
-const sampleSources = [
-  'azertag.az',
-  'apa.az',
-  'report.az',
-  'oxu.az',
-  'trend.az',
-  'qafqazinfo.az',
-  'musavat.com',
-  'axar.az',
-]
 
 // Mirrors the layout of the worker's real Telegram alert (alert_message in
 // apps/worker/rss/site_monitor.py) so the hero shows what customers receive.
@@ -114,30 +100,9 @@ function IndexPage() {
                 {content.hero.secondaryCta}
               </Link>
             </div>
-            <p className='mt-4 text-sm text-slate-500'>
-              {t(
-                'Ödəniş kartı tələb olunmur. Açar sözü yazırsınız, Telegram-ı qoşursunuz.'
-              )}
-            </p>
           </div>
 
           <TelegramAlertPreview items={content.demo.items} />
-        </section>
-
-        <section className='border-y border-slate-200 bg-white'>
-          <div className='mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-5 py-5 text-sm md:px-8'>
-            <span className='font-semibold text-slate-900'>
-              {t('İzlənən saytlardan bəziləri:')}
-            </span>
-            {sampleSources.map((source) => (
-              <span key={source} className='text-slate-500'>
-                {source}
-              </span>
-            ))}
-            <span className='text-slate-500'>
-              {t('və 280-dən çox başqa sayt')}
-            </span>
-          </div>
         </section>
 
         <section id='services' className='mx-auto max-w-7xl px-5 py-20 md:px-8'>
@@ -146,7 +111,7 @@ function IndexPage() {
             title={content.services.title}
             description={content.services.description}
           />
-          <div className='mx-auto grid max-w-4xl gap-4 sm:grid-cols-2'>
+          <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
             {live.map((service) => (
               <article
                 key={service.title}
@@ -196,34 +161,6 @@ function IndexPage() {
           </div>
         </section>
 
-        <section id='demo' className='mx-auto max-w-7xl px-5 py-12 md:px-8'>
-          <div className='flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 md:flex-row md:items-center md:justify-between md:p-8'>
-            <div className='max-w-2xl'>
-              <h2 className='text-2xl font-extrabold tracking-tight text-slate-950 md:text-3xl'>
-                {content.demo.title}
-              </h2>
-              <p className='mt-3 text-base leading-7 text-slate-600'>
-                {content.demo.description}
-              </p>
-            </div>
-            <div className='flex shrink-0 flex-wrap gap-3'>
-              <Link
-                to='/monitor/workspace-preview'
-                className='inline-flex h-11 items-center gap-2 rounded-lg bg-[#1463ff] px-4 text-sm font-bold text-white hover:bg-blue-700'
-              >
-                {content.demo.primaryCta}
-                <PlayCircle className='h-4 w-4' />
-              </Link>
-              <Link
-                to='/contact'
-                className='inline-flex h-11 items-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-800 hover:bg-slate-50'
-              >
-                {content.demo.secondaryCta}
-              </Link>
-            </div>
-          </div>
-        </section>
-
         <section id='pricing' className='mx-auto max-w-7xl px-5 py-20 md:px-8'>
           <SectionHeading
             eyebrow={content.pricing.eyebrow}
@@ -241,9 +178,6 @@ function IndexPage() {
                 <p className='mt-3 text-3xl font-black text-slate-950'>
                   {plan.price}
                 </p>
-                <p className='mt-3 text-sm leading-6 text-slate-600'>
-                  {plan.description}
-                </p>
                 <ul className='mt-5 grid gap-3 text-sm text-slate-700'>
                   {plan.features.map((feature) => (
                     <li key={feature} className='flex gap-2'>
@@ -255,9 +189,15 @@ function IndexPage() {
               </article>
             ))}
           </div>
+          <p className='mt-6 text-center text-sm'>
+            <Link
+              to='/pricing'
+              className='font-bold text-[#1463ff] hover:underline'
+            >
+              {t('Planları müqayisə et və suallara bax')}
+            </Link>
+          </p>
         </section>
-
-        <PublicFaq />
 
         <section id='contact' className='mx-auto max-w-7xl px-5 py-20 md:px-8'>
           <div className='rounded-2xl bg-slate-900 p-6 text-white md:p-10'>
