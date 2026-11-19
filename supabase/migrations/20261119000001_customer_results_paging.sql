@@ -63,8 +63,22 @@ as $$
   select pg_catalog.lower(pg_catalog.translate(coalesce(p_text, ''), 'IİƏÖÜĞŞÇ', 'ıiəöüğşç'))
 $$;
 
--- Same rules as apps/web/src/lib/news-language.ts: language from the link
--- (/en/..., ru.site.az), then from the title's letters and common words.
+-- Edition in the link: /en/..., /ru/... first, then en.site.az. Null if none.
+create or replace function public.url_language(p_url text)
+returns text
+language sql
+immutable
+parallel safe
+as $$
+  select coalesce(
+    pg_catalog.lower(substring(p_url from '^[A-Za-z][A-Za-z0-9+.-]*://[^/?#]+/([Aa][Zz]|[Rr][Uu]|[Ee][Nn])(?:[/?#]|$)')),
+    pg_catalog.lower(substring(p_url from '^[A-Za-z][A-Za-z0-9+.-]*://(?:[^/?#@]*@)?([Aa][Zz]|[Rr][Uu]|[Ee][Nn])\.[^/?#:.]+\.[^/?#:]+'))
+  )
+$$;
+
+-- Same rules as apps/web/src/lib/news-language.ts: the title's script decides
+-- first (a Latin title is never Russian, even under /ru/), then the link's
+-- az/en edition, then the title's common words.
 create or replace function public.news_language(p_title text, p_url text)
 returns text
 language sql
@@ -72,13 +86,12 @@ immutable
 parallel safe
 as $$
   select case
-    when pg_catalog.lower(substring(p_url from '^[A-Za-z][A-Za-z0-9+.-]*://[^/?#]+/(az|ru|en|AZ|RU|EN|Az|Ru|En)(?:[/?#]|$)')) is not null
-      then pg_catalog.lower(substring(p_url from '^[A-Za-z][A-Za-z0-9+.-]*://[^/?#]+/(az|ru|en|AZ|RU|EN|Az|Ru|En)(?:[/?#]|$)'))
-    when pg_catalog.lower(substring(p_url from '^[A-Za-z][A-Za-z0-9+.-]*://(?:[^/?#@]*@)?((?:az|ru|en|AZ|RU|EN))\.[^/?#:.]+\.[^/?#:]+')) is not null
-      then pg_catalog.lower(substring(p_url from '^[A-Za-z][A-Za-z0-9+.-]*://(?:[^/?#@]*@)?((?:az|ru|en|AZ|RU|EN))\.[^/?#:.]+\.[^/?#:]+'))
+    when pg_catalog.regexp_count(coalesce(p_title, ''), '[Ѐ-ӿA-Za-zƏəİıĞğŞşÇçÖöÜü]') = 0
+      then coalesce(public.url_language(p_url), 'az')
     when pg_catalog.regexp_count(coalesce(p_title, ''), '[Ѐ-ӿ]')
       > pg_catalog.regexp_count(coalesce(p_title, ''), '[A-Za-zƏəİıĞğŞşÇçÖöÜü]') then 'ru'
     when coalesce(p_title, '') ~ '[əƏ]' then 'az'
+    when public.url_language(p_url) in ('az', 'en') then public.url_language(p_url)
     when pg_catalog.regexp_count(public.az_lower(p_title),
         '(?<![a-zəıöüğşç])(the|of|and|in|to|for|on|with|is|at|by|from|as|after|over|new|says|will|has|are|was)(?![a-zəıöüğşç])')
       > pg_catalog.regexp_count(public.az_lower(p_title),
