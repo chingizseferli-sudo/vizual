@@ -234,7 +234,7 @@ export function PublicFaq() {
     },
     {
       q: t("Hansı mənbələr izlənir?"),
-      a: t("280-dən çox yerli xəbər saytı, həmçinin Facebook, Instagram, YouTube, X, LinkedIn və seçilmiş Telegram kanalları."),
+      a: t("700-dən çox yerli xəbər saytı, həmçinin Facebook, Instagram, YouTube, X, LinkedIn və seçilmiş Telegram kanalları."),
     },
     {
       q: t("Bildirişləri harada alıram?"),
