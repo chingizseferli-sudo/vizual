@@ -141,7 +141,7 @@ class SourceHealthPayloadTests(unittest.TestCase):
         from datetime import timedelta
         for reason in ("old_news", "no_monitor_match", "sent", "duplicate"):
             self.assertEqual(site_monitor.source_backoff_interval(reason), timedelta(0), reason)
-        self.assertEqual(site_monitor.get_scheduler_base_interval_minutes({"monitor_method": "rss"}), 5)
+        self.assertEqual(site_monitor.get_scheduler_base_interval_minutes({"monitor_method": "rss"}), 3)
         self.assertEqual(site_monitor.get_scheduler_base_interval_minutes({"monitor_method": "latest_page"}), 8)
         # Blocks and dead sites back off for hours, but not a whole day.
         for reason in ("http_403", "http_429", "dns_failure", "ssl_failure", "http_404"):
