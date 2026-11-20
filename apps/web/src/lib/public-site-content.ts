@@ -143,7 +143,7 @@ export const defaultPublicSiteContent: PublicSiteContent = {
     badge: t("Azərbaycan mediası üçün monitorinq"),
     tagline: t("Adınız xəbərə düşəndə ilk siz bilin."),
     description:
-      t("280-dən çox xəbər saytını və sosial şəbəkələri sizin yerinizə izləyirik. Açar sözünüz harada çıxsa, linki dərhal Telegram-a göndəririk."),
+      t("700-dən çox xəbər saytını və sosial şəbəkələri sizin yerinizə izləyirik. Açar sözünüz harada çıxsa, linki dərhal Telegram-a göndəririk."),
     primaryCta: t("7 gün pulsuz sına"),
     secondaryCta: t("İstifadəçi girişi"),
   },
@@ -154,7 +154,7 @@ export const defaultPublicSiteContent: PublicSiteContent = {
     items: [
       {
         title: t("Xəbər saytları"),
-        description: t("280-dən çox yerli sayt hər 15 dəqiqədən bir yoxlanılır."),
+        description: t("700-dən çox yerli sayt hər 15 dəqiqədən bir yoxlanılır."),
         icon: 'newspaper',
         status: t("Aktiv"),
       },

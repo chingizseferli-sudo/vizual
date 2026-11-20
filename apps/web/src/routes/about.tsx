@@ -40,7 +40,7 @@ function AboutPage() {
   ]
 
   const facts = [
-    { value: '280+', label: t('xəbər saytı') },
+    { value: '700+', label: t('xəbər saytı') },
     { value: '6', label: t('sosial platforma') },
     { value: '15', label: t('dəqiqədən bir yoxlama') },
     { value: '3', label: t('dil: AZ, RU, EN') },
