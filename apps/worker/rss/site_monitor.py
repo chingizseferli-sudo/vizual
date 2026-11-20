@@ -483,8 +483,8 @@ def get_scheduler_base_interval_minutes(site):
     # News is only worth sending while it is fresh (NEWS_TIME_LIMIT_HOURS), so
     # sources are polled every few minutes. Failing sources back off separately.
     method_intervals = {
-        "rss": 5,
-        "rss_discovered": 5,
+        "rss": 3,
+        "rss_discovered": 3,
         "google_news_fallback": 10,
         "latest_page": 8,
         "selector": 8,
