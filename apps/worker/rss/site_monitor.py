@@ -20,6 +20,7 @@ from bs4 import BeautifulSoup
 from dateutil import parser
 from lxml import html
 
+import alert_rules
 import competitor_ai
 import keyword_variants_ai
 import email_reports
@@ -5235,6 +5236,8 @@ def find_matching_user_monitors(title, monitor_keywords_cache=None, matcher=None
                     "keyword": keyword_original,
                     "telegram_chat_id": get_user_telegram_chat_id(monitor.get("user_id")),
                     "notify_telegram": monitor.get("notify_telegram") is not False,
+                    "user_id": monitor.get("user_id"),
+                    "is_critical": bool(row.get("is_critical")),
                 }
             )
         return matched_monitors
@@ -5272,6 +5275,8 @@ def match_user_monitors(item_id, title, monitor_keywords_cache=None, matcher=Non
                         "keyword": keyword_original,
                         "telegram_chat_id": get_user_telegram_chat_id(monitor.get("user_id")),
                         "notify_telegram": monitor.get("notify_telegram") is not False,
+                        "user_id": monitor.get("user_id"),
+                        "is_critical": bool(row.get("is_critical")),
                     }
                 )
             payload = {"monitor_id": row.get("monitor_id"), "item_id": item_id, "matched_keyword": keyword_original}
@@ -5897,6 +5902,22 @@ Link:
 """
 
 
+def user_alert_marks(matches, source_id=None, engagement=None):
+    """Marks (critical keyword, priority source, high engagement) for one customer's matches."""
+    user_id = next((match.get("user_id") for match in matches if match.get("user_id")), None)
+    return alert_rules.marks(user_id, matches, source_id, engagement) if user_id else []
+
+
+def email_marked_alerts(matches, source_id, text, key=None, engagement=None):
+    """One email per customer whose alert is marked and who turned alert emails on."""
+    by_user = {}
+    for match in matches:
+        if match.get("user_id"):
+            by_user.setdefault(match["user_id"], []).append(match)
+    for user_id, user_matches in by_user.items():
+        alert_rules.email_alert(user_id, alert_rules.marks(user_id, user_matches, source_id, engagement), text, key=key)
+
+
 def process_site(index, total, site, patterns_data, monitor_keywords_cache=None, competitor_keywords_cache=None):
     started = time.time()
     result = {
@@ -6058,9 +6079,11 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
             seen_target_chats.add(chat_id)
             target_chat_ids.append(chat_id)
 
-        if not reserve_news(link, clean_title, site, source_id=item.get("_source_id") or site.get("id")):
+        item_source_id = item.get("_source_id") or site.get("id")
+        if not reserve_news(link, clean_title, site, source_id=item_source_id):
             result["reason"] = site.pop("_reserve_failure_reason", "duplicate_url")
             continue
+        email_marked_alerts(monitor_matches, item_source_id, alert_message(clean_title, source, matched_keywords_text, published_time, link), key=link)
 
         if not target_chat_ids:
             result["reason"] = "no_telegram_recipient"
@@ -6079,6 +6102,7 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
             chat_keywords = clean_matched_keywords([match.get("keyword") for match in chat_matches])
             chat_keywords_text = ", ".join(chat_keywords) or matched_keywords_text
             chat_message = alert_message(clean_title, source, chat_keywords_text, published_time, link)
+            chat_message = alert_rules.headline(user_alert_marks(chat_matches, item_source_id)) + chat_message
             if send_telegram(chat_message, chat_id=chat_id):
                 sent_chats.add(chat_id)
                 sent_any = True
@@ -6115,6 +6139,8 @@ def process_site(index, total, site, patterns_data, monitor_keywords_cache=None,
 CYCLE_WAIT_SECONDS = 60
 # The same source is not read again sooner than this, even when it is due.
 SITE_MIN_GAP_SECONDS = 180
+# A customer's priority source (user_priority_sources) is read every minute.
+PRIORITY_SITE_MIN_GAP_SECONDS = 60
 SITE_POOL = {"executor": None}
 SITES_IN_FLIGHT = {}
 SITE_LAST_STARTED = {}
@@ -6134,13 +6160,15 @@ def site_key(site):
 def take_sites_to_read(sites, now=None):
     """Drop sites still being read or read less than SITE_MIN_GAP_SECONDS ago."""
     now = time.time() if now is None else now
+    priority = alert_rules.priority_source_ids()
     ready, busy, recent = [], 0, 0
     with SITES_LOCK:
         for site in sites:
             key = site_key(site)
+            gap = PRIORITY_SITE_MIN_GAP_SECONDS if str(site.get("id")) in priority else SITE_MIN_GAP_SECONDS
             if key in SITES_IN_FLIGHT:
                 busy += 1
-            elif now - SITE_LAST_STARTED.get(key, 0) < SITE_MIN_GAP_SECONDS:
+            elif now - SITE_LAST_STARTED.get(key, 0) < gap:
                 recent += 1
             else:
                 ready.append(site)
@@ -6180,6 +6208,8 @@ def check_sites(poll_commands=True, wait_all=True):
         ARTICLE_TITLE_INFO_CACHE.clear()
     if len(ARTICLE_VERDICT_CACHE) > ARTICLE_VERDICT_MAX:
         ARTICLE_VERDICT_CACHE.clear()
+    if supabase_ready():
+        alert_rules.refresh(requests, SUPABASE_URL, supabase_headers(), REQUEST_TIMEOUT)
     sites = expand_language_variants(load_sites())
     if SCHEDULER_DRY_RUN:
         scheduler_decisions = [evaluate_source_schedule(site) for site in sites]
