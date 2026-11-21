@@ -1,6 +1,8 @@
 export const customerQueryKeys = {
   all: ['customer'] as const,
   dashboard: () => [...customerQueryKeys.all, 'dashboard'] as const,
+  dashboardStats: (days: number) =>
+    [...customerQueryKeys.all, 'dashboard-stats', days] as const,
   workspace: () => [...customerQueryKeys.all, 'workspace'] as const,
   keywords: () => [...customerQueryKeys.all, 'keywords'] as const,
   competitors: () => [...customerQueryKeys.all, 'competitors'] as const,
@@ -15,4 +17,5 @@ export const customerQueryKeys = {
     [...customerQueryKeys.all, 'result-filters', days] as const,
   alerts: () => [...customerQueryKeys.all, 'alerts'] as const,
   profile: () => [...customerQueryKeys.all, 'profile'] as const,
+  alertSettings: () => [...customerQueryKeys.all, 'alert-settings'] as const,
 }

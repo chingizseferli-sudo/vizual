@@ -11,6 +11,7 @@ import {
   Play,
   Plus,
   Search,
+  Siren,
   SlidersHorizontal,
   Trash2,
 } from 'lucide-react'
@@ -21,6 +22,7 @@ import {
   fetchKeywordsData,
   keywordErrorMessage,
   setKeywordAliases,
+  setKeywordCritical,
   setKeywordFilters,
   setKeywordSocial,
   setKeywordStatus,
@@ -154,6 +156,23 @@ function KeywordsPage() {
       next === 'active'
         ? t("Açar söz yenidən izlənir: {0}", [item.keyword])
         : t("Açar söz dayandırıldı: {0}", [item.keyword])
+    )
+  }
+
+  async function toggleCritical(item: CustomerKeyword) {
+    const next = !item.critical
+    setBusyId(item.id)
+    const error = await setKeywordCritical(item.id, next)
+    setBusyId(null)
+    if (error) {
+      setMessage(keywordErrorMessage(error))
+      return
+    }
+    await refresh()
+    setMessage(
+      next
+        ? t("Kritik açar söz: {0}. Bildirişləri işarələnəcək.", [item.keyword])
+        : t("Açar söz artıq kritik deyil: {0}", [item.keyword])
     )
   }
 
@@ -434,6 +453,29 @@ function KeywordsPage() {
                       </span>
                     </div>
                     <div className='flex flex-wrap items-center gap-1 sm:shrink-0 sm:flex-nowrap'>
+                      {data?.criticalSupported ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='icon'
+                              aria-pressed={item.critical}
+                              aria-label={t("Kritik açar söz: {0}", [item.keyword])}
+                              onClick={() => void toggleCritical(item)}
+                              disabled={busy}
+                              className={cn(item.critical && 'text-destructive')}
+                            >
+                              <Siren />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {item.critical
+                              ? t("Kritik: bildirişlər işarələnir. Söndürmək üçün basın.")
+                              : t("Kritik et: bildirişlər işarələnsin və emailə də getsin")}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : null}
                       {data?.aliasesSupported ? (
                         <Tooltip>
                           <TooltipTrigger asChild>

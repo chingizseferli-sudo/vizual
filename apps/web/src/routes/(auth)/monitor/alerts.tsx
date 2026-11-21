@@ -10,6 +10,7 @@ import {
   Send,
   XCircle,
 } from 'lucide-react'
+import { AlertRules } from '@/features/alert-rules/alert-rules'
 import { fetchCustomerAlerts } from '@/features/keywords/alerts'
 import { NotificationChannels } from '@/features/notifications/channels'
 import { customerQueryKeys } from '@/lib/query-keys'
@@ -301,6 +302,8 @@ function AlertsPage() {
       </div>
 
       <NotificationChannels />
+
+      <AlertRules />
 
       <section className='rounded-2xl border border-border bg-card p-4 shadow-sm'>
         <h2 className='text-base font-semibold'>{t("Bildirişlər necə yaranır?")}</h2>
