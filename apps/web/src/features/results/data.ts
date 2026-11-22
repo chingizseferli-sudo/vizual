@@ -11,7 +11,16 @@ export type ResultRow = {
   url: string | null
   published_at: string | null
   detected_at: string | null
+  network?: string | null
+  author?: string | null
+  like_count?: number | null
+  comment_count?: number | null
+  share_count?: number | null
+  view_count?: number | null
+  engagement?: number | null
 }
+
+export type ResultsSort = 'new' | 'engagement'
 
 export type ResultsQuery = {
   days: number
@@ -22,6 +31,7 @@ export type ResultsQuery = {
   language?: string
   search: string
   date?: string
+  sort?: ResultsSort
   limit: number
   offset: number
 }
@@ -71,6 +81,7 @@ export async function fetchResultsPage(query: ResultsQuery): Promise<ResultsPage
     p_date: query.date || null,
     p_limit: query.limit,
     p_offset: query.offset,
+    p_sort: query.sort ?? 'new',
   })
 
   if (error) {

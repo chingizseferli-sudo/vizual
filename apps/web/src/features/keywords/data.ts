@@ -24,6 +24,9 @@ export type CustomerKeyword = {
   aliases: string[]
   // Spellings suggested once by the worker; null until it has asked.
   aliasSuggestions: string[] | null
+  // Alerts are marked "Kritik" and can go by email (set_keyword_critical(),
+  // migration 20261121000001).
+  critical: boolean
   created_at: string | null
 }
 
@@ -43,6 +46,8 @@ export type KeywordsData = {
   filtersSupported: boolean
   // False until migration 20261116000001: keyword variants are hidden.
   aliasesSupported: boolean
+  // False until migration 20261121000001: the critical switch is hidden.
+  criticalSupported: boolean
 }
 
 type MonitorRow = { id: string; status: string | null; created_at: string | null }
@@ -56,6 +61,7 @@ type KeywordRow = {
   exclude_words?: string[] | null
   aliases?: string[] | null
   alias_suggestions?: string[] | null
+  is_critical?: boolean | null
   created_at: string | null
 }
 type PlanLimitsRow = {
@@ -105,6 +111,7 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
       statusSupported: true,
       filtersSupported: false,
       aliasesSupported: false,
+      criticalSupported: false,
     }
   }
 
@@ -120,6 +127,7 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
   const statusSupported = rows.length === 0 || 'status' in rows[0]
   const filtersSupported = rows.length > 0 && 'az_only' in rows[0]
   const aliasesSupported = rows.length > 0 && 'aliases' in rows[0]
+  const criticalSupported = rows.length > 0 && 'is_critical' in rows[0]
   const keywords = rows.map((row) => ({
     id: row.id,
     monitor_id: row.monitor_id,
@@ -130,6 +138,7 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
     excludeWords: row.exclude_words || [],
     aliases: row.aliases || [],
     aliasSuggestions: row.alias_suggestions ?? null,
+    critical: row.is_critical === true,
     status:
       monitorStatus.get(row.monitor_id) === 'active' && row.status !== 'paused'
         ? ('active' as const)
@@ -148,6 +157,7 @@ export async function fetchKeywordsData(): Promise<KeywordsData> {
     statusSupported,
     filtersSupported,
     aliasesSupported,
+    criticalSupported,
   }
 }
 
@@ -198,6 +208,14 @@ export async function setKeywordStatus(id: string, status: KeywordStatus) {
   const { error } = await supabase.rpc('set_keyword_status', {
     p_keyword_id: id,
     p_status: status,
+  })
+  return error
+}
+
+export async function setKeywordCritical(id: string, critical: boolean) {
+  const { error } = await supabase.rpc('set_keyword_critical', {
+    p_keyword_id: id,
+    p_critical: critical,
   })
   return error
 }

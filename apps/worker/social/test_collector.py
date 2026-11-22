@@ -163,6 +163,7 @@ def base_routes(settings, cache, usage=None, social_ids=None):
         ]),
         ("GET", "social_keyword_state"): FakeResponse(200, []),
         ("POST", "social_keyword_state"): FakeResponse(201, None),
+        ("GET", "user_priority_sources"): FakeResponse(200, []),
         ("GET", "bot_runtime_state"): FakeResponse(200, [{"value": usage}] if usage else []),
         ("POST", "bot_runtime_state"): FakeResponse(201, None),
         ("POST", "monitor_matches"): FakeResponse(201, [{"id": "match-1"}]),
@@ -677,6 +678,7 @@ def yt_routes(settings, rows, profiles, plans, items=(), quota_units=None, searc
     routes[("GET", "bot_runtime_state")] = lambda kw: FakeResponse(
         200, [{"value": {"units": quota_units}}] if quota_units is not None and kw["params"]["key"].startswith("eq.youtube_quota_") else [])
     routes[("GET", "search")] = search or FakeResponse(200, {"items": list(items)})
+    routes[("GET", "videos")] = FakeResponse(200, {"items": []})
     return routes
 
 
@@ -702,7 +704,9 @@ def test_youtube_searches_new_videos_for_plans_with_youtube(col):
     items = [yt_item("v1", "Kapital Bank&#39;ın yeni kartı", 3), yt_item("v2", "Futbol icmalı", 2),
              yt_item("v3", "Kapital Bank köhnə video", 60)]
     fake = use(col, {**yt_routes(YT_SETTINGS, rows, yt_profiles(), YT_PLANS, items),
-                     ("POST", "monitored_items"): insert_item})
+                     ("POST", "monitored_items"): insert_item,
+                     ("GET", "videos"): FakeResponse(200, {"items": [
+                         {"id": "v1", "statistics": {"viewCount": "1500", "likeCount": "40", "commentCount": "7"}}]})})
     col.run_tick(NOW)
 
     # SOCAR belongs only to a plan without YouTube: not searched.
@@ -718,6 +722,10 @@ def test_youtube_searches_new_videos_for_plans_with_youtube(col):
     assert stored[0]["url"] == "https://www.youtube.com/watch?v=v1"
     assert stored[0]["item_hash"] == "youtube:v1" and stored[0]["source_id"] == "src-yt"
     assert stored[0]["title"] == "Kanal: Kapital Bank'ın yeni kartı"
+    # Statistics of the found videos: one videos.list call (1 unit).
+    assert fake.find("GET", "videos")[0]["params"] == {"part": "statistics", "id": "v1,v2,v3"}
+    assert (stored[0]["author"], stored[0]["view_count"], stored[0]["like_count"], stored[0]["comment_count"]) == (
+        "Kanal", 1500, 40, 7)
     # Only the owner whose plan includes YouTube is alerted.
     sends = fake.find("POST", "sendMessage")
     assert [s["data"]["chat_id"] for s in sends] == ["777"] and "YouTube" in sends[0]["data"]["text"]
@@ -727,7 +735,7 @@ def test_youtube_searches_new_videos_for_plans_with_youtube(col):
     assert {k: stats["last_stats"][k] for k in ("raw", "stored", "no_match", "too_old")} == {
         "raw": 3, "stored": 1, "no_match": 1, "too_old": 1}
     quota = [c["json"] for c in fake.find("POST", "bot_runtime_state") if c["json"]["key"].startswith("youtube_quota_")]
-    assert quota == [{"key": "youtube_quota_2026-10-20", "value": {"units": 100}, "updated_at": quota[0]["updated_at"]}]
+    assert quota == [{"key": "youtube_quota_2026-10-20", "value": {"units": 101}, "updated_at": quota[0]["updated_at"]}]
     beat = [c["json"]["value"] for c in fake.find("POST", "bot_runtime_state") if c["json"]["key"] == "social_heartbeat"][0]
     assert beat["youtube_key"] is True and beat["youtube_keywords"] == 1 and beat["youtube_daily_quota"] == 9000
 
@@ -997,3 +1005,29 @@ def test_keyword_variant_matches_social_post(col):
     post = {"text": "AZAL yeni reyslər açır", "url": "https://facebook.com/p/1"}
     rows, reason = col.relevant_keyword_rows(post, [row], col.post_matcher("facebook", post), post["text"])
     assert rows == [row] and reason is None
+
+
+def test_engagement_is_stored_and_marks_the_alert(col, monkeypatch):
+    rows = [keyword_row("Kapital Bank", USER_A)]
+    popular = {**tweet("9", "Kapital Bank'ın yeni kartı", 2), "likeCount": 90, "replyCount": 8, "retweetCount": 4,
+               "viewCount": 5000}
+    routes, _runs = apify_net_routes(rows, [popular], [])
+    stored = []
+
+    def insert_item(kwargs):
+        stored.append(kwargs["json"])
+        return FakeResponse(201, [{"id": f"item-{len(stored)}"}])
+
+    import time as real_time
+    monkeypatch.setattr(col.sm.alert_rules, "_cache", {
+        "at": real_time.time(), "priority": {},
+        "profiles": {USER_A: {"user_id": USER_A, "engagement_alert_threshold": 100}}})
+    fake = use(col, {**routes, ("POST", "monitored_items"): insert_item})
+    col.run_tick(NOW)
+
+    x_rows = [row for row in stored if row["item_hash"] == "x:9"]
+    assert [(r["author"], r["like_count"], r["comment_count"], r["share_count"], r["view_count"]) for r in x_rows] == [
+        ("User", 90, 8, 4, 5000)]
+    text = fake.find("POST", "sendMessage")[0]["data"]["text"]
+    assert text.startswith("🔥 YÜKSƏK ENGAGEMENT\n\n")
+    assert "Bəyənmə: 90 · Şərh: 8 · Paylaşım: 4 · Baxış: 5000" in text

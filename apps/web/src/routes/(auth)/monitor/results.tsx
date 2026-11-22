@@ -7,8 +7,10 @@ import {
   ExternalLink,
   FileCode2,
   FileJson2,
+  FileSpreadsheet,
   FileText,
   Loader2,
+  Printer,
   Search,
 } from 'lucide-react'
 import {
@@ -24,10 +26,12 @@ import {
   RESULTS_PAGE_SIZE,
   type ResultRow,
   type ResultsQuery,
+  type ResultsSort,
 } from '@/features/results/data'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { dateLocale, t } from '@/lib/i18n'
 import { type NewsLanguage } from '@/lib/news-language'
+import { buildXlsx } from '@/lib/xlsx'
 import iconSvg from '../../../../public/images/vizual-icon.svg?raw'
 
 // The export is one offline file, so the logo is embedded instead of linked.
@@ -120,8 +124,8 @@ function csvCell(value: string | number | null | undefined) {
   return `"${text}"`
 }
 
-function downloadFile(filename: string, content: string, type: string) {
-  const blob = new Blob([content], { type })
+function downloadFile(filename: string, content: string | Blob, type: string) {
+  const blob = content instanceof Blob ? content : new Blob([content], { type })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -155,7 +159,39 @@ function mapExportRow(row: ResultRow) {
     url: row.url || '',
     published_at: formatDate(row.published_at),
     detected_at: formatDate(row.detected_at || row.created_at),
+    author: row.author || '',
+    likes: row.like_count ?? null,
+    comments: row.comment_count ?? null,
+    shares: row.share_count ?? null,
+    views: row.view_count ?? null,
+    engagement: row.network ? (row.engagement ?? null) : null,
   }
+}
+
+type ExportFormat = 'csv' | 'xlsx' | 'pdf' | 'json' | 'html'
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat(dateLocale()).format(value)
+}
+
+function EngagementBadges({ row }: { row: ResultRow }) {
+  const parts = [
+    { value: row.like_count, label: t("bəyənmə") },
+    { value: row.comment_count, label: t("şərh") },
+    { value: row.share_count, label: t("paylaşım") },
+    { value: row.view_count, label: t("baxış") },
+  ].filter((part): part is { value: number; label: string } => part.value != null)
+  if (!row.author && parts.length === 0) return null
+  return (
+    <div className='mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground'>
+      {row.author ? <span className='font-semibold text-foreground/80'>{row.author}</span> : null}
+      {parts.map((part) => (
+        <span key={part.label}>
+          {formatCount(part.value)} {part.label}
+        </span>
+      ))}
+    </div>
+  )
 }
 
 function Pagination({
@@ -246,6 +282,7 @@ function ResultsPage() {
   const [siteQuery, setSiteQuery] = useState('')
   const [dateFilter, setDateFilter] = useState('')
   const [exportRange, setExportRange] = useState<ExportRange>('1')
+  const [sort, setSort] = useState<ResultsSort>('new')
   const [page, setPage] = useState(1)
   const [isExporting, setIsExporting] = useState(false)
 
@@ -260,6 +297,7 @@ function ResultsPage() {
     socialNetwork,
     dateFilter,
     exportRange,
+    sort,
   ])
 
   const filterQuery = useMemo<Omit<ResultsQuery, 'limit' | 'offset'>>(
@@ -272,8 +310,10 @@ function ResultsPage() {
       language: languageFilter === ALL ? undefined : languageFilter,
       search: debouncedSearch,
       date: dateFilter || undefined,
+      sort,
     }),
     [
+      sort,
       exportRange,
       sourceCategory,
       selectedSites,
@@ -353,35 +393,59 @@ function ResultsPage() {
     setDateFilter('')
   }
 
-  async function exportResults(format: 'csv' | 'json' | 'html') {
+  async function exportResults(format: ExportFormat) {
+    // The print window is opened now, while the click still counts as the user's:
+    // a window opened after the download would be blocked as a popup.
+    const printWindow = format === 'pdf' ? window.open('', '_blank') : null
     setIsExporting(true)
     const result = await fetchResultsPage({
       ...filterQuery,
       limit: EXPORT_LIMIT,
       offset: 0,
     }).finally(() => setIsExporting(false))
-    if (result.errorMessage) return
+    if (result.errorMessage) {
+      printWindow?.close()
+      return
+    }
     const mappedRows = result.rows.map(mapExportRow)
+    const tableHeader = [
+      t("Açar söz"),
+      t("Başlıq"),
+      t("Mənbə"),
+      t("Link"),
+      t("Dərc tarixi"),
+      t("Tapılma vaxtı"),
+      t("Müəllif"),
+      t("Bəyənmə"),
+      t("Şərh"),
+      t("Paylaşım"),
+      t("Baxış"),
+    ]
+    const tableBody = mappedRows.map((row) => [
+      row.keyword,
+      row.title,
+      row.source,
+      row.url,
+      row.published_at,
+      row.detected_at,
+      row.author,
+      row.likes,
+      row.comments,
+      row.shares,
+      row.views,
+    ])
 
     if (format === 'csv') {
-      downloadCsv('tapilan-xeberler.csv', [
-        [
-          t("Açar söz"),
-          t("Başlıq"),
-          t("Mənbə"),
-          t("Link"),
-          t("Dərc tarixi"),
-          t("Tapılma vaxtı"),
-        ],
-        ...mappedRows.map((row) => [
-          row.keyword,
-          row.title,
-          row.source,
-          row.url,
-          row.published_at,
-          row.detected_at,
-        ]),
-      ])
+      downloadCsv('tapilan-xeberler.csv', [tableHeader, ...tableBody])
+      return
+    }
+
+    if (format === 'xlsx') {
+      downloadFile(
+        'tapilan-xeberler.xlsx',
+        buildXlsx(t("Nəticələr"), [tableHeader, ...tableBody]),
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      )
       return
     }
 
@@ -416,6 +480,7 @@ function ResultsPage() {
             <td>${escapeHtml(row.source)}</td>
             <td><a href="${escapeHtml(row.url)}" target="_blank" rel="noreferrer">${escapeHtml(row.title)}</a></td>
             <td><span class="keyword-pill">${escapeHtml(row.keyword)}</span></td>
+            <td>${row.engagement != null ? escapeHtml(formatCount(row.engagement)) : '-'}</td>
             <td>
               <div class="date-cell">
                 <strong>${escapeHtml(datePart)}</strong>
@@ -434,6 +499,7 @@ function ResultsPage() {
               <th>Mənbə</th>
               <th>Başlıq</th>
               <th>Açar söz</th>
+              <th>Engagement</th>
               <th>Dərc vaxtı</th>
             </tr>
           </thead>
@@ -441,9 +507,7 @@ function ResultsPage() {
         </table>`
         : `<div class="empty">Seçilən interval üzrə ixrac ediləcək nəticə yoxdur.</div>`
 
-    downloadFile(
-      'tapilan-xeberler.html',
-      `<!doctype html>
+    const reportHtml = `<!doctype html>
 <html lang="az">
   <head>
     <meta charset="utf-8" />
@@ -559,9 +623,20 @@ function ResultsPage() {
       <div class="footer">Vizual.Az tərəfindən avtomatik yaradılıb.</div>
     </main>
   </body>
-</html>`,
-      'text/html;charset=utf-8'
-    )
+</html>`
+
+    if (format === 'pdf') {
+      if (!printWindow) return
+      // The browser's print dialog saves the report as PDF.
+      printWindow.document.open()
+      printWindow.document.write(reportHtml)
+      printWindow.document.close()
+      printWindow.focus()
+      printWindow.setTimeout(() => printWindow.print(), 300)
+      return
+    }
+
+    downloadFile('tapilan-xeberler.html', reportHtml, 'text/html;charset=utf-8')
   }
   if (isLoading && !data) {
     return (
@@ -624,6 +699,15 @@ function ResultsPage() {
 
           <div className='flex flex-wrap gap-2'>
             <select
+              aria-label={t("Sıralama")}
+              value={sort}
+              onChange={(event) => setSort(event.target.value as ResultsSort)}
+              className='h-9 rounded-xl border border-border bg-card px-3 text-sm font-medium'
+            >
+              <option value='new'>{t("Ən yenilər")}</option>
+              <option value='engagement'>{t("Ən çox engagement")}</option>
+            </select>
+            <select
               aria-label={t("İxrac dövrü")}
               value={exportRange}
               onChange={(event) =>
@@ -645,6 +729,24 @@ function ResultsPage() {
             >
               <FileText className='h-4 w-4' />
               CSV
+            </button>
+            <button
+              type='button'
+              onClick={() => void exportResults('xlsx')}
+              disabled={totalItems === 0 || isExporting}
+              className='inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-semibold hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50'
+            >
+              <FileSpreadsheet className='h-4 w-4' />
+              Excel
+            </button>
+            <button
+              type='button'
+              onClick={() => void exportResults('pdf')}
+              disabled={totalItems === 0 || isExporting}
+              className='inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-semibold hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50'
+            >
+              <Printer className='h-4 w-4' />
+              PDF
             </button>
             <button
               type='button'
@@ -876,6 +978,8 @@ function ResultsPage() {
                         {title}
                       </div>
                     )}
+
+                    <EngagementBadges row={row} />
 
                     <div className='mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground'>
                       <span>{t("Dərc:")}{' '}{formatDate(row.published_at)}

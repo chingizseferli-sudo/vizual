@@ -45,6 +45,7 @@ import requests  # noqa: E402
 import site_monitor as sm  # noqa: E402
 
 import cost_alerts  # noqa: E402
+import engagement  # noqa: E402
 from relevance import keyword_row_allows, post_is_azerbaijani  # noqa: E402
 
 APIFY_TOKEN = os.getenv("APIFY_TOKEN", "").strip()
@@ -56,8 +57,10 @@ APIFY_LINKEDIN_ACTOR = "harvestapi~linkedin-post-search"
 SOCIALFETCH_BASE = "https://api.socialfetch.dev"
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
 YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
+YOUTUBE_VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
 # search.list costs 100 quota units; the quota resets at midnight Pacific time.
-YOUTUBE_UNITS_PER_SEARCH = 100
+# search.list (100) + videos.list for the found videos' statistics (1).
+YOUTUBE_UNITS_PER_SEARCH = 101
 PACIFIC_TZ = ZoneInfo("America/Los_Angeles")
 
 SOCIAL_TICK_SECONDS = int(os.getenv("SOCIAL_TICK_SECONDS", "300"))
@@ -514,6 +517,7 @@ def apify_facebook_search(targets, folded_keywords, settings=None):
             "text": item.get("message") or item.get("text") or item.get("postText") or "",
             "author": author or item.get("author_title"),
             "published_at": parse_time(item.get("published_at") or item.get("timestamp") or item.get("time") or item.get("date")),
+            **engagement.counts("facebook", item),
         })
     return posts, usd, None
 
@@ -564,6 +568,7 @@ def x_posts(items, folded):
             "author": first_value(author, "name", "userName", "username") or handle,
             "author_location": first_value(author, "location"),
             "published_at": parse_time(first_value(item, "createdAt", "created_at", "date")),
+            **engagement.counts("x", item),
         })
     return posts
 
@@ -605,6 +610,7 @@ def linkedin_posts(items, folded):
             "author": first_value(author, "name", "fullName", "publicIdentifier") or item.get("authorName"),
             "author_location": location or None,
             "published_at": parse_time(first_value(item, "postedAt", "postedDate", "publishedAt", "createdAt", "date")),
+            **engagement.counts("linkedin", item),
         })
     return posts
 
@@ -656,6 +662,7 @@ def socialfetch_media_posts(body, folded=None, undated_is_new=False):
             "text": item.get("caption") or "",
             "author": owner.get("handle"),
             "published_at": published or (utcnow() if undated_is_new else None),
+            **engagement.counts("instagram", item),
         })
     return posts
 
@@ -708,7 +715,33 @@ def youtube_search(targets, folded, now):
         except (ValueError, AttributeError):
             reason = "error"
         return [], 0.0, f"youtube:{reason}:{response.status_code}"
-    return youtube_posts(response.json() or {}, folded), 0.0, None
+    posts = youtube_posts(response.json() or {}, folded)
+    add_youtube_statistics(posts)
+    return posts, 0.0, None
+
+
+def add_youtube_statistics(posts):
+    """Views, likes and comments of the found videos (videos.list, 1 unit for up to 50).
+    A failed call only leaves the counts empty."""
+    if not posts:
+        return
+    try:
+        response = requests.get(
+            YOUTUBE_VIDEOS_URL,
+            params={"part": "statistics", "id": ",".join(post["external_id"] for post in posts[:50])},
+            headers={"X-goog-api-key": YOUTUBE_API_KEY, "Accept": "application/json"},
+            timeout=HTTP_TIMEOUT,
+        )
+    except Exception as exc:
+        print(f"youtube statistika oxunmadı: {type(exc).__name__}", flush=True)
+        return
+    if response.status_code != 200:
+        print(f"youtube statistika oxunmadı: {response.status_code}", flush=True)
+        return
+    by_id = {item.get("id"): item.get("statistics") for item in (response.json() or {}).get("items") or []}
+    for post in posts:
+        if post["external_id"] in by_id:
+            post.update(engagement.youtube_counts(by_id[post["external_id"]]))
 
 
 def youtube_posts(data, folded):
@@ -744,6 +777,7 @@ def parse_telegram_preview(page_html, channel):
             continue
         text_node = message.select_one(".tgme_widget_message_text")
         time_node = message.select_one(".tgme_widget_message_date time[datetime]") or message.select_one("time[datetime]")
+        views_node = message.select_one(".tgme_widget_message_views")
         posts.append({
             "keyword_fold": None,
             "external_id": post_ref,
@@ -751,6 +785,7 @@ def parse_telegram_preview(page_html, channel):
             "text": text_node.get_text(" ", strip=True) if text_node else "",
             "author": title,
             "published_at": parse_time(time_node.get("datetime")) if time_node else None,
+            "views": engagement.parse_count(views_node.get_text(strip=True)) if views_node else None,
         })
     return posts, title
 
@@ -800,6 +835,11 @@ def store_post(platform, source_id, post):
             "detected_at": utcnow().isoformat(),
             "item_hash": f"{platform}:{post.get('external_id') or post['url']}",
             "status": "new",
+            "author": sm.clean_text(post.get("author"))[:200] or None,
+            "like_count": post.get("likes"),
+            "comment_count": post.get("comments"),
+            "share_count": post.get("shares"),
+            "view_count": post.get("views"),
         },
         timeout=sm.REQUEST_TIMEOUT,
     )
@@ -817,8 +857,16 @@ def alert_text(platform, post, keywords):
         f"Mətn:\n{post_title(post)}\n\n"
         f"Açar sözlər:\n{keywords}\n\n"
         f"Tarix və saat:\n{published}\n\n"
+        f"{engagement_line(post)}"
         f"Link:\n{post['url']}\n"
     )
+
+
+def engagement_line(post):
+    parts = [f"{label}: {post[field]}" for field, label in
+             (("likes", "Bəyənmə"), ("comments", "Şərh"), ("shares", "Paylaşım"), ("views", "Baxış"))
+             if post.get(field) is not None]
+    return f"Engagement:\n{' · '.join(parts)}\n\n" if parts else ""
 
 
 def is_short_keyword(folded):
@@ -906,6 +954,10 @@ def handle_post(platform, source_id, post, keyword_cache, now):
     if not item_id:
         return "duplicate", 0, 0
     matches = sm.match_user_monitors(item_id, text, rows, matcher=matcher)
+    total_engagement = engagement.total(post)
+    all_keywords = ", ".join(sm.clean_matched_keywords([m.get("keyword") for m in matches]))
+    sm.email_marked_alerts(matches, source_id, alert_text(platform, post, all_keywords), key=post["url"],
+                           engagement=total_engagement)
     sent = 0
     chats = {}
     for match in matches:
@@ -914,7 +966,8 @@ def handle_post(platform, source_id, post, keyword_cache, now):
             chats.setdefault(chat_id, []).append(match)
     for chat_id, chat_matches in chats.items():
         keywords = ", ".join(sm.clean_matched_keywords([m.get("keyword") for m in chat_matches]))
-        if sm.send_telegram(alert_text(platform, post, keywords), chat_id=chat_id):
+        marks = sm.user_alert_marks(chat_matches, source_id, total_engagement)
+        if sm.send_telegram(sm.alert_rules.headline(marks) + alert_text(platform, post, keywords), chat_id=chat_id):
             sent += 1
     return "stored", len(matches), sent
 
@@ -1139,6 +1192,7 @@ def run_tick(now=None):
         write_heartbeat(settings, now, keywords=0)
         return
 
+    sm.alert_rules.refresh(sm.requests, sm.SUPABASE_URL, sm.supabase_headers(), sm.REQUEST_TIMEOUT)
     extra = {"keywords": 0}
     keyword_cache = []
     if any(enabled.values()) or instagram_pages:

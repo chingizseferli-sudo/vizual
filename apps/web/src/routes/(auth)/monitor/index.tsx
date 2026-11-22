@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import {
   Bell,
@@ -11,6 +12,8 @@ import {
   EMPTY_DASHBOARD,
   fetchDashboardData,
 } from '@/features/keywords/dashboard'
+import { DashboardCharts } from '@/features/dashboard/charts'
+import { EMPTY_DASHBOARD_STATS, fetchDashboardStats } from '@/features/dashboard/stats'
 import { customerQueryKeys } from '@/lib/query-keys'
 import { PortalLoading, PortalError } from '@/components/layout/portal-state'
 import { dateLocale, t } from '@/lib/i18n'
@@ -116,6 +119,44 @@ function FirstRunGuide() {
   )
 }
 
+const STATS_PERIODS = [7, 30] as const
+
+function DashboardStatsSection() {
+  const [days, setDays] = useState<(typeof STATS_PERIODS)[number]>(7)
+  const { data = EMPTY_DASHBOARD_STATS, isError } = useQuery({
+    queryKey: customerQueryKeys.dashboardStats(days),
+    queryFn: () => fetchDashboardStats(days),
+    staleTime: 60 * 1000,
+    placeholderData: keepPreviousData,
+  })
+
+  return (
+    <section className='grid gap-3'>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <h2 className='text-lg font-bold text-foreground'>{t("Analitika")}</h2>
+        <div className='inline-flex rounded-lg border border-border bg-card p-0.5' role='group' aria-label={t("Dövr")}>
+          {STATS_PERIODS.map((period) => (
+            <button
+              key={period}
+              type='button'
+              aria-pressed={days === period}
+              onClick={() => setDays(period)}
+              className={`rounded-md px-3 py-1.5 text-sm font-semibold ${days === period ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+            >
+              {period === 7 ? t("Son 7 gün") : t("Son 30 gün")}
+            </button>
+          ))}
+        </div>
+      </div>
+      {isError ? (
+        <p className='text-sm text-muted-foreground'>{t("Analitikanı yükləmək mümkün olmadı.")}</p>
+      ) : (
+        <DashboardCharts stats={data} />
+      )}
+    </section>
+  )
+}
+
 function UserMonitorDashboard() {
   const {
     data = EMPTY_DASHBOARD,
@@ -203,6 +244,8 @@ function UserMonitorDashboard() {
           icon={Send}
         />
       </div>
+
+      {!hasNoKeywords ? <DashboardStatsSection /> : null}
 
       {!hasNoKeywords ? (
         <section className='rounded-2xl border border-border bg-card p-4 shadow-sm'>

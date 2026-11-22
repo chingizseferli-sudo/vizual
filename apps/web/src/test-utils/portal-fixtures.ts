@@ -276,6 +276,33 @@ export const fixtureSupabase = {
         error: null,
       })
     }
+    if (name === 'my_dashboard_stats') {
+      const empty = portalFixture.state === 'empty'
+      return Promise.resolve({
+        data: {
+          news: empty ? 0 : storyRows.length,
+          social: 0,
+          engagement: 0,
+          by_network: empty ? [] : [{ network: 'web', count: storyRows.length }],
+          daily: [{ day: timestamp.slice(0, 10), news: empty ? 0 : storyRows.length, social: 0 }],
+          top_keywords: empty ? [] : [{ keyword: 'Bakı Dövlət Universiteti', count: storyRows.length }],
+          top_sources: [],
+          top_engagement: [],
+        },
+        error: null,
+      })
+    }
+    if (name === 'customer_sources') {
+      return Promise.resolve({
+        data: items.map((item, index) => ({
+          id: `fixture-source-${index}`,
+          name: new URL(item.url).hostname,
+          host: new URL(item.url).hostname,
+          is_priority: index === 0,
+        })),
+        error: null,
+      })
+    }
     if (name === 'current_user_account_state') {
       return Promise.resolve({ data: [{ status: 'active' }], error: null })
     }

@@ -68,3 +68,15 @@ def test_cycle_does_not_wait_for_a_slow_site(monkeypatch):
     release.set()
     sm.site_pool().shutdown(wait=True)
     assert "https://slow.az/" in done
+
+
+def test_priority_sources_are_read_every_minute(monkeypatch):
+    reset_pool(monkeypatch)
+    monkeypatch.setattr(sm.alert_rules, "priority_source_ids", lambda: {"s-priority"})
+    priority = {"id": "s-priority", "url": "https://priority.az/"}
+    normal = {"id": "s-normal", "url": "https://normal.az/"}
+    started = time.time()
+    for site in (priority, normal):
+        sm.SITE_LAST_STARTED[sm.site_key(site)] = started
+    ready, _, recent = sm.take_sites_to_read([priority, normal], now=started + sm.PRIORITY_SITE_MIN_GAP_SECONDS + 1)
+    assert [site["url"] for site in ready] == ["https://priority.az/"] and recent == 1
