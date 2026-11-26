@@ -61,7 +61,6 @@ def test_azerbaijani_letters(keyword, title):
         ("miq", "Əmiqdarı artırıldı"),
         ("dim", "Ədimli kəndində yol təmiri"),
         ("ağa", "Ağacların əkilməsi davam edir"),
-        ("peşə təhsili", "Peşə təhsilinin problemləri"),
         ("qız", "Qızıl medal qazandı"),
         ("ADA", "Adaşı ilə görüşdü"),
         ("mir", "Əmir bəy çıxış etdi"),
@@ -69,6 +68,35 @@ def test_azerbaijani_letters(keyword, title):
     ],
 )
 def test_no_match_inside_longer_words(keyword, title):
+    assert not match(keyword, title)
+
+
+@pytest.mark.parametrize(
+    "keyword, title",
+    [
+        ("Qarabağ Universiteti", "Qarabağ Universitetinin rektoru açıqlama verdi"),
+        ("Qarabağ Universiteti", "Qarabağ Universitetində yeni fakültə açılır"),
+        ("Qarabağ Universiteti", "Qarabağ Universitetinə qəbul başladı"),
+        ("Qarabağ Universiteti", "QARABAĞ UNİVERSİTETİNDƏN açıqlama"),
+        ("peşə təhsili", "Peşə təhsilinin problemləri"),
+        ("Bakı Dövlət Universiteti", "Bakı Dövlət Universitetinin tələbələri"),
+        ("Ильхам Алиев", "Ильхам Алиеву вручили орден"),
+    ],
+)
+def test_phrase_last_word_takes_suffixes(keyword, title):
+    assert match(keyword, title)
+
+
+@pytest.mark.parametrize(
+    "keyword, title",
+    [
+        ("Qarabağ Universiteti", "Qarabağ Universitetləri"),
+        ("Qarabağ Universiteti", "Qarabağda Universiteti"),
+        ("Qarabağ Universiteti", "Qarabağ Universitetixyz"),
+        ("Bakı DİM", "Bakı DİMlər"),
+    ],
+)
+def test_phrase_stays_a_phrase(keyword, title):
     assert not match(keyword, title)
 
 

@@ -2612,12 +2612,17 @@ def keyword_rule(keyword):
     Cached: thousands of customer keywords are checked against every article."""
     # \w is Unicode-aware, so ə ğ ı ö ü ç ş count as word characters while
     # hyphens/punctuation do not ("BDU-da" matches "bdu", "ABDU" does not).
-    strict_match = keyword in STRICT_WORDS_FOLDED or len(keyword) <= 4
-    if strict_match or " " in keyword:
+    # A phrase is found as written, and its last word may take suffixes like a single
+    # word ("Qarabağ Universiteti" -> "Qarabağ Universitetinin", "...Universitetində").
+    last_word = keyword.rsplit(" ", 1)[-1]
+    phrase = " " in keyword
+    if last_word in STRICT_WORDS_FOLDED or len(last_word) <= 4:
         return keyword, re.compile(r"(?!\w)"), False
-    if CYRILLIC_KEYWORD_RE.search(keyword):
-        stem = keyword[:-1] if len(keyword) >= 5 and keyword[-1] in RU_STEM_VOWELS else keyword
+    if CYRILLIC_KEYWORD_RE.search(last_word):
+        stem = keyword[:-1] if len(last_word) >= 5 and keyword[-1] in RU_STEM_VOWELS else keyword
         return stem, re.compile(RU_SUFFIX_CHAIN + r"(?!\w)"), False
+    if phrase:
+        return keyword, re.compile(AZ_SUFFIX_CHAIN + r"(?!\w)"), False
     # Long single-word keywords match as a stem at the start of a word, followed by
     # nothing or Azerbaijani suffixes ("universitet" -> "Universitetin"). "ümumtəhsil":
     # "ümum" is the only compound prefix kept from the old substring match.
